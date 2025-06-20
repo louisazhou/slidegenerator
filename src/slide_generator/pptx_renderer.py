@@ -137,19 +137,34 @@ class PPTXRenderer:
             if block.oversized:
                 text_frame.auto_size = MSO_AUTO_SIZE.SHAPE_TO_FIT_TEXT
             
-            # Get list items directly from the element's text content
-            list_items = [li for li in block.text_content.split('\n') if li.strip()]
+            # Get list items directly from the element's textContent
+            # Split by line breaks and filter out empty lines
+            list_items = [li.strip() for li in block.text_content.split('\n') if li.strip()]
             
-            # Add each list item
+            # Add each list item as a separate paragraph with bullet
             first = True
-            for item in list_items:
+            for i, item in enumerate(list_items):
                 if first:
                     p = text_frame.paragraphs[0]
                     first = False
                 else:
                     p = text_frame.add_paragraph()
-                p.text = item
-                p.level = 0          # built-in bullet
+                
+                # For unordered lists, add bullet character
+                if block.tag_name == 'ul':
+                    p.text = "• " + item
+                else:
+                    # For ordered lists, add number
+                    p.text = f"{i+1}. " + item
+                
+                # Set paragraph level (for indentation)
+                p.level = 0
+                
+                # Set alignment
+                from pptx.enum.text import PP_ALIGN
+                p.alignment = PP_ALIGN.LEFT
+                
+                # Set font size
                 p.font.size = Pt(18)
         
         elif block.is_code_block():

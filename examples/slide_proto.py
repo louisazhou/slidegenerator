@@ -255,12 +255,14 @@ class SlideProto:
             ul, ol {
                 margin-top: 10px;
                 margin-bottom: 20px;
+                padding-left: 20px;
             }
             
             li {
                 font-size: 18px;
                 line-height: 1.5;
                 margin-bottom: 8px;
+                list-style-position: outside;
             }
             
             pre {
@@ -285,6 +287,14 @@ class SlideProto:
                 background-color: #f9f9f9;
                 border-radius: 5px;
             }
+            
+            .page-break {
+                display: block;
+                height: 1px;
+                margin: 0;
+                padding: 0;
+                page-break-after: always;
+            }
         </style>
         """
         
@@ -305,7 +315,7 @@ class SlideProto:
         # Add page break markers between slides
         for slide_html in html_slides[1:]:
             combined_html += f"""
-            <!-- slide -->
+            <div class="page-break"><!-- slide --></div>
             <div class="slide">
                 {slide_html}
             </div>
@@ -335,39 +345,43 @@ class SlideProto:
     
     def _process_layout(self, prs, layout_info):
         """Process layout information and add elements to slides."""
-        # Filter out container divs
+        # Filter out container divs and identify page breaks
         filtered_layout = []
+        page_breaks = []
+        
+        # First pass: collect all elements and identify page breaks
         for element in layout_info:
             # Skip container divs (two-column, column)
             if element['tagName'] == 'div' and element['className']:
                 if 'column' in element['className'] or 'two-column' in element['className']:
                     continue
-            filtered_layout.append(element)
+                if 'page-break' in element['className']:
+                    page_breaks.append(len(filtered_layout))
+                    continue
+            
+            # Check for HTML comments that indicate page breaks
+            if element['tagName'] == '#comment' and '<!-- slide -->' in element['textContent']:
+                page_breaks.append(len(filtered_layout))
+                continue
+            
+            # Add all other elements
+            if element['tagName'] != '#comment':  # Skip regular comments
+                filtered_layout.append(element)
         
-        # Process HTML comments for slide breaks
+        # Second pass: insert page breaks at the identified positions
         layout_with_breaks = []
-        page_break_indices = []
-        
-        # First pass: identify slide breaks from HTML comments
         for i, element in enumerate(filtered_layout):
-            if element.get('tagName') == '#comment' and '<!-- slide -->' in element.get('textContent', ''):
-                page_break_indices.append(i)
-        
-        # Second pass: add page breaks at the identified positions
-        for i, element in enumerate(filtered_layout):
-            if i in page_break_indices:
+            if i in page_breaks:
                 layout_with_breaks.append({"role": "page_break"})
-            elif element.get('tagName') != '#comment':  # Skip comment nodes
-                layout_with_breaks.append(element)
-        
-        # Sort elements within each slide by Y position
-        def sort_by_position(blocks):
-            return sorted(blocks, key=lambda b: (b.get('y', 0), b.get('x', 0)) if 'role' not in b else (-1, -1))
+            layout_with_breaks.append(element)
         
         # Paginate the layout
         paginated_layout = paginate(layout_with_breaks, max_px=460)  # 540px - margins
         
         # Sort elements within each page by position (but keep pages in order)
+        def sort_by_position(blocks):
+            return sorted(blocks, key=lambda b: (b.get('y', 0), b.get('x', 0)) if 'role' not in b else (-1, -1))
+        
         sorted_paginated_layout = [sort_by_position(page) for page in paginated_layout]
         
         # Create slides for each page
@@ -463,19 +477,34 @@ class SlideProto:
             if element.get('oversized'):
                 text_frame.auto_size = MSO_AUTO_SIZE.SHAPE_TO_FIT_TEXT
             
-            # Get list items directly from the element's text content
-            list_items = [li for li in element['textContent'].split('\n') if li.strip()]
+            # Get list items directly from the element's textContent
+            # Split by line breaks and filter out empty lines
+            list_items = [li.strip() for li in element['textContent'].split('\n') if li.strip()]
             
-            # Add each list item
+            # Add each list item as a separate paragraph with bullet
             first = True
-            for item in list_items:
+            for i, item in enumerate(list_items):
                 if first:
                     p = text_frame.paragraphs[0]
                     first = False
                 else:
                     p = text_frame.add_paragraph()
-                p.text = item
-                p.level = 0          # built-in bullet
+                
+                # For unordered lists, add bullet character
+                if tag_name == 'ul':
+                    p.text = "• " + item
+                else:
+                    # For ordered lists, add number
+                    p.text = f"{i+1}. " + item
+                
+                # Set paragraph level (for indentation)
+                p.level = 0
+                
+                # Set alignment
+                from pptx.enum.text import PP_ALIGN
+                p.alignment = PP_ALIGN.LEFT
+                
+                # Set font size
                 p.font.size = Pt(18)
         
         elif tag_name == 'pre':
