@@ -199,43 +199,37 @@ def test_textbox_height():
                 # Calculate match score based on length ratio
                 match_score = min(len(element_text), len(textbox_text)) / max(len(element_text), len(textbox_text))
             else:
-                # No match
-                match_score = 0
-                
-            if match_score > best_match_score:
-                best_match_score = match_score
-                best_match = (textbox_idx, textbox)
-        
-        # We should have found a matching textbox
-        if best_match is None:
-            print(f"WARNING: No matching textbox found for element: {element_text[:50]}...")
-            continue
+                continue
             
-        textbox_idx, textbox = best_match
-        matched_indices.add(textbox_idx)
+            # Keep the best match
+            if match_score > best_match_score:
+                best_match = textbox
+                best_match_score = match_score
+                best_match_idx = textbox_idx
         
-        # Print element information
-        print(f"\nElement {element_idx}: {element['tagName']}, text={element_text[:50]}...")
-        print(f"  Browser height: {element['height']} px, {element['height_emu']} EMUs")
-        
-        # Print textbox information
-        textbox_rect = get_shape_rect(textbox)
-        print(f"  Matching textbox {textbox_idx} on slide {textbox.slide_idx + 1}: height={textbox.height} EMUs")
-        print(f"  Match score: {best_match_score:.2f}")
-        print(f"  Ratio: {textbox.height / element['height_emu']:.2f}")
-        
-        # Special handling for code blocks which may be reformatted
-        if element_tag == 'pre':
-            # Code blocks may be reformatted, so we're more lenient
-            assert textbox.height >= element['height_emu'] * 0.3, \
-                f"Textbox height {textbox.height} is less than 30% of browser height {element['height_emu']}"
-        else:
-            # For regular text, we expect better height matching
-            assert textbox.height >= element['height_emu'] * 0.7, \
-                f"Textbox height {textbox.height} is less than 70% of browser height {element['height_emu']}"
+        if best_match and best_match_score > 0.3:  # Require at least 30% similarity
+            # Mark this textbox as matched
+            matched_indices.add(best_match_idx)
+            
+            # Compare heights
+            textbox_height = best_match.height
+            browser_height_emu = element['height_emu']
+            
+            # Allow some tolerance (1px difference is about 1270 EMUs)
+            tolerance = 1270
+            
+            print(f"\nElement: {element_tag}, text: '{element['textContent'][:30]}...'")
+            print(f"  Browser height: {browser_height_emu} EMUs ({element['height']} px)")
+            print(f"  Textbox height: {textbox_height} EMUs")
+            print(f"  Match score: {best_match_score:.2f}")
+            
+            # Check if textbox height is at least 70% of browser height
+            assert textbox_height >= browser_height_emu * 0.7 - tolerance, \
+                f"Textbox height {textbox_height} is less than 70% of browser height {element['height_emu']}"
 
-def test_no_overlap():
-    """Test that slide generation produces non-overlapping elements."""
+
+def test_no_overlap_via_generator():
+    """Test that slide generation via SlideGenerator produces non-overlapping elements."""
     markdown_text = """# Test Slide
 
 This is a paragraph.
@@ -270,6 +264,7 @@ Another paragraph after code."""
     if os.path.exists(output_path):
         os.remove(output_path)
 
+
 def test_multi_slide_no_overlap():
     """Test that multi-slide generation works correctly."""
     markdown_text = """# Slide 1
@@ -303,9 +298,10 @@ More content here."""
     if os.path.exists(output_path):
         os.remove(output_path)
 
+
 if __name__ == "__main__":
     test_no_overlaps()
     test_textbox_height()
-    test_no_overlap()
+    test_no_overlap_via_generator()
     test_multi_slide_no_overlap()
     print("All tests passed!") 
