@@ -1,0 +1,13 @@
+# Core slide generation dependencies
+python-pptx>=0.6.21
+pyppeteer>=1.0.2
+markdown>=3.4.4
+asyncio>=3.4.3
+
+# Development and testing
+pytest>=6.2.4
+
+# Google Slides API integration (will be implemented in M2)
+google-api-python-client>=2.88.0
+google-auth-httplib2>=0.1.0
+google-auth-oauthlib>=1.0.0 
