@@ -29,9 +29,9 @@ This is a paragraph.
     headings = [block for page in pages for block in page if block.is_heading()]
     assert len(headings) >= 2  # h1 and h2
     
-    # Should have list blocks (ul/ol elements, not individual li)
+    # Should have list blocks (ul/ol elements)
     lists = [block for page in pages for block in page if block.is_list()]
-    assert len(lists) >= 1  # one ul element containing multiple items
+    assert len(lists) >= 1  # one list element
 
 
 def test_page_break_handling():

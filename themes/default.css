@@ -1,0 +1,79 @@
+/* Default theme for slide generation */
+/* Extracted from layout_engine.py hardcoded CSS */
+
+body {
+    margin: 0;
+    padding: 0;
+    font-family: Arial, sans-serif;
+}
+
+.slide {
+    width: 960px;
+    height: 540px;
+    padding: 40px;
+    box-sizing: border-box;
+    position: relative;
+    page-break-after: always;
+}
+
+h1 {
+    font-size: 36px;
+    margin-bottom: 20px;
+}
+
+h2 {
+    font-size: 28px;
+    margin-bottom: 15px;
+}
+
+h3 {
+    font-size: 22px;
+    margin-bottom: 12px;
+}
+
+p {
+    font-size: 18px;
+    line-height: 1.4;
+    margin-bottom: 15px;
+}
+
+ul, ol {
+    font-size: 18px;
+    line-height: 1.4;
+    margin-left: 20px;
+    margin-bottom: 15px;
+}
+
+li {
+    margin-bottom: 8px;
+}
+
+pre, code {
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    background-color: #f4f4f4;
+    padding: 10px;
+    border-radius: 4px;
+    margin-bottom: 15px;
+}
+
+table {
+    border-collapse: collapse;
+    width: 100%;
+    margin-bottom: 15px;
+}
+
+th, td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: left;
+}
+
+th {
+    background-color: #f2f2f2;
+    font-weight: bold;
+}
+
+.page-break {
+    display: none;  /* Hidden in CSS but will be detected by JavaScript */
+} 

@@ -57,6 +57,14 @@ class PPTXRenderer:
         # Save the presentation
         prs.save(output_path)
     
+    def _add_formatted_text(self, paragraph, block: Block):
+        """Add formatted text to a paragraph, handling basic markdown-style formatting."""
+        import re
+        
+        # For now, just add the plain text
+        # TODO: Implement rich text formatting by parsing HTML or markdown
+        paragraph.text = block.content
+    
     def _add_element_to_slide(self, slide, block: Block):
         """Add a Block element to a slide."""
         # Convert browser coordinates to slide coordinates
@@ -72,15 +80,21 @@ class PPTXRenderer:
         x_scale = slide_width_inches / browser_width_px
         y_scale = slide_height_inches / browser_height_px
         
-        # Convert coordinates
+        # Convert coordinates (pixels to inches)
         left = Inches(block.x * x_scale)
         top = Inches(block.y * y_scale)
         width = Inches(block.width * x_scale)
         height = Inches(block.height * y_scale)
         
-        # Skip elements that are too small or have no content
-        if not block.content.strip() or width < Inches(0.1) or height < Inches(0.1):
+        # Skip elements that have no content
+        if not block.content.strip():
             return
+        
+        # Ensure minimum dimensions for text boxes
+        if width < Inches(0.5):
+            width = Inches(0.5)
+        if height < Inches(0.3):
+            height = Inches(0.3)
         
         # Add text box to slide
         textbox = slide.shapes.add_textbox(left, top, width, height)
@@ -88,26 +102,26 @@ class PPTXRenderer:
         text_frame.clear()
         
         # Configure text frame
-        text_frame.margin_left = Inches(0.1)
-        text_frame.margin_right = Inches(0.1)
-        text_frame.margin_top = Inches(0.05)
-        text_frame.margin_bottom = Inches(0.05)
+        text_frame.margin_left = 0
+        text_frame.margin_right = 0
+        text_frame.margin_top = 0
+        text_frame.margin_bottom = 0
         text_frame.word_wrap = True
         
-        # Add paragraph
+        # Add paragraph with rich text formatting
         p = text_frame.paragraphs[0]
-        p.text = block.content
+        self._add_formatted_text(p, block)
         
         # Configure paragraph formatting
         if block.is_heading():
             # Heading formatting
-            if block.tag == 'h1':
+            if block.tagName == 'h1':
                 p.font.size = Pt(28)
                 p.font.bold = True
-            elif block.tag == 'h2':
+            elif block.tagName == 'h2':
                 p.font.size = Pt(22)
                 p.font.bold = True
-            elif block.tag == 'h3':
+            elif block.tagName == 'h3':
                 p.font.size = Pt(18)
                 p.font.bold = True
             else:

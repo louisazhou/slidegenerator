@@ -4,11 +4,12 @@ import asyncio
 import tempfile
 import os
 import json
-import markdown
+from typing import List, Optional
 from pyppeteer import launch
 from pptx.util import Inches
 from .models import Block
-from typing import List, Optional
+from .markdown_parser import MarkdownParser
+from .theme_loader import get_css
 
 
 def paginate(blocks: List[Block], max_height_px: int = 540) -> List[List[Block]]:
@@ -57,6 +58,19 @@ def paginate(blocks: List[Block], max_height_px: int = 540) -> List[List[Block]]
     # Add the last page if it's not empty
     if current_page:
         pages.append(current_page)
+    
+    # Normalize Y coordinates for each page
+    for page in pages:
+        if not page:
+            continue
+            
+        # Find the minimum Y coordinate on this page
+        min_y = min(block.y for block in page)
+        
+        # Adjust all Y coordinates to start from a reasonable position (e.g., 40px for padding)
+        page_top_margin = 40
+        for block in page:
+            block.y = block.y - min_y + page_top_margin
     
     return pages
 
@@ -109,6 +123,11 @@ class LayoutEngine:
                     return;
                 }
                 
+                // Skip li elements - we'll process their parent ul/ol instead
+                if (el.tagName.toLowerCase() === 'li') {
+                    return;
+                }
+                
                 // Skip elements that are children of elements we've already processed
                 for (const parent of result) {
                     if (parent.element && parent.element.contains(el)) {
@@ -122,17 +141,19 @@ class LayoutEngine:
                 // Get text content, handling special cases
                 let textContent = el.textContent;
                 
-                // For list items, add bullet points manually
-                if (el.tagName.toLowerCase() === 'li') {
-                    const listType = el.parentElement.tagName.toLowerCase();
-                    if (listType === 'ul') {
-                        textContent = '• ' + textContent;
-                    } else if (listType === 'ol') {
-                        // Find the index of this li among its siblings
-                        const siblings = Array.from(el.parentElement.children);
-                        const index = siblings.indexOf(el) + 1;
-                        textContent = index + '. ' + textContent;
-                    }
+                // For list elements (ul/ol), format the list items properly
+                if (el.tagName.toLowerCase() === 'ul' || el.tagName.toLowerCase() === 'ol') {
+                    const listItems = Array.from(el.children).filter(child => child.tagName.toLowerCase() === 'li');
+                    const isOrdered = el.tagName.toLowerCase() === 'ol';
+                    
+                    textContent = listItems.map((li, index) => {
+                        const itemText = li.textContent.trim();
+                        if (isOrdered) {
+                            return `${index + 1}. ${itemText}`;
+                        } else {
+                            return `• ${itemText}`;
+                        }
+                    }).join('\\n');
                 }
                 
                 result.push({
@@ -200,134 +221,19 @@ class LayoutEngine:
         if not markdown_text or not markdown_text.strip():
             return ""
         
-        # Process page breaks in markdown (--- or <!-- slide -->)
-        slides_md = []
-        current_slide = []
-        
-        # Add a leading newline to ensure proper parsing
-        lines = markdown_text.strip().split('\n')
-        
-        for line in lines:
-            if line.strip() == '---' or '<!-- slide -->' in line:
-                # Add current slide content if it exists
-                if current_slide:
-                    slides_md.append('\n'.join(current_slide))
-                # Always start a new slide after a page break
-                current_slide = []
-            else:
-                current_slide.append(line)
-                
-        # Add the last slide if it has content
-        if current_slide:
-            slides_md.append('\n'.join(current_slide))
-        
-        # If no page breaks were found, treat the whole content as one slide
-        if not slides_md:
-            slides_md = [markdown_text]
-        
-        # Convert each slide to HTML
-        html_slides = []
-        for slide_md in slides_md:
-            if not slide_md.strip():
-                # Skip completely empty slides
-                continue
-            
-            # Use extra extension to allow raw HTML and output as HTML5
-            html = markdown.markdown(
-                slide_md,
-                extensions=['tables', 'fenced_code', 'extra'],
-                output_format='html5'
-            )
-            html_slides.append(html)
+        # Use the new markdown parser
+        parser = MarkdownParser()
+        html_slides = parser.parse_with_page_breaks(markdown_text)
         
         # If no content slides, return empty string
         if not html_slides:
             return ""
         
-        # Add CSS for layout
-        css = """
-        <style>
-            body {
-                margin: 0;
-                padding: 0;
-                font-family: Arial, sans-serif;
-            }
-            
-            .slide {
-                width: 960px;
-                height: 540px;
-                padding: 40px;
-                box-sizing: border-box;
-                position: relative;
-                page-break-after: always;
-            }
-            
-            h1 {
-                font-size: 36px;
-                margin-bottom: 20px;
-            }
-            
-            h2 {
-                font-size: 28px;
-                margin-bottom: 15px;
-            }
-            
-            h3 {
-                font-size: 22px;
-                margin-bottom: 12px;
-            }
-            
-            p {
-                font-size: 18px;
-                line-height: 1.4;
-                margin-bottom: 15px;
-            }
-            
-            ul, ol {
-                font-size: 18px;
-                line-height: 1.4;
-                margin-left: 20px;
-                margin-bottom: 15px;
-            }
-            
-            li {
-                margin-bottom: 8px;
-            }
-            
-            pre, code {
-                font-family: 'Courier New', monospace;
-                font-size: 14px;
-                background-color: #f4f4f4;
-                padding: 10px;
-                border-radius: 4px;
-                margin-bottom: 15px;
-            }
-            
-            table {
-                border-collapse: collapse;
-                width: 100%;
-                margin-bottom: 15px;
-            }
-            
-            th, td {
-                border: 1px solid #ddd;
-                padding: 8px;
-                text-align: left;
-            }
-            
-            th {
-                background-color: #f2f2f2;
-                font-weight: bold;
-            }
-            
-            .page-break {
-                display: none;  /* Hidden in CSS but will be detected by JavaScript */
-            }
-        </style>
-        """
+        # Get CSS from theme system
+        css = get_css("default")  # TODO: Make theme configurable
         
         # Combine HTML slides
-        full_html = f"{css}\n<body>\n"
+        full_html = f"<style>\n{css}\n</style>\n<body>\n"
         for i, html_slide in enumerate(html_slides):
             full_html += f'<div class="slide" id="slide-{i}">\n{html_slide}\n</div>\n'
             
@@ -382,6 +288,9 @@ class LayoutEngine:
         # Convert raw layout data to Block objects
         blocks = [Block.from_element(element) for element in layout_info]
         
+        # Merge consecutive list items into text blocks
+        blocks = self._merge_consecutive_lists(blocks)
+        
         # Paginate the blocks
         pages = paginate(blocks, page_height)
         
@@ -394,3 +303,25 @@ class LayoutEngine:
                     print(f"    Block {j+1}: {block.tag} ({block.height}px) - '{block.content[:30]}...'{oversized_flag}")
         
         return pages 
+
+    def _merge_consecutive_lists(self, blocks: List[Block]) -> List[Block]:
+        """Merge consecutive list items into single text blocks."""
+        merged_blocks = []
+        current_block = None
+        
+        for block in blocks:
+            if block.is_list_item():
+                if current_block:
+                    current_block.content += " " + block.content
+                else:
+                    current_block = block
+            else:
+                if current_block:
+                    merged_blocks.append(current_block)
+                    current_block = None
+                merged_blocks.append(block)
+        
+        if current_block:
+            merged_blocks.append(current_block)
+        
+        return merged_blocks 

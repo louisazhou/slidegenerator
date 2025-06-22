@@ -59,6 +59,10 @@ class Block:
         """Check if this block is a code block."""
         return self.tag in ['pre', 'code']
     
+    def is_list_item(self):
+        """Check if this block is a list item."""
+        return self.tag == 'li'
+    
     @classmethod
     def from_element(cls, element):
         """
