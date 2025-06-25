@@ -17,6 +17,7 @@ Run this file to generate demonstration slides showcasing every feature.
 import os
 import sys
 from pathlib import Path
+from PIL import Image, ImageDraw
 
 # Add the project root to the path so we can import our modules
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -25,10 +26,42 @@ sys.path.insert(0, project_root)
 from slide_generator.generator import SlideGenerator
 
 
+def _ensure_dummy_figures():
+    """Create simple dummy chart images if they don't already exist."""
+    assets_dir = Path(__file__).parent / "assets"
+    assets_dir.mkdir(exist_ok=True)
+
+    bar_path = assets_dir / "chart_bar.png"
+    pie_path = assets_dir / "chart_pie.png"
+
+    if not bar_path.exists():
+        img = Image.new("RGB", (400, 300), "white")
+        draw = ImageDraw.Draw(img)
+        bars = [60, 120, 180, 90]
+        colors = ["#4e79a7", "#f28e2b", "#e15759", "#76b7b2"]
+        x0 = 40
+        for h, c in zip(bars, colors):
+            draw.rectangle((x0, 250 - h, x0 + 60, 250), fill=c)
+            x0 += 80
+        img.save(bar_path)
+
+    if not pie_path.exists():
+        img = Image.new("RGB", (300, 300), "white")
+        draw = ImageDraw.Draw(img)
+        draw.pieslice([0, 0, 300, 300], 0, 120, fill="#4e79a7")
+        draw.pieslice([0, 0, 300, 300], 120, 210, fill="#f28e2b")
+        draw.pieslice([0, 0, 300, 300], 210, 360, fill="#e15759")
+        img.save(pie_path)
+
+    return bar_path, pie_path
+
+
 def create_comprehensive_demo_content():
     """Create comprehensive markdown content showcasing all features."""
     
-    demo_content = """# 🚀 Slide Generator - Complete Feature Demo
+    bar_fig, pie_fig = _ensure_dummy_figures()
+
+    demo_markdown = """# 🚀 Slide Generator - Complete Feature Demo
 
 Welcome to the **comprehensive demonstration** of the *Slide Generator*!
 
@@ -338,9 +371,97 @@ generator.generate(markdown_content, "dark_presentation.pptx")
 - **Output formats**: PowerPoint (.pptx) with full compatibility
 - **Custom styling**: CSS-based theme configuration
 
-**End of demonstration** - ==All features showcased==! 🎊"""
+**End of demonstration** - ==All features showcased==! 🎊
+
+---
+
+# 📈 Figures Demo
+
+Bar chart (80% width):
+
+![Bar Chart|0.8x]({bar_fig})
+
+Pie chart (60% height):
+
+![Pie Chart|0.6y]({pie_fig})
+
+# Two-column slide: table on left, text on right
+
+:::columns
+
+:::column
+
+### 📋 Project Status Table
+
+| Task | Owner | Progress |
+|------|-------|----------|
+| Authentication | Alice | 100% |
+| Database | Bob | 80% |
+| API Docs | Carol | 100% |
+| Analytics | Dave | 60% |
+
+:::
+
+:::column
+
+### ✍️ Notes
+
+All core features are either complete or in progress. Remaining items are performance tuning and UX polish.
+
+:::
+
+:::
+
+---
+
+# 📈 Figures Demo (Columns)
+
+:::columns
+
+:::column
+
+![Bar Chart|0.8x]({bar_fig})
+
+:::
+
+:::column
+
+The bar chart shows relative task completion percentages. Authentication and API docs are finished; analytics is lagging.
+
+:::
+
+:::
+
+---
+
+# 🖼️ Figure + Table Demo
+
+:::columns
+
+:::column
+
+![Pie Chart|0.6y]({pie_fig})
+
+:::
+
+:::column
+
+| Segment | % |
+|---------|---|
+| Complete | 55 |
+| In-Progress | 35 |
+| Blocked | 10 |
+
+:::
+
+:::
+
+"""
     
-    return demo_content
+    # Substitute figure placeholders with absolute paths so they render correctly
+    demo_markdown = demo_markdown.replace("{bar_fig}", str(bar_fig)).replace("{pie_fig}", str(pie_fig))
+
+    return demo_markdown
 
 
 def generate_theme_demos():
@@ -350,6 +471,7 @@ def generate_theme_demos():
     from slide_generator.generator import SlideGenerator
     
     # Get demo content
+    bar_fig, pie_fig = _ensure_dummy_figures()
     demo_content = create_comprehensive_demo_content()
     
     # Create output directory in current working directory (path-independent)

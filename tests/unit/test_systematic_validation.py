@@ -70,8 +70,8 @@ This paragraph has **bold text**, *italic text*, `inline code`, and ==highlighte
 ## Final Section
 Thank you for testing the slide generator!"""
         
-        output_path = "output/test_output.pptx"
-        os.makedirs("output", exist_ok=True)
+        with tempfile.NamedTemporaryFile(suffix='.pptx', delete=False) as tmp:
+            output_path = tmp.name
         
         generator = SlideGenerator(debug=True)
         generator.generate(markdown_content, output_path)

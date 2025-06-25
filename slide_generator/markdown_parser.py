@@ -3,6 +3,7 @@ Enhanced markdown parser with support for multiple page break formats.
 """
 from typing import List, Optional
 from markdown_it import MarkdownIt
+from pathlib import Path
 
 
 class MarkdownParser:
@@ -10,15 +11,18 @@ class MarkdownParser:
     Enhanced markdown parser with page break support using markdown-it-py.
     """
     
-    def __init__(self, extensions: Optional[List[str]] = None):
+    def __init__(self, extensions: Optional[List[str]] = None, theme: str = "default"):
         """
         Initialize the markdown parser.
         
         Args:
             extensions: List of markdown extensions to enable (for compatibility)
+            theme: Theme name for CSS variables
         """
         # markdown-it-py doesn't use the same extension system as the old markdown library
         # but it has most features built-in by default
+        self.theme = theme
+
         self.markdown_processor = MarkdownIt('commonmark', {
             'html': True,          # Enable HTML tags
             'linkify': True,       # Auto-convert URLs to links
@@ -27,6 +31,18 @@ class MarkdownParser:
         
         # Enable additional features
         self.markdown_processor.enable(['table', 'strikethrough'])
+
+        # Parse CSS variables for slide dimensions
+        from .theme_loader import get_css
+        import re
+        css_content = get_css(self.theme)
+        width_match = re.search(r'--slide-width:\s*(\d+)px', css_content)
+        height_match = re.search(r'--slide-height:\s*(\d+)px', css_content)
+        padding_match = re.search(r'--slide-padding:\s*(\d+)px', css_content)
+
+        self.viewport_width = int(width_match.group(1)) if width_match else 960
+        self.viewport_height = int(height_match.group(1)) if height_match else 540
+        self.padding_px = int(padding_match.group(1)) if padding_match else 19
     
     def parse(self, markdown_text: str) -> str:
         """
@@ -65,6 +81,117 @@ class MarkdownParser:
         # Convert ++underline++ to HTML <u> tags
         # Using ++ to avoid conflict with markdown bold (**bold**)
         processed = re.sub(r'\+\+(.*?)\+\+', r'<u>\1</u>', processed)
+        
+        # Handle Pandoc-style multi-column blocks
+        def convert_columns(text: str) -> str:
+            lines = text.split('\n')
+            out_lines = []
+            i = 0
+            while i < len(lines):
+                if lines[i].strip().startswith(':::columns'):
+                    i += 1
+                    columns = []
+                    current = []
+                    in_column = False
+                    
+                    while i < len(lines):
+                        line = lines[i].strip()
+                        
+                        if line.startswith(':::column'):
+                            # Start new column, flush current if exists
+                            if current:
+                                columns.append('\n'.join(current).strip())
+                                current = []
+                            in_column = True
+                            i += 1
+                            continue
+                        elif line == ':::' and in_column:
+                            # End current column
+                            if current:
+                                columns.append('\n'.join(current).strip())
+                                current = []
+                            in_column = False
+                            i += 1
+                            continue
+                        elif line == ':::' and not in_column:
+                            # End entire columns block
+                            i += 1
+                            break
+                        
+                        # Regular content line
+                        current.append(lines[i])
+                        i += 1
+                    
+                    # Build HTML - filter out empty columns and parse markdown content
+                    col_html = []
+                    for c in columns:
+                        if c.strip():  # Only add non-empty columns
+                            # Parse the column content as markdown with table support
+                            from markdown_it import MarkdownIt
+                            md = MarkdownIt().enable('table')
+                            if hasattr(self, 'extensions') and self.extensions:
+                                for ext in self.extensions:
+                                    if hasattr(md, 'use'):
+                                        md = md.use(ext)
+                            
+                            # Apply image preprocessing to column content first
+                            processed_column = self._preprocess_custom_syntax(c.strip())
+                            column_html = md.render(processed_column)
+                            col_html.append(f'<div class="column">\n{column_html}</div>')
+                    out_lines.append('<div class="columns">')
+                    out_lines.extend(col_html)
+                    out_lines.append('</div>')
+                    # i is already positioned after the closing :::
+                else:
+                    out_lines.append(lines[i])
+                    i += 1
+            return '\n'.join(out_lines)
+
+        processed = convert_columns(processed)
+        
+        # Handle image scaling syntax ![alt|0.8x](path)
+        def replace_image(match):
+            alt = match.group(1)
+            scale = match.group(2)
+            axis = match.group(3)
+            src = match.group(4)
+
+            from pathlib import Path
+            # Convert src to absolute file path and file:// URL for browser
+            if not src.startswith('http'):  # local file
+                abs_path = str(Path(src).expanduser().resolve())
+                browser_src = 'file://' + abs_path
+            else:
+                abs_path = src
+                browser_src = src
+
+            attrs = [f'data-filepath="{abs_path}"']
+            if scale and axis:
+                # Calculate explicit pixel dimensions to ensure accurate browser measurement
+                # The browser ignores max-width/max-height constraints if image is smaller than the limit
+                # We need to use explicit width/height for reliable measurement
+                if axis.lower() == 'x':
+                    # For width scaling: calculate target pixels based on content area
+                    # TODO: Make this dynamic by reading CSS variables
+                    content_width = self.viewport_width - 2 * self.padding_px
+                    target_content_percent = float(scale) * 100  # e.g., 80%
+                    target_pixels = content_width * (target_content_percent / 100)  # e.g., 738px
+                    # Use explicit width instead of max-width for reliable measurement
+                    attrs.append(f'style="width:{target_pixels:.0f}px;height:auto;"')
+                    attrs.append(f'data-scale-x="{scale}"')
+                elif axis.lower() == 'y':
+                    # For height scaling: calculate target pixels based on content area
+                    # TODO: Make this dynamic by reading CSS variables
+                    content_height = self.viewport_height - 2 * self.padding_px
+                    target_content_percent = float(scale) * 100  # e.g., 60%
+                    target_pixels = content_height * (target_content_percent / 100)  # e.g., 301px
+                    # Use explicit height instead of max-height for reliable measurement
+                    attrs.append(f'style="height:{target_pixels:.0f}px;width:auto;"')
+                    attrs.append(f'data-scale-y="{scale}"')
+            attr_str = ' '.join(attrs)
+            return f'<img src="{browser_src}" alt="{alt}" {attr_str} />'
+
+        processed = re.sub(r'!\[([^\]|]+)(?:\|([0-9.]+)([xy]))?\]\(([^)\s]+)\)', replace_image, processed)
         
         return processed
     

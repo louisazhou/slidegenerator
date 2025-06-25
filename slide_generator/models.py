@@ -19,6 +19,8 @@ class Block:
     role: Optional[str] = None
     style: Optional[Dict] = None
     table_column_widths: Optional[list] = None
+    src: Optional[str] = None  # For images
+    className: Optional[str] = None  # For CSS class names
     
     @property
     def width(self):
@@ -68,6 +70,10 @@ class Block:
         """Check if this block is a table."""
         return self.tag == 'table'
     
+    def is_image(self):
+        """Check if this block is an image."""
+        return self.tag == 'img'
+    
     @classmethod
     def from_element(cls, element):
         """
@@ -82,5 +88,7 @@ class Block:
             content=element.get('textContent', ''),
             role=element.get('role'),
             style=element.get('style', {}),
-            table_column_widths=element.get('tableColumnWidths')
+            table_column_widths=element.get('tableColumnWidths'),
+            src=element.get('src'),
+            className=element.get('className')
         ) 

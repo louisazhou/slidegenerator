@@ -37,11 +37,18 @@ class SlideGenerator:
         Returns:
             str: Path to the generated PPTX file
         """
+        import tempfile
+        
         # Ensure output directory exists
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         
+        # Create a temp directory for this generation session
+        temp_dir = tempfile.mkdtemp()
+        if self.debug:
+            print(f"🗂️ Using temp directory: {temp_dir}")
+        
         # Step 1: Layout engine processes markdown and returns paginated blocks
-        pages = self.layout_engine.measure_and_paginate(markdown_text)
+        pages = self.layout_engine.measure_and_paginate(markdown_text, temp_dir=temp_dir)
         
         # Step 2: PPTX renderer converts pages to PowerPoint presentation
         self.pptx_renderer.render(pages, output_path)

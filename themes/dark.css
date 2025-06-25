@@ -6,16 +6,18 @@
     --slide-width: 960px;
     --slide-height: 540px;
     --slide-aspect-ratio: 16/9;  /* 16:9 aspect ratio */
+    --slide-padding: 19px;       /* Configurable slide padding in pixels */
+    --slide-font-family: 'Arial'; /* Font family that matches PowerPoint exactly */
     
     /* Table styling deltas */
-    --table-font-delta: -2pt;    /* Table font size = body - 2pt */
     --table-border-width: 0.25pt; /* Much thinner table borders */
+    --table-font-delta: -2pt;
 }
 
 body {
     margin: 0;
     padding: 0;
-    font-family: Arial, sans-serif;
+    font-family: var(--slide-font-family), sans-serif;
     background-color: #1a1a1a;
     color: #e0e0e0;
 }
@@ -23,7 +25,7 @@ body {
 .slide {
     width: var(--slide-width);
     min-height: var(--slide-height); /* Allow content to extend beyond slide for debugging */
-    padding: 40px;
+    padding: var(--slide-padding);
     box-sizing: border-box;
     position: relative;
     page-break-after: always;
@@ -34,31 +36,34 @@ body {
 }
 
 h1 {
-    font-size: 36px;
+    font-size: 16px;
     line-height: 1.4;
+    margin-top: 0;
     margin-bottom: 20px;
     width: fit-content;
     color: #e0e0e0;
 }
 
 h2 {
-    font-size: 28px;
+    font-size: 13px;
     line-height: 1.4;
+    margin-top: 0;
     margin-bottom: 15px;
     width: fit-content;
     color: #e0e0e0;
 }
 
 h3 {
-    font-size: 22px;
+    font-size: 11px;
     line-height: 1.4;
+    margin-top: 0;
     margin-bottom: 12px;
     width: fit-content;
     color: #e0e0e0;
 }
 
 p {
-    font-size: 18px;
+    font-size: 10px;
     line-height: 1.4;
     margin-bottom: 0px;
     width: fit-content;
@@ -67,7 +72,7 @@ p {
 }
 
 ul, ol {
-    font-size: 18px;
+    font-size: 10px;
     line-height: 1.4;
     margin-left: 20px;
     margin-bottom: 0px;
@@ -78,21 +83,20 @@ ul, ol {
 
 li {
     line-height: 1.4;
-    margin-bottom: 8px;
+    margin-bottom: 0;
     width: fit-content;
     max-width: 100%;
 }
 
 /* Code blocks - separate styling for pre and inline code */
 pre {
+    background-color: transparent;
+    color: #dcdcdc;
+    padding: 0;
+    border: none;
+    margin-bottom: 15px;
     font-family: 'Courier New', monospace;
     font-size: 14px;
-    line-height: 1.4;
-    background-color: #2d2d2d;
-    color: #ffffff;
-    padding: 10px;
-    border-radius: 4px;
-    margin-bottom: 15px;
     width: auto;
     max-width: 100%; /* Ensure code blocks fit within slide boundaries */
     overflow-x: auto; /* Add horizontal scrolling if needed */
@@ -117,11 +121,12 @@ pre code {
 }
 
 code {
+    background-color: transparent;
+    color: #dcdcdc;
+    padding: 0 2px;
+    border: none;
     font-family: 'Courier New', monospace;
     font-size: 14px;
-    background-color: #2d2d2d;
-    color: #ffffff;
-    padding: 2px 4px;
     border-radius: 2px;
 }
 
@@ -135,7 +140,7 @@ table {
 }
 
 th, td {
-    border: 1px solid #ffffff;
+    border: 1px solid #666;
     padding: 8px;
     text-align: left;
     background-color: transparent;
@@ -144,6 +149,7 @@ th, td {
     word-wrap: break-word; /* Break long words in table cells */
     max-width: 200px; /* Prevent individual cells from getting too wide */
     overflow-wrap: break-word; /* Modern CSS property for word breaking */
+    font-size: 10px;
 }
 
 th {
@@ -153,4 +159,20 @@ th {
 
 .page-break {
     display: none;  /* Hidden in CSS but will be detected by JavaScript */
+}
+
+/* Two-column layout support */
+.columns {
+  display: flex;
+  gap: 32px;
+}
+
+.column {
+  flex: 1 1 0;
+  padding: 0 8px;
+}
+
+/* Ensure tables inside columns fill the available column width */
+.column table {
+  width: 100%;
 } 
