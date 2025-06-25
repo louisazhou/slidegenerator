@@ -10,8 +10,8 @@
     --slide-font-family: 'Arial'; /* Font family that matches PowerPoint exactly */
     
     /* Table styling deltas */
+    --table-font-delta: -2pt;    /* Table font size = body - 2pt */
     --table-border-width: 0.25pt; /* Much thinner table borders */
-    --table-font-delta: -2pt; /* Slightly smaller font inside tables */
 }
 
 body {
@@ -82,7 +82,7 @@ ul, ol {
 
 li {
     line-height: 1.4;
-    margin-bottom: 0;
+    margin-bottom: 8px;
     width: fit-content;
     max-width: 100%;
 }
@@ -94,8 +94,8 @@ pre {
     line-height: 1.4;
     background-color: #f4f4f4;
     color: #333333;
-    padding: 0;
-    border: none;
+    padding: 10px;
+    border-radius: 4px;
     margin-bottom: 15px;
     width: auto;
     max-width: 100%; /* Ensure code blocks fit within slide boundaries */
@@ -125,8 +125,8 @@ code {
     font-size: 14px;
     background-color: #f4f4f4;
     color: #333333;
-    padding: 0 2px;
-    border: none;
+    padding: 2px 4px;
+    border-radius: 2px;
 }
 
 table {
@@ -139,8 +139,7 @@ table {
 }
 
 th, td {
-    font-size: 10px;
-    border: 1px solid #333;
+    border: 1px solid #000;
     padding: 8px;
     text-align: left;
     background-color: transparent;

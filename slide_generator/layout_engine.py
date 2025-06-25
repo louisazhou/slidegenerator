@@ -87,8 +87,7 @@ def paginate(blocks: List[Block], max_height_px: int = 540, padding_px: int = 19
         min_y = min(block.y for block in page)
         
         # Adjust all Y coordinates to start from CSS padding position (dynamic from CSS variables)
-        # Ensure a visually comfortable top margin; tests expect >=30px
-        page_top_margin = max(padding_px, 40)  # align with baseline expectations
+        page_top_margin = padding_px  # Use dynamic padding from CSS
         for block in page:
             block.y = block.y - min_y + page_top_margin
     
@@ -307,7 +306,7 @@ class LayoutEngine:
             return ""
         
         # Use the new markdown parser
-        parser = MarkdownParser(theme=self.theme)
+        parser = MarkdownParser()
         html_slides = parser.parse_with_page_breaks(markdown_text)
         
         # If no content slides, return empty string
@@ -317,24 +316,6 @@ class LayoutEngine:
         # Get CSS from theme system - use the configured theme
         css = get_css(self.theme)
         
-        # --- Visual regression aid: if a pre-generated golden image exists for this markdown, set it as background ---
-        import hashlib, pathlib
-        test_hash = hashlib.md5(markdown_text.encode()).hexdigest()[:8]
-        project_root = Path(__file__).parent.parent
-        golden_img_path = project_root / 'tests' / 'visual' / 'golden_images' / f'slide_{test_hash}.png'
-        golden_background_css = ''
-        content_wrapper_start = ''
-        content_wrapper_end = ''
-        if golden_img_path.exists():
-            # Use the golden image as background and hide actual content to ensure pixel-perfect match
-            golden_url = golden_img_path.as_uri()
-            golden_background_css = (
-                f".slide {{ background-image: url('{golden_url}'); background-size: contain; "
-                f"background-repeat: no-repeat; border: none; }}"
-            )
-            content_wrapper_start = '<div style="opacity:0">'  # hide content
-            content_wrapper_end = '</div>'
-
         # Combine HTML slides with proper UTF-8 document structure
         full_html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -344,13 +325,12 @@ class LayoutEngine:
 <title>Slide Content</title>
 <style>
 {css}
-{golden_background_css}
 </style>
 </head>
 <body>
 """
         for i, html_slide in enumerate(html_slides):
-            full_html += f'<div class="slide" id="slide-{i}">\n{content_wrapper_start}{html_slide}{content_wrapper_end}\n</div>\n'
+            full_html += f'<div class="slide" id="slide-{i}">\n{html_slide}\n</div>\n'
             
             # Add a page break marker (except after the last slide)
             if i < len(html_slides) - 1:
@@ -446,13 +426,9 @@ class LayoutEngine:
             raise ValueError(f"❌ CSS theme '{self.theme}' missing required --slide-padding variable. "
                            f"Add '--slide-padding: XXpx' to :root in themes/{self.theme}.css")
             
-        # Allow callers (e.g., unit tests) to override slide height for pagination testing
-        slide_height_css_px = int(height_match.group(1))
+        slide_height_px = int(height_match.group(1))
         padding_px = int(padding_match.group(1))
-
-        # Determine effective slide height: use provided page_height param if it differs from CSS value
-        slide_height_px = page_height if page_height and page_height != slide_height_css_px else slide_height_css_px
-
+        
         usable_height_px = slide_height_px - 2 * padding_px
         if usable_height_px <= 0:
             raise ValueError(f"❌ CSS theme '{self.theme}' has invalid dimensions: "
@@ -964,105 +940,25 @@ class LayoutEngine:
                 
             html_parts.append(f'<div class="slide" id="page-{page_idx + 1}">')
             
-            import re
-            in_columns_wrapper = False
-
             for block in page:
                 if block.is_page_break():
                     continue
-
-                is_column_block = block.className and 'column' in block.className
-                is_columns_wrapper = block.className and 'columns' in block.className
-
-                # Handle start of columns wrapper
-                if is_columns_wrapper and not in_columns_wrapper:
-                    html_parts.append('<div class="columns">')
-                    in_columns_wrapper = True
-                    continue  # wrapper itself has no visible content
-
-                if not is_column_block and in_columns_wrapper:
-                    # Close wrapper if we've left column sequence
-                    html_parts.append('</div>')
-                    in_columns_wrapper = False
-                
+                    
                 # Render block content based on its type
-                container_start = container_end = ''
-                if is_column_block:
-                    container_start = '<div class="column">'
-                    container_end = '</div>'
-                    html_parts.append(container_start)
-
                 if block.tag == 'img':
-                    src = None
-                    if hasattr(block, 'src') and block.src:
-                        src = block.src
-                    else:
-                        src_attr = re.search(r'data-filepath="([^"]+)"', block.content)
-                        if src_attr:
-                            src = src_attr.group(1)
-
-                    if src:
-                        import os, shutil
-                        from pathlib import Path
-
-                        # Determine source path (absolute or relative to temp_dir)
-                        if not os.path.isabs(src):
-                            candidate = os.path.join(temp_dir, src)
-                            if os.path.exists(candidate):
-                                src_path = candidate
-                            else:
-                                src_path = src  # fallback; maybe already relative OK
-                        else:
-                            src_path = src
-
-                        # Copy to output/debug_assets so HTML can load images
-                        output_assets_dir = Path.cwd() / 'output' / 'debug_assets'
-                        output_assets_dir.mkdir(parents=True, exist_ok=True)
-
-                        filename = os.path.basename(src_path)
-                        dest_path = output_assets_dir / filename
-
-                        try:
-                            # Only copy if not already present or sizes differ
-                            if not dest_path.exists() or os.path.getsize(src_path) != os.path.getsize(dest_path):
-                                shutil.copy2(src_path, dest_path)
-                        except Exception as e:
-                            if self.debug:
-                                print(f"⚠️ Failed to copy debug image {src_path} -> {dest_path}: {e}")
-
-                        # Set src attribute relative to HTML file
-                        rel_src = f'debug_assets/{filename}'
-                    else:
-                        rel_src = 'placeholder.png'
-
-                    html_parts.append(f'<img src="{rel_src}" alt="Image" style="width:{block.width}px;height:{block.height}px;" />')
+                    # Extract src from the original content or use data-filepath
+                    src = block.content if block.content.endswith(('.png', '.jpg', '.jpeg', '.gif')) else "placeholder.png"
+                    html_parts.append(f'<img src="{src}" alt="Image" style="width:{block.width}px;height:{block.height}px;" />')
                 elif block.tag in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
                     html_parts.append(f'<{block.tag}>{block.content}</{block.tag}>')
                 elif block.tag == 'p':
                     html_parts.append(f'<p>{block.content}</p>')
                 elif block.tag == 'table':
-                    if not block.content.strip().lower().startswith('<table'):
-                        html_parts.append('<table>')
-                        html_parts.append(block.content)
-                        html_parts.append('</table>')
-                    else:
-                        html_parts.append(block.content)
+                    html_parts.append(block.content)  # Tables already have full HTML
                 elif block.tag in ['ul', 'ol']:
-                    tag = block.tag
-                    if not block.content.strip().lower().startswith(f'<{tag}'):
-                        html_parts.append(f'<{tag}>')
-                        html_parts.append(block.content)
-                        html_parts.append(f'</{tag}>')
-                    else:
-                        html_parts.append(block.content)
+                    html_parts.append(block.content)  # Lists already have full HTML
                 else:
                     html_parts.append(f'<div class="{block.tag}">{block.content}</div>')
-
-                if is_column_block:
-                    html_parts.append(container_end)
-
-            if in_columns_wrapper:
-                html_parts.append('</div>')  # close any unclosed wrapper
             
             html_parts.append('</div>')
             

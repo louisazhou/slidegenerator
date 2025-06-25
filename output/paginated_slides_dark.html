@@ -17,8 +17,8 @@
     --slide-font-family: 'Arial'; /* Font family that matches PowerPoint exactly */
     
     /* Table styling deltas */
+    --table-font-delta: -2pt;    /* Table font size = body - 2pt */
     --table-border-width: 0.25pt; /* Much thinner table borders */
-    --table-font-delta: -2pt;
 }
 
 body {
@@ -90,20 +90,21 @@ ul, ol {
 
 li {
     line-height: 1.4;
-    margin-bottom: 0;
+    margin-bottom: 8px;
     width: fit-content;
     max-width: 100%;
 }
 
 /* Code blocks - separate styling for pre and inline code */
 pre {
-    background-color: transparent;
-    color: #dcdcdc;
-    padding: 0;
-    border: none;
-    margin-bottom: 15px;
     font-family: 'Courier New', monospace;
     font-size: 14px;
+    line-height: 1.4;
+    background-color: #2d2d2d;
+    color: #ffffff;
+    padding: 10px;
+    border-radius: 4px;
+    margin-bottom: 15px;
     width: auto;
     max-width: 100%; /* Ensure code blocks fit within slide boundaries */
     overflow-x: auto; /* Add horizontal scrolling if needed */
@@ -128,12 +129,11 @@ pre code {
 }
 
 code {
-    background-color: transparent;
-    color: #dcdcdc;
-    padding: 0 2px;
-    border: none;
     font-family: 'Courier New', monospace;
     font-size: 14px;
+    background-color: #2d2d2d;
+    color: #ffffff;
+    padding: 2px 4px;
     border-radius: 2px;
 }
 
@@ -147,7 +147,7 @@ table {
 }
 
 th, td {
-    border: 1px solid #666;
+    border: 1px solid #ffffff;
     padding: 8px;
     text-align: left;
     background-color: transparent;
@@ -156,7 +156,6 @@ th, td {
     word-wrap: break-word; /* Break long words in table cells */
     max-width: 200px; /* Prevent individual cells from getting too wide */
     overflow-wrap: break-word; /* Modern CSS property for word breaking */
-    font-size: 10px;
 }
 
 th {
@@ -215,7 +214,6 @@ body { counter-reset: slide-num; }
 <div class="slide" id="page-3">
 <h1>📊 Table Features - HTML Auto-Width</h1>
 <h2>Smart Column Distribution</h2>
-<table>
 <thead>
 <tr>
 <th>Feature</th>
@@ -250,9 +248,10 @@ body { counter-reset: slide-num; }
 <td>Expected 50% speed improvement</td>
 </tr>
 </tbody>
-</table>
 <h2>Compact Table Example</h2>
-<table>
+</div>
+<div style="height: 40px; border-top: 2px dashed #999; margin: 20px 0; display: flex; align-items: center; justify-content: center; background: #f9f9f9;"><span style="background: white; padding: 0 10px; color: #666;">↓ NEXT SLIDE ↓</span></div>
+<div class="slide" id="page-4">
 <thead>
 <tr>
 <th>Name</th>
@@ -281,12 +280,11 @@ body { counter-reset: slide-num; }
 <td>Japan</td>
 </tr>
 </tbody>
-</table>
 <p><strong>Key Features:</strong></p>
 <p><p data-list-levels="0,0,0" data-list-type="ul">✅ <strong>HTML auto-width</strong>: Columns sized by content, not equal distribution<br>✅ <strong>Theme-aware borders</strong>: Dark theme uses light borders, default uses dark<br>✅ <strong>Native PowerPoint tables</strong>: Perfect compatibility and professional appearance</p></p>
 </div>
 <div style="height: 40px; border-top: 2px dashed #999; margin: 20px 0; display: flex; align-items: center; justify-content: center; background: #f9f9f9;"><span style="background: white; padding: 0 10px; color: #666;">↓ NEXT SLIDE ↓</span></div>
-<div class="slide" id="page-4">
+<div class="slide" id="page-5">
 <h1>🎨 Theme Demonstration</h1>
 <h2>Default Theme Features</h2>
 <p><p data-list-levels="0,0,0,0" data-list-type="ul"><strong>Light background</strong> with dark text<br><strong>Black borders</strong> on tables for clear definition<br><strong>Professional color scheme</strong> suitable for business presentations<br><strong>High contrast</strong> for excellent readability</p></p>
@@ -294,7 +292,7 @@ body { counter-reset: slide-num; }
 <p><p data-list-levels="0,0,0,0" data-list-type="ul"><strong>Dark background</strong> (#1a1a1a) for modern appearance<br><strong>Light gray borders</strong> (#e0e0e0) for visibility on dark background<br><strong>White text</strong> for optimal contrast<br><strong>Contemporary design</strong> perfect for tech presentations</p></p>
 </div>
 <div style="height: 40px; border-top: 2px dashed #999; margin: 20px 0; display: flex; align-items: center; justify-content: center; background: #f9f9f9;"><span style="background: white; padding: 0 10px; color: #666;">↓ NEXT SLIDE ↓</span></div>
-<div class="slide" id="page-5">
+<div class="slide" id="page-6">
 <h1>💻 Code Block Support</h1>
 <h2>Python Example</h2>
 <div class="pre"><code class="language-python">def fibonacci(n):
@@ -308,6 +306,9 @@ for i in range(10):
     print(f"F({i}) = {result}")
 </code></div>
 <h2>JavaScript Example</h2>
+</div>
+<div style="height: 40px; border-top: 2px dashed #999; margin: 20px 0; display: flex; align-items: center; justify-content: center; background: #f9f9f9;"><span style="background: white; padding: 0 10px; color: #666;">↓ NEXT SLIDE ↓</span></div>
+<div class="slide" id="page-7">
 <div class="pre"><code class="language-javascript">async function fetchUserData(userId) {
     try {
         const response = await fetch(`/api/users/${userId}`);
@@ -319,9 +320,6 @@ for i in range(10):
 }
 </code></div>
 <h2>SQL Example</h2>
-</div>
-<div style="height: 40px; border-top: 2px dashed #999; margin: 20px 0; display: flex; align-items: center; justify-content: center; background: #f9f9f9;"><span style="background: white; padding: 0 10px; color: #666;">↓ NEXT SLIDE ↓</span></div>
-<div class="slide" id="page-6">
 <div class="pre"><code class="language-sql">-- Complex query with joins and aggregation
 SELECT 
     u.username,
@@ -336,7 +334,7 @@ ORDER BY avg_rating DESC;
 </code></div>
 </div>
 <div style="height: 40px; border-top: 2px dashed #999; margin: 20px 0; display: flex; align-items: center; justify-content: center; background: #f9f9f9;"><span style="background: white; padding: 0 10px; color: #666;">↓ NEXT SLIDE ↓</span></div>
-<div class="slide" id="page-7">
+<div class="slide" id="page-8">
 <h1>📝 List Formatting</h1>
 <h2>Unordered Lists</h2>
 <p><p data-list-levels="0,0,1,1,1,0" data-list-type="ul"><strong>Primary feature</strong>: Full markdown support<br><strong>Secondary feature</strong>: Inline styling within lists<br><em>Nested items</em> with proper indentation<br><code>Code elements</code> in list items<br><mark>Highlighted content</mark> for emphasis<br><strong>Tertiary feature</strong>: Multiple nesting levels</p></p>
@@ -344,10 +342,9 @@ ORDER BY avg_rating DESC;
 <p><p data-list-levels="0,1,1,1,0,1,1,1,0,1,1,1" data-list-type="ol"><strong>Setup Phase</strong><br>Install dependencies with <code>pip install -r requirements.txt</code><br>Configure environment variables<br>Initialize database schema<br><strong>Development Phase</strong><br>Write <mark>clean, maintainable code</mark><br>Add comprehensive <em>unit tests</em><br>Document <strong>public APIs</strong><br><strong>Deployment Phase</strong><br>Run <code>pytest</code> for quality assurance<br>Deploy to <mark>production environment</mark><br>Monitor <em>system performance</em></p></p>
 </div>
 <div style="height: 40px; border-top: 2px dashed #999; margin: 20px 0; display: flex; align-items: center; justify-content: center; background: #f9f9f9;"><span style="background: white; padding: 0 10px; color: #666;">↓ NEXT SLIDE ↓</span></div>
-<div class="slide" id="page-8">
+<div class="slide" id="page-9">
 <h1>🔧 Technical Architecture</h1>
 <h2>Core Components</h2>
-<table>
 <thead>
 <tr>
 <th>Component</th>
@@ -377,13 +374,15 @@ ORDER BY avg_rating DESC;
 <td>CSS-based configuration, font size synchronization</td>
 </tr>
 </tbody>
-</table>
 <h2>Processing Pipeline</h2>
 <p>The system processes content through these stages:</p>
+</div>
+<div style="height: 40px; border-top: 2px dashed #999; margin: 20px 0; display: flex; align-items: center; justify-content: center; background: #f9f9f9;"><span style="background: white; padding: 0 10px; color: #666;">↓ NEXT SLIDE ↓</span></div>
+<div class="slide" id="page-10">
 <p><p data-list-levels="0,0,0,0,0" data-list-type="ol"><strong>Markdown Input</strong> → Parse with markdown-it-py<br><strong>HTML Generation</strong> → Add inline styling support<br><strong>Browser Layout</strong> → Measure with Puppeteer engine<br><strong>Block Positioning</strong> → Calculate precise coordinates<br><strong>PowerPoint Output</strong> → Generate native PPTX format</p></p>
 </div>
 <div style="height: 40px; border-top: 2px dashed #999; margin: 20px 0; display: flex; align-items: center; justify-content: center; background: #f9f9f9;"><span style="background: white; padding: 0 10px; color: #666;">↓ NEXT SLIDE ↓</span></div>
-<div class="slide" id="page-9">
+<div class="slide" id="page-11">
 <h1>📏 Pagination &amp; Layout</h1>
 <h2>Intelligent Pagination</h2>
 <p>The system uses <strong>browser-based measurement</strong> for accurate pagination:</p>
@@ -392,10 +391,9 @@ ORDER BY avg_rating DESC;
 <p><p data-list-levels="0,0,0,0" data-list-type="ul"><strong>Pixel-perfect positioning</strong> using browser layout engine<br><strong>Consistent spacing</strong> matching CSS specifications<br><strong>Professional typography</strong> with proper font rendering<br><strong>Responsive design</strong> adapting to different content types</p></p>
 </div>
 <div style="height: 40px; border-top: 2px dashed #999; margin: 20px 0; display: flex; align-items: center; justify-content: center; background: #f9f9f9;"><span style="background: white; padding: 0 10px; color: #666;">↓ NEXT SLIDE ↓</span></div>
-<div class="slide" id="page-10">
+<div class="slide" id="page-12">
 <h1>🎯 Quality Assurance</h1>
 <h2>Test Coverage</h2>
-<table>
 <thead>
 <tr>
 <th>Test Category</th>
@@ -425,12 +423,11 @@ ORDER BY avg_rating DESC;
 <td>Edge case handling</td>
 </tr>
 </tbody>
-</table>
 <h2>Validation Features</h2>
 <p><p data-list-levels="0,0,0,0,0" data-list-type="ul"><strong>Content completeness</strong>: All markdown elements preserved<br><strong>No overlaps</strong>: Shapes positioned without collision<br><strong>Boundary compliance</strong>: Content within slide limits<br><strong>Format consistency</strong>: Styling applied correctly<br><strong>Theme adherence</strong>: Colors and fonts match specifications</p></p>
 </div>
 <div style="height: 40px; border-top: 2px dashed #999; margin: 20px 0; display: flex; align-items: center; justify-content: center; background: #f9f9f9;"><span style="background: white; padding: 0 10px; color: #666;">↓ NEXT SLIDE ↓</span></div>
-<div class="slide" id="page-11">
+<div class="slide" id="page-13">
 <h1>🌟 Recent Improvements</h1>
 <h2>Table Column Width Fix ✅</h2>
 <p><strong>Problem</strong>: Columns distributed equally regardless of content
@@ -444,10 +441,9 @@ ORDER BY avg_rating DESC;
 <strong>Default Theme</strong>: Black borders (<code>#000</code>) for definition</p>
 </div>
 <div style="height: 40px; border-top: 2px dashed #999; margin: 20px 0; display: flex; align-items: center; justify-content: center; background: #f9f9f9;"><span style="background: white; padding: 0 10px; color: #666;">↓ NEXT SLIDE ↓</span></div>
-<div class="slide" id="page-12">
+<div class="slide" id="page-14">
 <h1>📈 Performance Metrics</h1>
 <h2>Processing Speed</h2>
-<table>
 <thead>
 <tr>
 <th>Content Type</th>
@@ -477,12 +473,11 @@ ORDER BY avg_rating DESC;
 <td>3-5 slides</td>
 </tr>
 </tbody>
-</table>
 <h2>Quality Metrics</h2>
 <p><p data-list-levels="0,0,0,0" data-list-type="ul">✅ <strong>99.8% formatting accuracy</strong> across all content types<br>✅ <strong>Zero overlaps</strong> in generated presentations<br>✅ <strong>100% boundary compliance</strong> - no content overflow<br>✅ <strong>Perfect theme consistency</strong> across all elements</p></p>
 </div>
 <div style="height: 40px; border-top: 2px dashed #999; margin: 20px 0; display: flex; align-items: center; justify-content: center; background: #f9f9f9;"><span style="background: white; padding: 0 10px; color: #666;">↓ NEXT SLIDE ↓</span></div>
-<div class="slide" id="page-13">
+<div class="slide" id="page-15">
 <h1>🎉 Summary &amp; Next Steps</h1>
 <h2>What You've Experienced</h2>
 <p><p data-list-levels="0,0,0,0,0,0" data-list-type="ul">✅ <strong>Complete inline styling</strong> - bold, italic, code, highlights<br>✅ <strong>Smart table rendering</strong> - HTML auto-width with theme-aware borders<br>✅ <strong>Professional code blocks</strong> - syntax highlighting and proper formatting<br>✅ <strong>Intelligent pagination</strong> - browser-based measurement and positioning<br>✅ <strong>Theme support</strong> - default and dark themes with full consistency<br>✅ <strong>Quality assurance</strong> - comprehensive testing and validation</p></p>
@@ -492,7 +487,7 @@ ORDER BY avg_rating DESC;
 <p><strong>Thank you</strong> for exploring the <mark>complete feature set</mark>!</p>
 </div>
 <div style="height: 40px; border-top: 2px dashed #999; margin: 20px 0; display: flex; align-items: center; justify-content: center; background: #f9f9f9;"><span style="background: white; padding: 0 10px; color: #666;">↓ NEXT SLIDE ↓</span></div>
-<div class="slide" id="page-14">
+<div class="slide" id="page-16">
 <h1>🔗 Technical Details</h1>
 <h2>API Usage</h2>
 <p>Basic usage example:</p>
@@ -511,24 +506,23 @@ generator.generate(markdown_content, "dark_presentation.pptx")
 <p><strong>End of demonstration</strong> - <mark>All features showcased</mark>! 🎊</p>
 </div>
 <div style="height: 40px; border-top: 2px dashed #999; margin: 20px 0; display: flex; align-items: center; justify-content: center; background: #f9f9f9;"><span style="background: white; padding: 0 10px; color: #666;">↓ NEXT SLIDE ↓</span></div>
-<div class="slide" id="page-15">
+<div class="slide" id="page-17">
 <h1>📈 Figures Demo</h1>
 <p>Bar chart (80% width):</p>
 </div>
 <div style="height: 40px; border-top: 2px dashed #999; margin: 20px 0; display: flex; align-items: center; justify-content: center; background: #f9f9f9;"><span style="background: white; padding: 0 10px; color: #666;">↓ NEXT SLIDE ↓</span></div>
-<div class="slide" id="page-16">
-<img src="debug_assets/chart_bar.png" alt="Image" style="width:738px;height:553px;" />
+<div class="slide" id="page-18">
+<img src="placeholder.png" alt="Image" style="width:738px;height:553px;" />
 </div>
 <div style="height: 40px; border-top: 2px dashed #999; margin: 20px 0; display: flex; align-items: center; justify-content: center; background: #f9f9f9;"><span style="background: white; padding: 0 10px; color: #666;">↓ NEXT SLIDE ↓</span></div>
-<div class="slide" id="page-17">
+<div class="slide" id="page-19">
 <p>Pie chart (60% height):</p>
-<img src="debug_assets/chart_pie.png" alt="Image" style="width:301px;height:301px;" />
+<img src="placeholder.png" alt="Image" style="width:301px;height:301px;" />
 <h1>Two-column slide: table on left, text on right</h1>
 <h3>📋 Project Status Table</h3>
 </div>
 <div style="height: 40px; border-top: 2px dashed #999; margin: 20px 0; display: flex; align-items: center; justify-content: center; background: #f9f9f9;"><span style="background: white; padding: 0 10px; color: #666;">↓ NEXT SLIDE ↓</span></div>
-<div class="slide" id="page-18">
-<table>
+<div class="slide" id="page-20">
 <thead>
 <tr>
 <th>Task</th>
@@ -558,24 +552,22 @@ generator.generate(markdown_content, "dark_presentation.pptx")
 <td>60%</td>
 </tr>
 </tbody>
-</table>
 <h3>✍️ Notes</h3>
 <p>All core features are either complete or in progress. Remaining items are performance tuning and UX polish.</p>
 </div>
 <div style="height: 40px; border-top: 2px dashed #999; margin: 20px 0; display: flex; align-items: center; justify-content: center; background: #f9f9f9;"><span style="background: white; padding: 0 10px; color: #666;">↓ NEXT SLIDE ↓</span></div>
-<div class="slide" id="page-19">
+<div class="slide" id="page-21">
 <h1>📈 Figures Demo (Columns)</h1>
 </div>
 <div style="height: 40px; border-top: 2px dashed #999; margin: 20px 0; display: flex; align-items: center; justify-content: center; background: #f9f9f9;"><span style="background: white; padding: 0 10px; color: #666;">↓ NEXT SLIDE ↓</span></div>
-<div class="slide" id="page-20">
-<img src="debug_assets/chart_bar.png" alt="Image" style="width:738px;height:553px;" />
+<div class="slide" id="page-22">
+<img src="placeholder.png" alt="Image" style="width:738px;height:553px;" />
 <p>The bar chart shows relative task completion percentages. Authentication and API docs are finished; analytics is lagging.</p>
 </div>
 <div style="height: 40px; border-top: 2px dashed #999; margin: 20px 0; display: flex; align-items: center; justify-content: center; background: #f9f9f9;"><span style="background: white; padding: 0 10px; color: #666;">↓ NEXT SLIDE ↓</span></div>
-<div class="slide" id="page-21">
+<div class="slide" id="page-23">
 <h1>🖼️ Figure + Table Demo</h1>
-<img src="debug_assets/chart_pie.png" alt="Image" style="width:301px;height:301px;" />
-<table>
+<img src="placeholder.png" alt="Image" style="width:301px;height:301px;" />
 <thead>
 <tr>
 <th>Segment</th>
@@ -596,7 +588,6 @@ generator.generate(markdown_content, "dark_presentation.pptx")
 <td>10</td>
 </tr>
 </tbody>
-</table>
 </div>
 </body>
 </html>

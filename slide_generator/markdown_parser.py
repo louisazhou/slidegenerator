@@ -11,18 +11,15 @@ class MarkdownParser:
     Enhanced markdown parser with page break support using markdown-it-py.
     """
     
-    def __init__(self, extensions: Optional[List[str]] = None, theme: str = "default"):
+    def __init__(self, extensions: Optional[List[str]] = None):
         """
         Initialize the markdown parser.
         
         Args:
             extensions: List of markdown extensions to enable (for compatibility)
-            theme: Theme name for CSS variables
         """
         # markdown-it-py doesn't use the same extension system as the old markdown library
         # but it has most features built-in by default
-        self.theme = theme
-
         self.markdown_processor = MarkdownIt('commonmark', {
             'html': True,          # Enable HTML tags
             'linkify': True,       # Auto-convert URLs to links
@@ -31,18 +28,6 @@ class MarkdownParser:
         
         # Enable additional features
         self.markdown_processor.enable(['table', 'strikethrough'])
-
-        # Parse CSS variables for slide dimensions
-        from .theme_loader import get_css
-        import re
-        css_content = get_css(self.theme)
-        width_match = re.search(r'--slide-width:\s*(\d+)px', css_content)
-        height_match = re.search(r'--slide-height:\s*(\d+)px', css_content)
-        padding_match = re.search(r'--slide-padding:\s*(\d+)px', css_content)
-
-        self.viewport_width = int(width_match.group(1)) if width_match else 960
-        self.viewport_height = int(height_match.group(1)) if height_match else 540
-        self.padding_px = int(padding_match.group(1)) if padding_match else 19
     
     def parse(self, markdown_text: str) -> str:
         """
@@ -173,7 +158,9 @@ class MarkdownParser:
                 if axis.lower() == 'x':
                     # For width scaling: calculate target pixels based on content area
                     # TODO: Make this dynamic by reading CSS variables
-                    content_width = self.viewport_width - 2 * self.padding_px
+                    viewport_width = 960  # CSS slide width
+                    padding_px = 19  # CSS slide padding (should match --slide-padding)
+                    content_width = viewport_width - 2 * padding_px  # 922px
                     target_content_percent = float(scale) * 100  # e.g., 80%
                     target_pixels = content_width * (target_content_percent / 100)  # e.g., 738px
                     # Use explicit width instead of max-width for reliable measurement
@@ -182,7 +169,9 @@ class MarkdownParser:
                 elif axis.lower() == 'y':
                     # For height scaling: calculate target pixels based on content area
                     # TODO: Make this dynamic by reading CSS variables
-                    content_height = self.viewport_height - 2 * self.padding_px
+                    viewport_height = 540  # CSS slide height
+                    padding_px = 19  # CSS slide padding (should match --slide-padding)
+                    content_height = viewport_height - 2 * padding_px  # 502px
                     target_content_percent = float(scale) * 100  # e.g., 60%
                     target_pixels = content_height * (target_content_percent / 100)  # e.g., 301px
                     # Use explicit height instead of max-height for reliable measurement

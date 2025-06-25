@@ -39,6 +39,7 @@ class PPTXRenderer:
             'line_height': None,
             'colors': {},
             'slide_dimensions': {},
+            'table_deltas': {},
             'css_content': css_content
         }
         
@@ -50,15 +51,6 @@ class PPTXRenderer:
             'p': r'p\s*{[^}]*font-size:\s*(\d+)px',
             'ul, ol': r'ul,\s*ol\s*{[^}]*font-size:\s*(\d+)px',
             'pre': r'pre\s*{[^}]*font-size:\s*(\d+)px'  # Look for separate pre rule
-        }
-        
-        # Parse margin-bottoms in px (defaults to 0)
-        margin_patterns = {
-            'h1': r'h1\s*{[^}]*margin-bottom:\s*(\d+)px',
-            'h2': r'h2\s*{[^}]*margin-bottom:\s*(\d+)px',
-            'h3': r'h3\s*{[^}]*margin-bottom:\s*(\d+)px',
-            'p': r'p\s*{[^}]*margin-bottom:\s*(\d+)px',
-            'li': r'li\s*{[^}]*margin-bottom:\s*(\d+)px'
         }
         
         for element, pattern in font_size_patterns.items():
@@ -111,18 +103,16 @@ class PPTXRenderer:
         
         config['font_family'] = font_family_match.group(1)
         
-        # Parse table border width (required) and optional font delta (deprecated)
-        border_width_match = re.search(r'--table-border-width:\s*([\d.]+)pt', css_content)
+        # Parse table styling deltas from CSS variables - REQUIRED
         font_delta_match = re.search(r'--table-font-delta:\s*(-?\d+)pt', css_content)
-
-        if not border_width_match:
-            raise ValueError(f"❌ CSS theme '{self.theme}' missing required --table-border-width variable. "
-                           f"Add '--table-border-width: X.Xpt' to :root in themes/{self.theme}.css")
-
-        font_delta_val = int(font_delta_match.group(1)) if font_delta_match else 0
-
+        border_width_match = re.search(r'--table-border-width:\s*([\d.]+)pt', css_content)
+        
+        if not font_delta_match or not border_width_match:
+            raise ValueError(f"❌ CSS theme '{self.theme}' missing required table styling variables. "
+                           f"Add '--table-font-delta: -Xpt' and '--table-border-width: X.Xpt' to :root in themes/{self.theme}.css")
+        
         config['table_deltas'] = {
-            'font_delta': font_delta_val,
+            'font_delta': int(font_delta_match.group(1)),
             'border_width_pt': float(border_width_match.group(1))
         }
             
@@ -132,13 +122,6 @@ class PPTXRenderer:
         
         # Extract colors from CSS theme - REQUIRED
         config['colors'] = self._extract_colors_from_css(css_content)
-        
-        # Margins
-        config['margins'] = {}
-        for element, pattern in margin_patterns.items():
-            match = re.search(pattern, css_content, re.IGNORECASE | re.DOTALL)
-            px_val = int(match.group(1)) if match else 0
-            config['margins'][element] = px_val
         
         return config
     
@@ -283,50 +266,32 @@ class PPTXRenderer:
         prs.slide_width = Inches(slide_width_inches)
         prs.slide_height = Inches(slide_height_inches)
         
-        MIN_TEXTBOX_HEIGHT_PX = 28  # PPT minimum intrinsic textbox height
+        EXTRA_TEXTBOX_PADDING_PX = 4  # Small extra to account for pptx internal leading
 
         for page_idx, page in enumerate(pages):
             # Add a new slide
             slide_layout = prs.slide_layouts[6]  # Blank layout
             slide = prs.slides.add_slide(slide_layout)
             
-            # Apply theme background color (if not white)
-            bg_hex = self.theme_config['colors'].get('background', '#ffffff')
-            if bg_hex.lower() not in ['#ffffff', '#fff']:
-                # Convert hex to RGB
-                rgb = self._hex_to_rgb(bg_hex)
-                background = slide.background
-                fill = background.fill
-                fill.solid()
-                fill.fore_color.rgb = RGBColor(*rgb)
-
             # Track cumulative vertical offset (in px) required to compensate for min-height adjustments
             self._page_offset_px = 0
-
+            
             # Add each block to the slide with dynamic offset adjustment
             for block in page:
                 # Adjust top position by current cumulative offset
                 block._adjusted_top_px = block.y + self._page_offset_px  # stash for use in _add_element_to_slide
 
-                # Apply 28-px intrinsic textbox height compensation to every block that
-                # eventually becomes a textbox (ie, not images or raw page-breaks)
-                is_visual_box = not block.is_image() and not block.is_table() and not block.is_page_break()
+                # Determine if this is a simple text block that should get extra padding
+                is_simple_text = block.tag in ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']
 
-                extra_height_px = 0
-                if is_visual_box and block.height < MIN_TEXTBOX_HEIGHT_PX:
-                    extra_height_px = MIN_TEXTBOX_HEIGHT_PX - block.height
+                # Always add a tiny padding to text blocks to prevent clipping
+                extra_height_px = EXTRA_TEXTBOX_PADDING_PX if is_simple_text else 0
 
-                # Render the block with the calculated extra padding
-                self._add_element_to_slide(
-                    slide,
-                    block,
-                    adjusted_top_px=block._adjusted_top_px,
-                    extra_padding_px=extra_height_px,
-                )
+                # Render the block at its adjusted position
+                self._add_element_to_slide(slide, block, adjusted_top_px=block._adjusted_top_px, extra_padding_px=extra_height_px)
 
-                # Shift subsequent blocks exactly once
-                if extra_height_px:
-                    self._page_offset_px += extra_height_px
+                # Increase cumulative offset for subsequent blocks
+                self._page_offset_px += extra_height_px
         
         # Handle the case where no pages were generated
         if not pages:
@@ -347,81 +312,87 @@ class PPTXRenderer:
     def _add_formatted_text(self, paragraph, block: Block):
         """Add formatted text to a paragraph, handling HTML inline formatting."""
         
-        # Get the raw content
-        raw_content = block.content
+        # Get the raw content and preprocess for highlighting
+        content = block.content
         
-        # Convert HTML line breaks to newlines (will be used if we don't split into separate paragraphs)
-        content_with_newlines = re.sub(r'<br\s*/?>', '\n', raw_content, flags=re.IGNORECASE)
+        # Convert HTML line breaks to newlines for PowerPoint
+        content = re.sub(r'<br\s*/?>', '\n', content, flags=re.IGNORECASE)
         
         # Preprocess ==highlight== syntax (convert to HTML)
-        content_with_newlines = re.sub(r'==(.*?)==', r'<mark>\1</mark>', content_with_newlines)
-
-        # Clear the paragraph ready for new runs/paragraphs
+        content = re.sub(r'==(.*?)==', r'<mark>\1</mark>', content)
+        
+        # Clear the paragraph and process HTML content
         paragraph.clear()
         
-        # Check for nested list metadata BEFORE any splitting
-        level_match = re.search(r'data-list-levels="([^"]*)"', raw_content)
-        list_type_match = re.search(r'data-list-type="([^"]*)"', raw_content)
+        # Check if this is a nested list before processing regular text
+        level_match = re.search(r'data-list-levels="([^"]*)"', content)
+        list_type_match = re.search(r'data-list-type="([^"]*)"', content)
         
-        # If the raw HTML contains <br> tags and this isn't a nested list, split on <br>
-        if ('<br' in raw_content.lower()) and not level_match and not list_type_match:
-            # Split the RAW content so we keep inline tags per line intact
-            line_parts = re.split(r'<br\s*/?>', raw_content, flags=re.IGNORECASE)
-            first = True
-            for part in line_parts:
-                # After splitting, process highlight syntax inside each part
-                part_processed = re.sub(r'==(.*?)==', r'<mark>\1</mark>', part)
-                if first:
-                    para = paragraph
-                else:
-                    para = paragraph._parent.add_paragraph()
-
-                # Remove any leading/trailing whitespace
-                part_processed = part_processed.strip()
-                self._parse_html_to_runs(para, part_processed)
-                first = False
-
-        elif level_match and list_type_match:
-            # Nested list handling – extract the inner content
-            content_match = re.search(r'<p[^>]*>(.*?)</p>', raw_content, re.DOTALL)
-            list_content = content_match.group(1) if content_match else raw_content
+        if level_match and list_type_match:
+            # This is a nested list - handle with text frame directly
+            # Extract the actual content from the HTML metadata format
+            content_match = re.search(r'<p[^>]*>(.*?)</p>', content, re.DOTALL)
+            if content_match:
+                list_content = content_match.group(1)
+            else:
+                # Fallback if no p tags found
+                list_content = content
+            
             self._add_nested_list_paragraphs(paragraph, list_content, level_match.group(1), list_type_match.group(1))
         elif block.tag in ['ul', 'ol']:
-            # Fallback list detection where engine didn't convert <ul>/<ol> properly
+            # FALLBACK: Handle ul/ol blocks that weren't converted by layout engine
             if self.debug:
                 print(f"⚠️ Processing unconverted {block.tag} block - converting to nested list format")
-            items = re.findall(r'<li[^>]*>(.*?)</li>', raw_content, re.DOTALL | re.IGNORECASE)
+            
+            # Extract list items from raw HTML
+            items = re.findall(r'<li[^>]*>(.*?)</li>', content, re.DOTALL | re.IGNORECASE)
             if items:
-                cleaned_items = [re.sub(r'<[^>]*>', '', item).strip() for item in items]
+                # Clean each item and create level data (all level 0 for simple lists)
+                cleaned_items = []
+                for item in items:
+                    # Clean HTML tags but preserve inline formatting
+                    clean_item = re.sub(r'<[^>]*>', '', item).strip()
+                    cleaned_items.append(clean_item)
+                
+                # Create the format expected by _add_nested_list_paragraphs
                 list_content = '<br>'.join(cleaned_items)
-                level_data = ','.join('0' for _ in items)
-                self._add_nested_list_paragraphs(paragraph, list_content, level_data, block.tag)
+                level_data = ','.join('0' for _ in items)  # All items at level 0
+                list_type = block.tag
+                
+                self._add_nested_list_paragraphs(paragraph, list_content, level_data, list_type)
             else:
-                self._parse_html_to_runs(paragraph, content_with_newlines)
+                # Fallback to regular text processing if no items found
+                self._parse_html_to_runs(paragraph, content)
         else:
-            # Regular paragraph – process content_with_newlines which already has \n converted
-            self._parse_html_to_runs(paragraph, content_with_newlines)
+            # Regular content - parse HTML tags and create runs with appropriate formatting
+            self._parse_html_to_runs(paragraph, content)
         
-        # Apply theme-aware line spacing directly from CSS (same as before)
+        # Apply theme-aware line spacing directly from CSS (no fallbacks)
         if hasattr(paragraph, 'line_spacing'):
+            # Extract line height from theme config - must come from CSS
             css_line_height = self.theme_config['line_height']
+            
+            # Convert CSS line-height to float for python-pptx
+            # CSS line-height can be: number (1.4), px (18px), or percentage (140%)
             if isinstance(css_line_height, str):
                 if css_line_height.endswith('px'):
+                    # Convert px to relative line height (assume 16px base font)
                     px_value = float(css_line_height.replace('px', ''))
                     base_font_size = self.theme_config['font_sizes']['p']
                     paragraph.line_spacing = px_value / base_font_size
                 elif css_line_height.endswith('%'):
-                    paragraph.line_spacing = float(css_line_height.replace('%', '')) / 100.0
+                    # Convert percentage to decimal
+                    percent_value = float(css_line_height.replace('%', ''))
+                    paragraph.line_spacing = percent_value / 100.0
                 else:
+                    # Assume it's a number string
                     paragraph.line_spacing = float(css_line_height)
             else:
+                # Assume it's already a number
                 paragraph.line_spacing = float(css_line_height)
-
+                
             if self.debug:
                 print(f"📏 Applied CSS line-height: {css_line_height} -> {paragraph.line_spacing}")
-
-        # End function early so we don't fall through to old logic below (we replaced it)
-        return
     
     def _add_nested_list_paragraphs(self, first_paragraph, content, level_data, list_type):
         """Add additional paragraphs to handle nested lists within a text frame."""
@@ -445,15 +416,11 @@ class PPTXRenderer:
             item_html = item.strip()
 
             # Obtain text frame to add paragraphs
-            para = first_paragraph if i == 0 else first_paragraph._parent.add_paragraph()
+            text_frame_obj = first_paragraph._parent
+            para = first_paragraph if i == 0 else text_frame_obj.add_paragraph()
 
             para.clear()
             para.level = item_level
-
-            # Remove default spacing
-            para.space_before = Pt(0)
-            li_mb_px = self.theme_config['margins'].get('li', 0)
-            para.space_after = Pt(li_mb_px * 0.75)
 
             if list_type == 'ol':
                 # Maintain simple counters per level
@@ -527,14 +494,15 @@ class PPTXRenderer:
                                 rgb = self._hex_to_rgb(code_color)
                                 run.font.color.rgb = RGBColor(*rgb)
                             # Apply code font size reduction (use default paragraph size + delta)
-                            code_font_size = self.theme_config['font_sizes']['code']
-                            run.font.size = Pt(code_font_size)
+                            code_font_delta = self.theme_config['table_deltas']['font_delta']
+                            base_font_size = self.theme_config['font_sizes']['p']  # Use paragraph base size
+                            run.font.size = Pt(max(8, base_font_size + code_font_delta))
                         elif fmt == 'mark':
                             # Highlight formatting - use bright background color simulation
                             # Since we can't set background, we'll use bright text color
                             run.font.color.rgb = RGBColor(255, 140, 0)  # Orange highlight color
                             run.font.bold = True  # Make highlighted text bold too
-                    
+    
                     # Always set font family to match CSS exactly (unless it's code)
                     if not is_code:
                         run.font.name = self.theme_config['font_family']
@@ -693,19 +661,6 @@ class PPTXRenderer:
             # Single paragraph content
             paragraphs_to_format = [p]
         
-        # First, normalise PowerPoint paragraph spacing to match CSS (margin-top/bottom already in measured y/height)
-        for para in paragraphs_to_format:
-            para.space_before = Pt(0)
-            # Determine margin-bottom in px based on block tag
-            mb_px = 0
-            if block.tag in ['h1', 'h2', 'h3']:
-                mb_px = self.theme_config['margins'].get(block.tag, 0)
-            elif block.tag == 'p':
-                mb_px = self.theme_config['margins'].get('p', 0)
-            elif block.tag in ['ul', 'ol'] or block.is_list_item():
-                mb_px = self.theme_config['margins'].get('li', 0)
-            para.space_after = Pt(mb_px * 0.75)
-
         if block.is_heading():
             # Heading formatting - apply to all runs in all paragraphs
             font_size = self.theme_config['font_sizes'].get(block.tag, 16)
@@ -717,11 +672,11 @@ class PPTXRenderer:
         elif block.is_code_block():
             # Code block formatting - apply to all runs in all paragraphs
             font_size = self.theme_config['font_sizes']['code']
-            code_font_delta = self.theme_config['table_deltas']['font_delta']
+            code_font_delta = self.theme_config['table_deltas']['font_delta']  # Reuse table delta for consistency
             for para in paragraphs_to_format:
                 for run in para.runs:
                     run.font.name = 'Courier New'
-                    run.font.size = Pt(max(8, font_size + code_font_delta))
+                    run.font.size = Pt(max(8, font_size + code_font_delta))  # Apply same delta as tables
             # Set background color for code blocks
             if hasattr(textbox, 'fill'):
                 textbox.fill.solid()

@@ -10,8 +10,8 @@
     --slide-font-family: 'Arial'; /* Font family that matches PowerPoint exactly */
     
     /* Table styling deltas */
+    --table-font-delta: -2pt;    /* Table font size = body - 2pt */
     --table-border-width: 0.25pt; /* Much thinner table borders */
-    --table-font-delta: -2pt;
 }
 
 body {
@@ -83,20 +83,21 @@ ul, ol {
 
 li {
     line-height: 1.4;
-    margin-bottom: 0;
+    margin-bottom: 8px;
     width: fit-content;
     max-width: 100%;
 }
 
 /* Code blocks - separate styling for pre and inline code */
 pre {
-    background-color: transparent;
-    color: #dcdcdc;
-    padding: 0;
-    border: none;
-    margin-bottom: 15px;
     font-family: 'Courier New', monospace;
     font-size: 14px;
+    line-height: 1.4;
+    background-color: #2d2d2d;
+    color: #ffffff;
+    padding: 10px;
+    border-radius: 4px;
+    margin-bottom: 15px;
     width: auto;
     max-width: 100%; /* Ensure code blocks fit within slide boundaries */
     overflow-x: auto; /* Add horizontal scrolling if needed */
@@ -121,12 +122,11 @@ pre code {
 }
 
 code {
-    background-color: transparent;
-    color: #dcdcdc;
-    padding: 0 2px;
-    border: none;
     font-family: 'Courier New', monospace;
     font-size: 14px;
+    background-color: #2d2d2d;
+    color: #ffffff;
+    padding: 2px 4px;
     border-radius: 2px;
 }
 
@@ -140,7 +140,7 @@ table {
 }
 
 th, td {
-    border: 1px solid #666;
+    border: 1px solid #ffffff;
     padding: 8px;
     text-align: left;
     background-color: transparent;
@@ -149,7 +149,6 @@ th, td {
     word-wrap: break-word; /* Break long words in table cells */
     max-width: 200px; /* Prevent individual cells from getting too wide */
     overflow-wrap: break-word; /* Modern CSS property for word breaking */
-    font-size: 10px;
 }
 
 th {
