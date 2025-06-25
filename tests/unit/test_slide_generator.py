@@ -11,7 +11,7 @@ from pathlib import Path
 # Add the parent directory to the Python path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from src.slide_generator.generator import SlideGenerator
+from slide_generator.generator import SlideGenerator
 from pptx import Presentation
 
 
@@ -70,7 +70,7 @@ Content for the first slide.
 
 Content for the second slide.
 
-<!-- slide -->
+---
 
 # Third Slide
 

@@ -13,13 +13,18 @@ class SlideGenerator:
     Main class for generating PowerPoint slides from markdown.
     """
     
-    def __init__(self, debug: bool = False):
+    def __init__(self, debug: bool = False, theme: str = "default"):
         """
         Initialize the slide generator.
+        
+        Args:
+            debug: Enable debug output
+            theme: Theme name for styling (default, dark, etc.)
         """
         self.debug = debug
-        self.layout_engine = LayoutEngine(debug=debug)
-        self.pptx_renderer = PPTXRenderer()
+        self.theme = theme
+        self.layout_engine = LayoutEngine(debug=debug, theme=theme)
+        self.pptx_renderer = PPTXRenderer(theme=theme, debug=debug)
     
     def generate(self, markdown_text: str, output_path: str = "output/demo.pptx"):
         """
@@ -44,6 +49,7 @@ class SlideGenerator:
         if self.debug:
             print(f"Generated presentation saved to: {output_path}")
             print(f"Total pages: {len(pages)}")
+            print(f"Theme: {self.theme}")
         
         return output_path
 
@@ -53,11 +59,12 @@ def main():
     import sys
     
     if len(sys.argv) < 2:
-        print("Usage: python -m slide_generator.generator <markdown_file> [output_file]")
+        print("Usage: python -m slide_generator.generator <markdown_file> [output_file] [theme]")
         sys.exit(1)
     
     markdown_file = sys.argv[1]
     output_file = sys.argv[2] if len(sys.argv) > 2 else "output/demo.pptx"
+    theme = sys.argv[3] if len(sys.argv) > 3 else "default"
     
     # Check if markdown file exists
     if not os.path.exists(markdown_file):
@@ -69,7 +76,7 @@ def main():
         markdown_content = f.read()
     
     # Generate slides
-    generator = SlideGenerator(debug=True)
+    generator = SlideGenerator(debug=True, theme=theme)
     output_path = generator.generate(markdown_content, output_file)
     
     print(f"Slides generated successfully: {output_path}")

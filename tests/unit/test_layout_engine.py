@@ -1,8 +1,8 @@
 """Test layout engine functionality."""
 
 import pytest
-from src.slide_generator.layout_engine import LayoutEngine
-from src.slide_generator.models import Block
+from slide_generator.layout_engine import LayoutEngine
+from slide_generator.models import Block
 
 
 def test_basic_markdown_conversion():
@@ -29,9 +29,11 @@ This is a paragraph.
     headings = [block for page in pages for block in page if block.is_heading()]
     assert len(headings) >= 2  # h1 and h2
     
-    # Should have list blocks (ul/ol elements)
-    lists = [block for page in pages for block in page if block.is_list()]
-    assert len(lists) >= 1  # one list element
+    # Should have paragraph blocks that contain list content (lists are preprocessed to paragraphs with data attributes)
+    paragraphs = [block for page in pages for block in page if block.tag == 'p']
+    # Look for the new list format with data-list-levels attributes
+    list_paragraphs = [p for p in paragraphs if 'data-list-levels' in p.content or 'data-list-type' in p.content]
+    assert len(list_paragraphs) >= 1  # one list converted to paragraph with metadata
 
 
 def test_page_break_handling():
@@ -47,7 +49,7 @@ Content for page 1.
 
 Content for page 2.
 
-<!-- slide -->
+---
 
 # Page 3
 

@@ -38,10 +38,35 @@ class MarkdownParser:
         Returns:
             HTML string
         """
+        # Preprocess custom syntax before markdown processing
+        processed_text = self._preprocess_custom_syntax(markdown_text)
+        
         # Convert markdown to HTML
-        html = self.markdown_processor.render(markdown_text)
+        html = self.markdown_processor.render(processed_text)
         
         return html
+    
+    def _preprocess_custom_syntax(self, markdown_text: str) -> str:
+        """
+        Preprocess custom syntax that isn't supported by markdown-it-py.
+        
+        Args:
+            markdown_text: Raw markdown content
+            
+        Returns:
+            Processed markdown with custom syntax converted
+        """
+        import re
+        
+        # Convert ==highlight== to HTML <mark> tags
+        # This needs to be done before markdown processing to avoid conflicts
+        processed = re.sub(r'==(.*?)==', r'<mark>\1</mark>', markdown_text)
+        
+        # Convert ++underline++ to HTML <u> tags
+        # Using ++ to avoid conflict with markdown bold (**bold**)
+        processed = re.sub(r'\+\+(.*?)\+\+', r'<u>\1</u>', processed)
+        
+        return processed
     
     def parse_with_page_breaks(self, markdown_text: str) -> List[str]:
         """

@@ -1,7 +1,7 @@
 """Test theme loader functionality."""
 
 import pytest
-from src.slide_generator.theme_loader import get_css, list_available_themes, validate_theme
+from slide_generator.theme_loader import get_css, list_available_themes, validate_theme
 
 
 def test_get_css_default():

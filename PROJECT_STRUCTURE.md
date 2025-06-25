@@ -4,32 +4,37 @@
 
 ```
 Slide_generate/
-├── src/slide_generator/          # Main package (M2 ✅ Complete)
-│   ├── __init__.py              # Package exports: SlideGenerator, LayoutEngine, PPTXRenderer, Block
+├── slide_generator/             # Main package (root-level)
+│   ├── __init__.py              # Logging setup + exports: SlideGenerator, LayoutEngine, PPTXRenderer, Block
 │   ├── models.py                # Block class with type checking & compatibility methods
-│   ├── layout_engine.py         # HTML measurement & pagination (now returns List[List[Block]])
+│   ├── layout_engine.py         # HTML measurement & pagination (returns List[List[Block]])
 │   ├── pptx_renderer.py         # PowerPoint rendering (accepts paginated blocks)
 │   ├── generator.py             # Main SlideGenerator.generate() orchestrator
-│   ├── markdown_parser.py       # 🆕 Modern markdown-it-py parser with enhanced features
-│   └── theme_loader.py          # 🆕 CSS theme system for consistent styling
+│   ├── markdown_parser.py       # Modern markdown-it-py parser with enhanced features
+│   └── theme_loader.py          # CSS-driven theme system for consistent styling
+├── themes/                       # CSS themes for HTML-based measurement
+│   ├── default.css
+│   └── dark.css
 ├── examples/
-│   ├── slide_proto.py           # Demo script using new API
-│   └── sample.md                # Sample markdown for CLI testing
-├── tests/unit/                  # Unit tests (41/41 passing ✅)
-│   ├── test_layout_engine.py    # LayoutEngine.measure_and_paginate() tests
-│   ├── test_slide_generator.py  # SlideGenerator.generate() tests
-│   ├── test_slide_nonempty.py   # Empty slide prevention tests
-│   ├── test_no_overlap.py       # Layout overlap & positioning tests
-│   ├── test_pptx_content_validation.py # **CRITICAL** content structure validation
-│   ├── test_markdown_parser.py  # 🆕 Comprehensive markdown-it-py parser tests
-│   └── test_theme_loader.py     # 🆕 Theme system tests
-├── output/                      # Generated files directory
-│   ├── demo.pptx               # Main demo presentation
-│   └── cli_demo.pptx           # CLI-generated presentation
-├── requirements.txt             # Dependencies (Google APIs preserved for M3+)
-├── token.json                  # Google API credentials (future M3+ use)
-├── .gitignore                  # Comprehensive ignore rules
-└── PROJECT_STRUCTURE.md        # This documentation
+│   └── comprehensive_demo.py     # CLI/demo script
+├── tests/
+│   ├── unit/                  # Unit-level tests (54/54 passing ✅)
+│   │   ├── test_layout_engine.py        # LayoutEngine.measure_and_paginate() tests
+│   │   ├── test_slide_generator.py      # SlideGenerator.generate() tests
+│   │   ├── test_markdown_parser.py      # Comprehensive markdown-it-py parser tests
+│   │   ├── test_theme_loader.py         # Theme system tests
+│   │   ├── test_inline_styling.py       # Inline & block styling rules
+│   │   ├── test_pagination_boundary.py  # Pagination & page-height boundary cases
+│   │   └── test_systematic_validation.py # 🔍 Full-stack PPTX validation
+│   ├── visual/                # Visual regression tests (marked @slow)
+│   │   └── test_snapshot.py        # Screenshot-based golden image comparison
+│   ├── conftest.py            # Ensures project root on sys.path for test discovery
+│   └── check_pptx.py          # Helper script to inspect generated PPTX files
+├── output/                       # Generated artifacts (ignored in VCS)
+├── requirements.txt
+├── pytest.ini
+├── .gitignore
+└── token.json                    # (future Google-API use)
 ```
 
 ## 🎯 **Milestone 2 Complete** ✅
@@ -49,19 +54,19 @@ Markdown Text → MarkdownParser → LayoutEngine.measure_and_paginate() → Lis
 - ✅ **Enhanced List Processing**: Fixed list rendering with proper line breaks and formatting
 - ✅ **Theme System**: Added CSS theme loader with default and dark themes
 - ✅ **Content Rendering Fixes**: Fixed PPTX text box margins and sizing issues
-- ✅ **Test Suite Expansion**: 41 comprehensive tests covering all functionality
+- ✅ **Test Suite Expansion**: 54 comprehensive tests covering all functionality
 - ✅ **Conda Environment**: Created `gslides_test` environment with modern dependencies
 
 ## 📋 File Registry & Purposes
 
 ### **Core Package Files** ✅
 
-#### `src/slide_generator/__init__.py`
+#### `slide_generator/__init__.py`
 - **Purpose**: Package initialization and exports
 - **Exports**: `SlideGenerator`, `LayoutEngine`, `PPTXRenderer`, `Block`, `MarkdownParser`, `ThemeLoader`
 - **Status**: M2 complete, ready for M3 extensions
 
-#### `src/slide_generator/models.py` ⭐ **CRITICAL**
+#### `slide_generator/models.py` ⭐ **CRITICAL**
 - **Purpose**: Structured data models for layout elements
 - **Key Classes**: 
   - `Block`: Core data structure with position, content, style, and type information
@@ -70,7 +75,7 @@ Markdown Text → MarkdownParser → LayoutEngine.measure_and_paginate() → Lis
 - **Status**: Enhanced with list item detection, foundation for entire pipeline
 - **⚠️ DO NOT REMOVE**: Used throughout layout and rendering systems
 
-#### `src/slide_generator/layout_engine.py` ⭐ **CORE**
+#### `slide_generator/layout_engine.py` ⭐ **CORE**
 - **Purpose**: HTML measurement and pagination using Puppeteer
 - **Key Functions**:
   - `measure_and_paginate(markdown, page_height=540)`: **Main API** - returns `List[List[Block]]`
@@ -84,7 +89,7 @@ Markdown Text → MarkdownParser → LayoutEngine.measure_and_paginate() → Lis
 - **Dependencies**: `pyppeteer`, `markdown-it-py`, `asyncio`
 - **Status**: M2 complete with enhanced list processing
 
-#### `src/slide_generator/pptx_renderer.py`
+#### `slide_generator/pptx_renderer.py`
 - **Purpose**: PowerPoint generation from paginated Block objects
 - **Key Functions**:
   - `render(pages: List[List[Block]], output_path)`: **Main API**
@@ -98,7 +103,7 @@ Markdown Text → MarkdownParser → LayoutEngine.measure_and_paginate() → Lis
 - **Dependencies**: `python-pptx`
 - **Status**: M2 complete with rendering fixes
 
-#### `src/slide_generator/generator.py` ⭐ **ENTRY POINT**
+#### `slide_generator/generator.py` ⭐ **ENTRY POINT**
 - **Purpose**: Main coordinator orchestrating the entire pipeline
 - **Key Functions**:
   - `generate(markdown_text, output_path="output/demo.pptx")`: **Public API**
@@ -106,7 +111,7 @@ Markdown Text → MarkdownParser → LayoutEngine.measure_and_paginate() → Lis
 - **Pipeline**: MarkdownParser → LayoutEngine → PPTXRenderer coordination
 - **Status**: M2 complete, clean API ready for extensions
 
-#### `src/slide_generator/markdown_parser.py` 🆕 **NEW IN M2**
+#### `slide_generator/markdown_parser.py` 🆕 **NEW IN M2**
 - **Purpose**: Modern markdown processing with markdown-it-py
 - **Key Features**:
   - Enhanced markdown parsing with tables, strikethrough, linkify, typographer
@@ -120,7 +125,7 @@ Markdown Text → MarkdownParser → LayoutEngine.measure_and_paginate() → Lis
 - **Dependencies**: `markdown-it-py`
 - **Status**: M2 complete, modern markdown processing
 
-#### `src/slide_generator/theme_loader.py` 🆕 **NEW IN M2**
+#### `slide_generator/theme_loader.py` 🆕 **NEW IN M2**
 - **Purpose**: CSS theme system for consistent styling
 - **Key Features**:
   - Default and dark theme support
@@ -134,19 +139,12 @@ Markdown Text → MarkdownParser → LayoutEngine.measure_and_paginate() → Lis
 
 ### **Example & Demo Files** ✅
 
-#### `examples/slide_proto.py`
-- **Purpose**: Demonstration of the complete M2 pipeline
-- **Features**: Multi-slide markdown with headings, lists, code blocks, page breaks
-- **Output**: Creates `output/demo.pptx` with debug logging
-- **Status**: Updated for M2 API with enhanced markdown processing
+#### `examples/comprehensive_demo.py`
+- **Purpose**: End-to-end demo script exercising headings, lists, code, tables and page-breaks.
+- **Usage**: `python examples/comprehensive_demo.py` → writes `output/comprehensive_demo_default.pptx` and `output/comprehensive_demo_dark.pptx`.
+- **Status**: Up-to-date with current API; serves as a quick sanity check.
 
-#### `examples/sample.md`
-- **Purpose**: Sample markdown content for CLI testing
-- **Features**: Multi-slide content with various elements
-- **Usage**: `python -m src.slide_generator.generator examples/sample.md output.pptx`
-- **Status**: M2 ready with enhanced markdown features
-
-### **Test Files** ✅ (41/41 passing)
+### **Test Files** ✅ (54/54 passing)
 
 #### `tests/unit/test_layout_engine.py`
 - **Purpose**: Core layout and pagination testing
@@ -160,39 +158,19 @@ Markdown Text → MarkdownParser → LayoutEngine.measure_and_paginate() → Lis
 - **Tests**: Basic generation, multi-slide creation, file output validation
 - **Status**: M2 complete with enhanced markdown processing
 
-#### `tests/unit/test_slide_nonempty.py`
-- **Purpose**: Quality assurance - prevents empty slides
-- **Tests**: Content validation, empty markdown handling, multi-page consistency
-- **Status**: M2 complete, ensures robust output
+#### `tests/unit/test_inline_styling.py`
+- **Purpose**: Validates inline CSS styling rules, font deltas, and inline-code sizing
+- **Status**: ✓ Covers multiple typography edge-cases
 
-#### `tests/unit/test_no_overlap.py`
-- **Purpose**: Layout positioning and overlap prevention
-- **Tests**: Shape overlap detection, textbox height validation, coordinate accuracy
-- **Dependencies**: Requires `output/demo.pptx` to exist
-- **Status**: M2 complete, critical for layout quality
+#### `tests/unit/test_pagination_boundary.py`
+- **Purpose**: Stress-tests automatic pagination at explicit height limits
+- **Status**: ✓ Ensures no overflows when content nearly exceeds page height
 
-#### `tests/unit/test_pptx_content_validation.py` ⭐ **CRITICAL**
-- **Purpose**: **ESSENTIAL** comprehensive content validation
-- **Tests**: 
-  - Content structure (headings, lists, code detection)
-  - Slide dimensions (16:9 aspect ratio validation)
-  - Element count and distribution across slides
-- **Usage**: `python tests/unit/test_pptx_content_validation.py` for detailed inspection
-- **Output**: Color-coded inspection report with shape counts and content analysis
-- **Status**: M2 complete, validates enhanced content rendering
+#### `tests/unit/test_systematic_validation.py` ⭐ **CRITICAL**
+- **Purpose**: End-to-end smoke + deep validation of generated `.pptx` files (structure, dimensions, overlap)
+- **Status**: ✓ Generates a presentation then applies ~10 analytical sub-tests
 
-#### `tests/unit/test_markdown_parser.py` 🆕 **NEW IN M2**
-- **Purpose**: Comprehensive testing of markdown-it-py parser
-- **Tests**: 
-  - Basic markdown parsing (headings, paragraphs, lists, code)
-  - Table parsing and rendering
-  - Page break handling (all supported formats)
-  - Extension management and compatibility
-  - Enhanced features integration
-- **Coverage**: 22 test cases covering all parser functionality
-- **Status**: M2 complete, validates modern markdown processing
-
-#### `tests/unit/test_theme_loader.py` 🆕 **NEW IN M2**
+#### `tests/unit/test_theme_loader.py`
 - **Purpose**: Theme system validation
 - **Tests**: 
   - Theme loading and validation
@@ -208,7 +186,7 @@ Markdown Text → MarkdownParser → LayoutEngine.measure_and_paginate() → Lis
   - `python-pptx>=0.6.21` - PowerPoint generation
   - `pyppeteer>=1.0.2` - Browser automation  
   - `markdown-it-py>=3.0.0` - **NEW** Modern markdown processing
-  - `websockets==10.4` - **NEW** Compatibility fix for pyppeteer
+  - `websockets>=10.0` - Satisfies pyppeteer; warnings filtered in pytest.ini
   - `pytest>=6.2.4` - Testing framework
 - **Future M3+ Dependencies** (preserved as requested):
   - `google-api-python-client>=2.88.0` - Google Slides API
@@ -230,23 +208,23 @@ Markdown Text → MarkdownParser → LayoutEngine.measure_and_paginate() → Lis
 #### `output/`
 - **Purpose**: All generated presentation files
 - **Contents**: 
-  - `demo.pptx` - Main demo from slide_proto.py with enhanced formatting
-  - `cli_demo.pptx` - CLI-generated example
+  - `comprehensive_demo_default.pptx` – Default-theme demo
+  - `comprehensive_demo_dark.pptx`   – Dark-theme demo
   - Test output files (cleaned automatically)
 - **Status**: Enhanced content with proper list formatting and rendering
 
 ## 🚨 **DO NOT TOUCH** Guidelines
 
 ### Critical Files (Extreme Caution Required)
-1. **`src/slide_generator/models.py`** - Block class is foundation of entire system
-2. **`src/slide_generator/layout_engine.py`** - Complex browser measurement and pagination logic
-3. **`src/slide_generator/pptx_renderer.py`** - Precise coordinate scaling and PowerPoint generation
-4. **All test files** - Must maintain 41/41 passing status
+1. **`slide_generator/models.py`** - Block class is foundation of entire system
+2. **`slide_generator/layout_engine.py`** - Complex browser measurement and pagination logic
+3. **`slide_generator/pptx_renderer.py`** - Precise coordinate scaling and PowerPoint generation
+4. **All test files** - Must maintain 54/54 passing status
 
 ### Safe to Modify for M3+
-1. **`src/slide_generator/generator.py`** - Main API, but test thoroughly
-2. **`src/slide_generator/markdown_parser.py`** - Can extend with new features
-3. **`src/slide_generator/theme_loader.py`** - Can add new themes
+1. **`slide_generator/generator.py`** - Main API, but test thoroughly
+2. **`slide_generator/markdown_parser.py`** - Can extend with new features
+3. **`slide_generator/theme_loader.py`** - Can add new themes
 4. **`examples/`** - Demo scripts, safe for experimentation
 5. **New files for M3** - Can add new modules without breaking existing code
 
@@ -259,16 +237,16 @@ Markdown Text → MarkdownParser → LayoutEngine.measure_and_paginate() → Lis
 
 ### **Critical Testing Protocol** ⚠️
 **After ANY code changes, always run:**
-1. `PYTHONPATH=/Users/louisazhou/Downloads/Slide_generate pytest tests/unit/ -v` (all 41 tests)
-2. `PYTHONPATH=/Users/louisazhou/Downloads/Slide_generate python tests/unit/test_pptx_content_validation.py` (detailed content inspection)
-3. Verify `output/demo.pptx` opens correctly in PowerPoint
+1. `PYTHONPATH=/Users/louisazhou/Downloads/Slide_generate pytest -v` (runs the full 54-test suite)
+2. Optionally run `pytest -m "not slow"` to skip the browser-based visual regression test
+3. Verify `output/comprehensive_demo_default.pptx` opens correctly in PowerPoint
 
 ### **Key M2 Achievements & Fixes**
 1. **List Rendering Fixed**: Proper separation between ordered/unordered lists with correct numbering
 2. **Content Visibility**: All content now renders correctly in PPTX files without truncation
 3. **Modern Parser**: Upgraded to `markdown-it-py` for better markdown processing and features
 4. **Line Breaks**: Lists maintain HTML-calculated spacing with `\n` between items
-5. **Test Coverage**: Expanded from 18 to 41 tests with comprehensive validation
+5. **Test Coverage**: Expanded from 18 to 54 tests with comprehensive validation
 6. **Environment Setup**: Created dedicated `gslides_test` conda environment
 
 ### **Development Workflow**
@@ -284,7 +262,7 @@ Markdown Text → MarkdownParser → LayoutEngine.measure_and_paginate() → Lis
 - ✅ Modern markdown processing with markdown-it-py
 - ✅ Enhanced list formatting with proper line breaks
 - ✅ Theme system with CSS styling
-- ✅ Comprehensive testing framework (41 tests)
+- ✅ Comprehensive testing framework (54 tests)
 - ✅ Fixed content rendering and PPTX generation
 - ✅ Clean Block-based data model
 - ✅ Browser-based precise layout measurement
@@ -306,7 +284,7 @@ Markdown Text → MarkdownParser → LayoutEngine.measure_and_paginate() → Lis
 
 ## ✅ **Current Status**
 - **M2 Complete**: ✅ All major improvements finished successfully
-- **All tests passing**: 41/41 unit tests green
+- **All tests passing**: 54/54 tests green
 - **Enhanced architecture**: Modern markdown processing with fixed rendering
 - **API stability**: Backward compatible, ready for M3 without breaking changes
 - **Quality assurance**: Comprehensive validation and inspection tools

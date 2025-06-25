@@ -24,7 +24,7 @@ def get_css(theme: str = "default") -> str:
         raise ValueError(f"Invalid theme name: {theme}")
     
     # Get project root directory
-    project_root = Path(__file__).parent.parent.parent
+    project_root = Path(__file__).parent.parent
     theme_path = project_root / "themes" / f"{theme}.css"
     
     # Check if theme file exists
@@ -51,7 +51,7 @@ def list_available_themes() -> List[str]:
     Returns:
         List of theme names
     """
-    project_root = Path(__file__).parent.parent.parent
+    project_root = Path(__file__).parent.parent
     themes_dir = project_root / "themes"
     
     if not themes_dir.exists():

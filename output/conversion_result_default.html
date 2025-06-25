@@ -1,3 +1,10 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Slide Content</title>
+<style>
 /* Default theme for slide generation */
 /* Extracted from layout_engine.py hardcoded CSS */
 
@@ -152,3 +159,64 @@ th {
 .page-break {
     display: none;  /* Hidden in CSS but will be detected by JavaScript */
 } 
+</style>
+</head>
+<body>
+<div class="slide" id="slide-0">
+<h1>Test Presentation</h1>
+<p>This is a comprehensive test presentation.</p>
+<h2>Basic Content</h2>
+<p data-list-levels="0,0,0" data-list-type="ul">First bullet point<br>Second bullet point<br>Third bullet point</p>
+<h2>Code Example</h2>
+<pre><code class="language-python">def hello_world():
+    print(&quot;Hello, World!&quot;)
+    return &quot;Success&quot;
+</code></pre>
+<h2>Table Example</h2>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Status</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Lists</td>
+<td>✅ Working</td>
+<td>Bullet and numbered</td>
+</tr>
+<tr>
+<td>Code</td>
+<td>✅ Working</td>
+<td>Syntax highlighting</td>
+</tr>
+<tr>
+<td>Tables</td>
+<td>✅ Working</td>
+<td>Proper formatting</td>
+</tr>
+</tbody>
+</table>
+
+</div>
+<div class="page-break"><!-- slide --></div>
+<div class="slide" id="slide-1">
+<h1>Second Slide</h1>
+<h2>More Content</h2>
+<p data-list-levels="0,0,0" data-list-type="ol">First numbered item<br>Second numbered item<br>Third numbered item</p>
+<h2>Inline Formatting</h2>
+<p>This paragraph has <strong>bold text</strong>, <em>italic text</em>, <code>inline code</code>, and <mark>highlighted text</mark>.</p>
+
+</div>
+<div class="page-break"><!-- slide --></div>
+<div class="slide" id="slide-2">
+<h1>Third Slide</h1>
+<h2>Large Content Test</h2>
+<p data-list-levels="0,0,0,0,0" data-list-type="ul">This is a long list item with substantial content to test sizing<br>Another long list item with more content for testing<br>A third item to ensure proper handling<br>Fourth item for comprehensive testing<br>Fifth item to verify pagination works correctly</p>
+<h2>Final Section</h2>
+<p>Thank you for testing the slide generator!</p>
+
+</div>
+</body></html>

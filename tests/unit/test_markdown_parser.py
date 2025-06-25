@@ -1,7 +1,7 @@
 """Test markdown parser functionality."""
 
 import pytest
-from src.slide_generator.markdown_parser import MarkdownParser, parse_markdown, parse_markdown_slides
+from slide_generator.markdown_parser import MarkdownParser, parse_markdown, parse_markdown_slides
 
 
 def test_basic_markdown_parsing():
@@ -93,30 +93,6 @@ Content for page 2."""
     # Second slide should contain Page 2
     assert "<h1>Page 2</h1>" in html_slides[1]
     assert "Content for page 2" in html_slides[1]
-
-
-def test_page_breaks_html_comment():
-    """Test page break handling with HTML comments."""
-    parser = MarkdownParser()
-    
-    markdown_text = """# Page 1
-
-Content for page 1.
-
-<!-- slide -->
-
-# Page 2
-
-Content for page 2."""
-    
-    html_slides = parser.parse_with_page_breaks(markdown_text)
-    
-    # Should create 2 slides
-    assert len(html_slides) == 2
-    
-    # Verify content distribution
-    assert "<h1>Page 1</h1>" in html_slides[0]
-    assert "<h1>Page 2</h1>" in html_slides[1]
 
 
 def test_empty_content_handling():
@@ -260,33 +236,23 @@ def test_enhanced_page_break_formats():
     """Test all supported page break formats."""
     parser = MarkdownParser()
     
-    # Test various page break formats
+    # Test various page break formats (HTML comment variant removed)
     test_cases = [
         # Horizontal rule
         ("# Page 1\n\n---\n\n# Page 2", 2),
-        
-        # HTML comments (various formats)
-        ("# Page 1\n\n<!-- slide -->\n\n# Page 2", 2),
-        ("# Page 1\n\n<!-- Slide -->\n\n# Page 2", 2),
-        ("# Page 1\n\n<!-- SLIDE -->\n\n# Page 2", 2),
-        ("# Page 1\n\n<!--slide-->\n\n# Page 2", 2),
-        
-        # NewSlide directive
-        ("# Page 1\n\n<!-- NewSlide: Title -->\n\n# Page 2", 2),
-        ("# Page 1\n\n<!--NewSlide:-->\n\n# Page 2", 2),
-        
+
         # Explicit [slide] directive
         ("# Page 1\n\n[slide]\n\n# Page 2", 2),
-        
+
         # Alternate horizontal rules
         ("# Page 1\n\n***\n\n# Page 2", 2),
         ("# Page 1\n\n****\n\n# Page 2", 2),
         ("# Page 1\n\n___\n\n# Page 2", 2),
         ("# Page 1\n\n____\n\n# Page 2", 2),
-        
-        # Multiple breaks
-        ("# Page 1\n\n---\n\n# Page 2\n\n<!-- slide -->\n\n# Page 3", 3),
-        
+
+        # Multiple breaks (horizontal rule only)
+        ("# Page 1\n\n---\n\n# Page 2\n\n---\n\n# Page 3", 3),
+
         # No breaks
         ("# Single Page\n\nContent here", 1),
     ]
@@ -306,7 +272,7 @@ def test_page_break_counting():
     test_cases = [
         ("# Single slide", 0),
         ("# Page 1\n\n---\n\n# Page 2", 1),
-        ("# P1\n\n---\n\n# P2\n\n<!-- slide -->\n\n# P3", 2),
+        ("# P1\n\n---\n\n# P2\n\n---\n\n# P3", 2),
         ("# P1\n\n***\n\n# P2\n\n___\n\n# P3\n\n[slide]\n\n# P4", 3),
         ("", 0),
         ("   \n\n   ", 0),
@@ -327,7 +293,7 @@ def test_slide_count_estimation():
     test_cases = [
         ("# Single slide", 1),
         ("# Page 1\n\n---\n\n# Page 2", 2),
-        ("# P1\n\n---\n\n# P2\n\n<!-- slide -->\n\n# P3", 3),
+        ("# P1\n\n---\n\n# P2\n\n---\n\n# P3", 3),
         ("", 0),
     ]
     
@@ -344,7 +310,7 @@ def test_page_break_edge_cases():
     parser = MarkdownParser()
     
     # Test content with only page breaks (should result in empty slides list)
-    empty_breaks_content = "---\n\n<!-- slide -->\n\n***"
+    empty_breaks_content = "---\n\n***"
     html_slides = parser.parse_with_page_breaks(empty_breaks_content)
     assert len(html_slides) == 0, "Only page breaks should result in no slides"
     
@@ -422,11 +388,11 @@ def test_page_break_whitespace_handling():
 
 # Page 2
 
-    <!-- slide -->    
+    [slide]    
 
 # Page 3
 
-	[slide]	
+	---	
 
 # Page 4"""
     

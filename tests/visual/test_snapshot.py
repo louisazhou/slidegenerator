@@ -7,12 +7,15 @@ from pathlib import Path
 from typing import Optional, Tuple
 import hashlib
 
+# Pytest import must remain first for module-level marker
 import pytest
+pytestmark = pytest.mark.slow
+
 from pyppeteer import launch
 from PIL import Image, ImageChops
 import numpy as np
 
-from src.slide_generator.layout_engine import LayoutEngine
+from slide_generator.layout_engine import LayoutEngine
 
 
 class VisualTestHelper:
