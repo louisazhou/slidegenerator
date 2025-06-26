@@ -925,10 +925,8 @@ class LayoutEngine:
             "<title>Paginated Slide Content</title>",
             "<style>",
             css_content,
-            ".slide{margin-bottom:40px;border:3px solid red;position:relative;overflow:hidden;}",
+            ".slide{margin-bottom:40px;border:3px solid red;position:relative;}",
             ".slide:before{position:absolute;top:-26px;left:0;background:red;color:#fff;padding:4px 8px;font-weight:bold;content:attr(data-idx);}",
-            "p[data-list-levels]{position:relative;padding-left:18px;} ",
-            "p[data-list-levels]::before{content:'•';position:absolute;left:0;} ",
             "</style>",
             "</head>",
             "<body>"

@@ -94,7 +94,7 @@ pre {
     line-height: 1.2;
     background-color: #f4f4f4;
     color: #333333;
-    padding: 0; /* remove vertical padding – PPT textbox cannot replicate */
+    padding: 10px;
     border-radius: 4px;
     margin-bottom: 15px;
     width: auto;
@@ -112,7 +112,7 @@ pre code {
     line-height: inherit;
     background-color: transparent; /* Don't double-apply background */
     color: inherit;
-    padding: 10px; /* visual grey inset, counts toward pre height */
+    padding: 0; /* Don't double-apply padding */
     border-radius: 0;
     margin: 0;
     white-space: inherit;
@@ -122,7 +122,7 @@ pre code {
 
 code {
     font-family: 'Courier New', monospace;
-    font-size: 14px;
+    font-size: 10px;
     background-color: #f4f4f4;
     color: #333333;
     padding: 2px 4px;

@@ -101,7 +101,7 @@ pre {
     line-height: 1.2;
     background-color: #f4f4f4;
     color: #333333;
-    padding: 0; /* remove vertical padding – PPT textbox cannot replicate */
+    padding: 10px;
     border-radius: 4px;
     margin-bottom: 15px;
     width: auto;
@@ -119,7 +119,7 @@ pre code {
     line-height: inherit;
     background-color: transparent; /* Don't double-apply background */
     color: inherit;
-    padding: 10px; /* visual grey inset, counts toward pre height */
+    padding: 0; /* Don't double-apply padding */
     border-radius: 0;
     margin: 0;
     white-space: inherit;
@@ -129,7 +129,7 @@ pre code {
 
 code {
     font-family: 'Courier New', monospace;
-    font-size: 14px;
+    font-size: 10px;
     background-color: #f4f4f4;
     color: #333333;
     padding: 2px 4px;
@@ -188,10 +188,8 @@ th {
   width: max-content; /* natural width */
   max-width: 100%;
 } 
-.slide{margin-bottom:40px;border:3px solid red;position:relative;overflow:hidden;}
+.slide{margin-bottom:40px;border:3px solid red;position:relative;}
 .slide:before{position:absolute;top:-26px;left:0;background:red;color:#fff;padding:4px 8px;font-weight:bold;content:attr(data-idx);}
-p[data-list-levels]{position:relative;padding-left:18px;} 
-p[data-list-levels]::before{content:'•';position:absolute;left:0;} 
 </style>
 </head>
 <body>
@@ -299,7 +297,7 @@ pre {
     line-height: 1.2;
     background-color: #f4f4f4;
     color: #333333;
-    padding: 0; /* remove vertical padding – PPT textbox cannot replicate */
+    padding: 10px;
     border-radius: 4px;
     margin-bottom: 15px;
     width: auto;
@@ -317,7 +315,7 @@ pre code {
     line-height: inherit;
     background-color: transparent; /* Don't double-apply background */
     color: inherit;
-    padding: 10px; /* visual grey inset, counts toward pre height */
+    padding: 0; /* Don't double-apply padding */
     border-radius: 0;
     margin: 0;
     white-space: inherit;
@@ -327,7 +325,7 @@ pre code {
 
 code {
     font-family: 'Courier New', monospace;
-    font-size: 14px;
+    font-size: 10px;
     background-color: #f4f4f4;
     color: #333333;
     padding: 2px 4px;
@@ -774,9 +772,9 @@ generator.generate(markdown_content, &quot;dark_presentation.pptx&quot;)
 <div class="slide" id="slide-13">
 <h1>📈 Figures Demo</h1>
 <p>Bar chart (80% width):</p>
-<img src="file:///var/folders/c4/cx02wyp127gchsrd9y_2qdxc0000gn/T/tmplcrdb6ac/chart_bar.png" alt="Bar Chart" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/assets/chart_bar.png" style="max-width:80%;height:auto;" data-scale-x="0.8" />
+<img src="file:///var/folders/c4/cx02wyp127gchsrd9y_2qdxc0000gn/T/tmp7ctoh8hu/chart_bar.png" alt="Bar Chart" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/assets/chart_bar.png" style="max-width:80%;height:auto;" data-scale-x="0.8" />
 <p>Pie chart (60% height):</p>
-<img src="file:///var/folders/c4/cx02wyp127gchsrd9y_2qdxc0000gn/T/tmplcrdb6ac/chart_pie.png" alt="Pie Chart" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/assets/chart_pie.png" style="max-height:60%;width:auto;" data-scale-y="0.6" />
+<img src="file:///var/folders/c4/cx02wyp127gchsrd9y_2qdxc0000gn/T/tmp7ctoh8hu/chart_pie.png" alt="Pie Chart" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/assets/chart_pie.png" style="max-height:60%;width:auto;" data-scale-y="0.6" />
 <h1>Two-column slide: table on left, text on right</h1>
 <div class="columns">
 <div class="column">
@@ -829,7 +827,7 @@ generator.generate(markdown_content, &quot;dark_presentation.pptx&quot;)
 <h1>📈 Figures Demo (Columns)</h1>
 <div class="columns">
 <div class="column">
-<img src="file:///var/folders/c4/cx02wyp127gchsrd9y_2qdxc0000gn/T/tmplcrdb6ac/chart_bar.png" alt="Bar Chart" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/assets/chart_bar.png" style="max-width:80%;height:auto;" data-scale-x="0.8" /></div>
+<img src="file:///var/folders/c4/cx02wyp127gchsrd9y_2qdxc0000gn/T/tmp7ctoh8hu/chart_bar.png" alt="Bar Chart" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/assets/chart_bar.png" style="max-width:80%;height:auto;" data-scale-x="0.8" /></div>
 <div class="column">
 <p>The bar chart shows relative task completion percentages. Authentication and API docs are finished; analytics is lagging.</p>
 </div>
@@ -845,7 +843,7 @@ generator.generate(markdown_content, &quot;dark_presentation.pptx&quot;)
 <h1>🖼️ Figure + Table Demo</h1>
 <div class="columns">
 <div class="column">
-<img src="file:///var/folders/c4/cx02wyp127gchsrd9y_2qdxc0000gn/T/tmplcrdb6ac/chart_pie.png" alt="Pie Chart" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/assets/chart_pie.png" style="max-height:60%;width:auto;" data-scale-y="0.6" /></div>
+<img src="file:///var/folders/c4/cx02wyp127gchsrd9y_2qdxc0000gn/T/tmp7ctoh8hu/chart_pie.png" alt="Pie Chart" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/assets/chart_pie.png" style="max-height:60%;width:auto;" data-scale-y="0.6" /></div>
 <div class="column">
 <table>
 <thead>
