@@ -118,6 +118,7 @@ class LayoutEngine:
         css_content = get_css(self.theme)
         
         # Parse CSS for slide dimensions
+        import re
         width_match = re.search(r'--slide-width:\s*(\d+)px', css_content)
         height_match = re.search(r'--slide-height:\s*(\d+)px', css_content)
         
@@ -246,7 +247,6 @@ class LayoutEngine:
                         fontSize: computedStyle.fontSize,
                         fontWeight: computedStyle.fontWeight,
                         fontStyle: computedStyle.fontStyle,
-                        lineHeight: computedStyle.lineHeight,
                         color: (() => {
                             const color = computedStyle.color;
                             const match = color.match(/rgb\\((\\d+), (\\d+), (\\d+)\\)/);
@@ -439,7 +439,7 @@ class LayoutEngine:
         
         # Generate paginated debug HTML to show actual slide structure
         if self.debug:
-            paginated_html = self._generate_paginated_debug_html(pages, processed_html, temp_dir)
+            paginated_html = self._generate_paginated_debug_html(pages, temp_dir)
             
             # Save to output directory for easy viewing
             current_working_dir = Path.cwd()
@@ -909,13 +909,12 @@ class LayoutEngine:
         
         return updated_html
 
-    def _generate_paginated_debug_html(self, pages: List[List[Block]], processed_html: str, temp_dir: str) -> str:
+    def _generate_paginated_debug_html(self, pages: List[List[Block]], temp_dir: str) -> str:
         """Generate HTML showing content split across actual slide pages."""
-        import re
+        from .theme_loader import get_css
+        
         css_content = get_css(self.theme)
-
-        parts = re.split(r'<div class="page-break"[^>]*>.*?</div>', processed_html, flags=re.IGNORECASE | re.DOTALL)
-
+        
         html_parts = [
             "<!DOCTYPE html>",
             "<html lang=\"en\">",
@@ -925,25 +924,48 @@ class LayoutEngine:
             "<title>Paginated Slide Content</title>",
             "<style>",
             css_content,
-            ".slide{margin-bottom:40px;border:3px solid red;position:relative;overflow:hidden;}",
-            ".slide:before{position:absolute;top:-26px;left:0;background:red;color:#fff;padding:4px 8px;font-weight:bold;content:attr(data-idx);}",
-            "p[data-list-levels]{position:relative;padding-left:18px;} ",
-            "p[data-list-levels]::before{content:'•';position:absolute;left:0;} ",
+            "/* Override for debugging pagination */",
+            ".slide { margin-bottom: 40px; border: 3px solid red; }",
+            ".slide::before { content: 'SLIDE ' counter(slide-num); counter-increment: slide-num; ",
+            "display: block; background: red; color: white; padding: 5px; font-weight: bold; }",
+            "body { counter-reset: slide-num; }",
             "</style>",
             "</head>",
             "<body>"
         ]
-
-        for idx, frag in enumerate(parts):
-            if not frag.strip():
+        
+        for page_idx, page in enumerate(pages):
+            if not page:
                 continue
-            html_parts.append(f'<div class="slide" data-idx="{idx+1}">')
-            # Fix relative image src to absolute file URLs so they load outside temp_dir
-            fixed_frag = re.sub(r'<img([^>]+)src="([^"]+)"', lambda m: f'<img{m.group(1)}src="file://{temp_dir}/{m.group(2)}"', frag)
-            html_parts.append(fixed_frag)
+                
+            html_parts.append(f'<div class="slide" id="page-{page_idx + 1}">')
+            
+            for block in page:
+                if block.is_page_break():
+                    continue
+                    
+                # Render block content based on its type
+                if block.tag == 'img':
+                    # Extract src from the original content or use data-filepath
+                    src = block.content if block.content.endswith(('.png', '.jpg', '.jpeg', '.gif')) else "placeholder.png"
+                    html_parts.append(f'<img src="{src}" alt="Image" style="width:{block.width}px;height:{block.height}px;" />')
+                elif block.tag in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
+                    html_parts.append(f'<{block.tag}>{block.content}</{block.tag}>')
+                elif block.tag == 'p':
+                    html_parts.append(f'<p>{block.content}</p>')
+                elif block.tag == 'table':
+                    html_parts.append(block.content)  # Tables already have full HTML
+                elif block.tag in ['ul', 'ol']:
+                    html_parts.append(block.content)  # Lists already have full HTML
+                else:
+                    html_parts.append(f'<div class="{block.tag}">{block.content}</div>')
+            
             html_parts.append('</div>')
-            if idx < len(parts)-1:
-                html_parts.append('<hr style="border:2px dashed #999;margin:40px 0;">')
-
+            
+            # Add visual separator between slides
+            if page_idx < len(pages) - 1:
+                html_parts.append('<div style="height: 40px; border-top: 2px dashed #999; margin: 20px 0; display: flex; align-items: center; justify-content: center; background: #f9f9f9;"><span style="background: white; padding: 0 10px; color: #666;">↓ NEXT SLIDE ↓</span></div>')
+        
         html_parts.extend(["</body>", "</html>"])
+        
         return "\n".join(html_parts)

@@ -44,7 +44,7 @@ body {
 
 h1 {
     font-size: 16px;
-    line-height: 1.4;
+    line-height: 1;
     margin-top: 0;
     margin-bottom: 20px;
     width: fit-content;
@@ -53,7 +53,7 @@ h1 {
 
 h2 {
     font-size: 13px;
-    line-height: 1.4;
+    line-height: 1.2    ;
     margin-top: 0;
     margin-bottom: 15px;
     width: fit-content;
@@ -62,7 +62,7 @@ h2 {
 
 h3 {
     font-size: 11px;
-    line-height: 1.4;
+    line-height: 1.2;
     margin-top: 0;
     margin-bottom: 12px;
     width: fit-content;
@@ -71,7 +71,7 @@ h3 {
 
 p {
     font-size: 10px;
-    line-height: 1.4;
+    line-height: 1.2;
     margin-bottom: 0px;
     width: fit-content;
     max-width: 100%;
@@ -80,7 +80,7 @@ p {
 
 ul, ol {
     font-size: 10px;
-    line-height: 1.4;
+    line-height: 1.2;
     margin-left: 20px;
     margin-bottom: 0px;
     width: fit-content;
@@ -89,8 +89,8 @@ ul, ol {
 }
 
 li {
-    line-height: 1.4;
-    margin-bottom: 8px;
+    line-height: 1.2;
+    margin-bottom: 0;
     width: fit-content;
     max-width: 100%;
 }
@@ -99,10 +99,10 @@ li {
 pre {
     font-family: 'Courier New', monospace;
     font-size: 14px;
-    line-height: 1.4;
+    line-height: 1.2;
     background-color: #2d2d2d;
     color: #ffffff;
-    padding: 10px;
+    padding: 0; /* remove vertical padding – PPT textbox cannot replicate */
     border-radius: 4px;
     margin-bottom: 15px;
     width: auto;
@@ -120,7 +120,7 @@ pre code {
     line-height: inherit;
     background-color: transparent; /* Don't double-apply background */
     color: inherit;
-    padding: 0; /* Don't double-apply padding */
+    padding: 10px; /* inset */
     border-radius: 0;
     margin: 0;
     white-space: inherit;
@@ -139,8 +139,8 @@ code {
 
 table {
     border-collapse: collapse;
-    width: auto;
-    max-width: 100%; /* Ensure table fits within slide boundaries */
+    width: fit-content;
+    max-width: 100%; /* Prevent overflow but allow natural width */
     margin-bottom: 15px;
     table-layout: auto; /* Allow intelligent column sizing */
     word-wrap: break-word; /* Break long words if necessary */
@@ -153,6 +153,7 @@ th, td {
     background-color: transparent;
     color: #ffffff;
     line-height: 1.4;
+    font-size: 10px; /* Match paragraph size so browser measurement matches PPT */
     word-wrap: break-word; /* Break long words in table cells */
     max-width: 200px; /* Prevent individual cells from getting too wide */
     overflow-wrap: break-word; /* Modern CSS property for word breaking */
@@ -171,16 +172,23 @@ th {
 .columns {
   display: flex;
   gap: 32px;
+  align-items: flex-start; /* Keep columns aligned to top */
+  break-inside: avoid; /* Prevent page breaks inside column container */
+  page-break-inside: avoid;
 }
 
 .column {
   flex: 1 1 0;
   padding: 0 8px;
+  min-width: 0; /* Prevent columns from overflowing */
+  break-inside: avoid;
+  page-break-inside: avoid;
 }
 
 /* Ensure tables inside columns fill the available column width */
 .column table {
-  width: 100%;
+  width: max-content;
+  max-width: 100%;
 } 
 </style>
 </head>
@@ -518,9 +526,9 @@ generator.generate(markdown_content, &quot;dark_presentation.pptx&quot;)
 <div class="slide" id="slide-13">
 <h1>📈 Figures Demo</h1>
 <p>Bar chart (80% width):</p>
-<img src="chart_bar.png" alt="Bar Chart" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/assets/chart_bar.png" style="width:738px;height:auto;" data-scale-x="0.8" />
+<img src="chart_bar.png" alt="Bar Chart" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/assets/chart_bar.png" style="max-width:80%;height:auto;" data-scale-x="0.8" />
 <p>Pie chart (60% height):</p>
-<img src="chart_pie.png" alt="Pie Chart" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/assets/chart_pie.png" style="height:301px;width:auto;" data-scale-y="0.6" />
+<img src="chart_pie.png" alt="Pie Chart" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/assets/chart_pie.png" style="max-height:60%;width:auto;" data-scale-y="0.6" />
 <h1>Two-column slide: table on left, text on right</h1>
 <div class="columns">
 <div class="column">
@@ -569,7 +577,7 @@ generator.generate(markdown_content, &quot;dark_presentation.pptx&quot;)
 <h1>📈 Figures Demo (Columns)</h1>
 <div class="columns">
 <div class="column">
-<img src="chart_bar.png" alt="Bar Chart" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/assets/chart_bar.png" style="width:738px;height:auto;" data-scale-x="0.8" /></div>
+<img src="chart_bar.png" alt="Bar Chart" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/assets/chart_bar.png" style="max-width:80%;height:auto;" data-scale-x="0.8" /></div>
 <div class="column">
 <p>The bar chart shows relative task completion percentages. Authentication and API docs are finished; analytics is lagging.</p>
 </div>
@@ -581,7 +589,7 @@ generator.generate(markdown_content, &quot;dark_presentation.pptx&quot;)
 <h1>🖼️ Figure + Table Demo</h1>
 <div class="columns">
 <div class="column">
-<img src="chart_pie.png" alt="Pie Chart" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/assets/chart_pie.png" style="height:301px;width:auto;" data-scale-y="0.6" /></div>
+<img src="chart_pie.png" alt="Pie Chart" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/assets/chart_pie.png" style="max-height:60%;width:auto;" data-scale-y="0.6" /></div>
 <div class="column">
 <table>
 <thead>

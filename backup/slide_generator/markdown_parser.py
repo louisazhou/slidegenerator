@@ -152,13 +152,30 @@ class MarkdownParser:
 
             attrs = [f'data-filepath="{abs_path}"']
             if scale and axis:
-                # Use percentage-based CSS to allow browser to calculate size relative to available space
-                percent = float(scale) * 100
+                # Calculate explicit pixel dimensions to ensure accurate browser measurement
+                # The browser ignores max-width/max-height constraints if image is smaller than the limit
+                # We need to use explicit width/height for reliable measurement
                 if axis.lower() == 'x':
-                    attrs.append(f'style="max-width:{percent:.0f}%;height:auto;"')
+                    # For width scaling: calculate target pixels based on content area
+                    # TODO: Make this dynamic by reading CSS variables
+                    viewport_width = 960  # CSS slide width
+                    padding_px = 19  # CSS slide padding (should match --slide-padding)
+                    content_width = viewport_width - 2 * padding_px  # 922px
+                    target_content_percent = float(scale) * 100  # e.g., 80%
+                    target_pixels = content_width * (target_content_percent / 100)  # e.g., 738px
+                    # Use explicit width instead of max-width for reliable measurement
+                    attrs.append(f'style="width:{target_pixels:.0f}px;height:auto;"')
                     attrs.append(f'data-scale-x="{scale}"')
                 elif axis.lower() == 'y':
-                    attrs.append(f'style="max-height:{percent:.0f}%;width:auto;"')
+                    # For height scaling: calculate target pixels based on content area
+                    # TODO: Make this dynamic by reading CSS variables
+                    viewport_height = 540  # CSS slide height
+                    padding_px = 19  # CSS slide padding (should match --slide-padding)
+                    content_height = viewport_height - 2 * padding_px  # 502px
+                    target_content_percent = float(scale) * 100  # e.g., 60%
+                    target_pixels = content_height * (target_content_percent / 100)  # e.g., 301px
+                    # Use explicit height instead of max-height for reliable measurement
+                    attrs.append(f'style="height:{target_pixels:.0f}px;width:auto;"')
                     attrs.append(f'data-scale-y="{scale}"')
             attr_str = ' '.join(attrs)
             return f'<img src="{browser_src}" alt="{alt}" {attr_str} />'

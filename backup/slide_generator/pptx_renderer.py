@@ -13,7 +13,6 @@ from typing import List, Dict, Optional
 import re
 from pptx.oxml import parse_xml
 from pptx.oxml.ns import nsdecls, qn
-import math
 
 # Helper function to convert pixels to inches
 def px(pixels):
@@ -267,6 +266,8 @@ class PPTXRenderer:
         prs.slide_width = Inches(slide_width_inches)
         prs.slide_height = Inches(slide_height_inches)
         
+        EXTRA_TEXTBOX_PADDING_PX = 4  # Small extra to account for pptx internal leading
+
         for page_idx, page in enumerate(pages):
             # Add a new slide
             slide_layout = prs.slide_layouts[6]  # Blank layout
@@ -280,18 +281,11 @@ class PPTXRenderer:
                 # Adjust top position by current cumulative offset
                 block._adjusted_top_px = block.y + self._page_offset_px  # stash for use in _add_element_to_slide
 
-                # Dynamically compute extra height based on line-height to compensate for font leading
-                extra_height_px = 0
-                if block.is_paragraph() or block.is_heading() or block.is_list() or block.is_code_block():
-                    lh = None
-                    if block.style and 'lineHeight' in block.style and isinstance(block.style['lineHeight'], str) and block.style['lineHeight'].endswith('px'):
-                        try:
-                            lh = float(block.style['lineHeight'].replace('px', ''))
-                        except:
-                            lh = None
-                    if lh and lh > 0:
-                        lines = max(1, math.ceil(block.height / lh))
-                        extra_height_px = int(lh * 0.30 * lines)  # 30% leading per line
+                # Determine if this is a simple text block that should get extra padding
+                is_simple_text = block.tag in ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']
+
+                # Always add a tiny padding to text blocks to prevent clipping
+                extra_height_px = EXTRA_TEXTBOX_PADDING_PX if is_simple_text else 0
 
                 # Render the block at its adjusted position
                 self._add_element_to_slide(slide, block, adjusted_top_px=block._adjusted_top_px, extra_padding_px=extra_height_px)
