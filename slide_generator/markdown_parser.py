@@ -4,6 +4,7 @@ Enhanced markdown parser with support for multiple page break formats.
 from typing import List, Optional
 from markdown_it import MarkdownIt
 from pathlib import Path
+import os
 
 
 class MarkdownParser:
@@ -77,23 +78,36 @@ class MarkdownParser:
                     i += 1
                     columns = []
                     current = []
+                    current_width = 'default'
                     in_column = False
                     
                     while i < len(lines):
                         line = lines[i].strip()
                         
                         if line.startswith(':::column'):
+                            # Detect optional width attribute, e.g., :::column{60%} or :::column{auto}
+                            import re as _re
+                            width_match = _re.match(r':::column\{([^}]+)\}', line)
+                            if width_match:
+                                pending_width = width_match.group(1).strip()
+                            else:
+                                pending_width = "default"
+
                             # Start new column, flush current if exists
                             if current:
-                                columns.append('\n'.join(current).strip())
+                                columns.append((current_width if 'current_width' in locals() else 'default', '\n'.join(current).strip()))
                                 current = []
+                            else:
+                                # Placeholder to capture width even if column starts empty for now
+                                current = []
+                            current_width = pending_width  # Track width for this column's lines
                             in_column = True
                             i += 1
                             continue
                         elif line == ':::' and in_column:
                             # End current column
                             if current:
-                                columns.append('\n'.join(current).strip())
+                                columns.append((current_width, '\n'.join(current).strip()))
                                 current = []
                             in_column = False
                             i += 1
@@ -109,7 +123,7 @@ class MarkdownParser:
                     
                     # Build HTML - filter out empty columns and parse markdown content
                     col_html = []
-                    for c in columns:
+                    for width_token, c in columns:
                         if c.strip():  # Only add non-empty columns
                             # Parse the column content as markdown with table support
                             from markdown_it import MarkdownIt
@@ -122,7 +136,16 @@ class MarkdownParser:
                             # Apply image preprocessing to column content first
                             processed_column = self._preprocess_custom_syntax(c.strip())
                             column_html = md.render(processed_column)
-                            col_html.append(f'<div class="column">\n{column_html}</div>')
+                            width_attr = f'data-column-width="{width_token}"'
+                            style_attr = ''
+                            if width_token.endswith('%') or width_token == 'auto' or width_token == 'default':
+                                if width_token == 'auto':
+                                    style_attr = 'style="flex:0 0 auto;"'
+                                elif width_token == 'default':
+                                    style_attr = 'style="flex:1 1 0;"'
+                                else:  # percentage
+                                    style_attr = f'style="flex:0 0 {width_token};"'
+                            col_html.append(f'<div class="column" {width_attr} {style_attr}>\n{column_html}</div>')
                     out_lines.append('<div class="columns">')
                     out_lines.extend(col_html)
                     out_lines.append('</div>')
@@ -141,29 +164,58 @@ class MarkdownParser:
             axis = match.group(3)
             src = match.group(4)
 
-            from pathlib import Path
-            # Convert src to absolute file path and file:// URL for browser
-            if not src.startswith('http'):  # local file
-                abs_path = str(Path(src).expanduser().resolve())
-                browser_src = 'file://' + abs_path
+            # Convert relative paths to absolute for file existence check
+            if not src.startswith(('http://', 'https://', 'file://')):
+                abs_path = os.path.abspath(src)
+                browser_src = f"file://{abs_path}"
             else:
                 abs_path = src
                 browser_src = src
 
             attrs = [f'data-filepath="{abs_path}"']
             if scale and axis:
-                # Use percentage-based CSS to allow browser to calculate size relative to available space
-                percent = float(scale) * 100
-                if axis.lower() == 'x':
-                    attrs.append(f'style="max-width:{percent:.0f}%;height:auto;"')
-                    attrs.append(f'data-scale-x="{scale}"')
-                elif axis.lower() == 'y':
-                    attrs.append(f'style="max-height:{percent:.0f}%;width:auto;"')
-                    attrs.append(f'data-scale-y="{scale}"')
+                # Store scaling information for the layout engine to process
+                # The layout engine will calculate exact dimensions using theme CSS values
+                attrs.append(f'data-scale-{axis.lower()}="{scale}"')
+                attrs.append(f'data-scale-type="{axis.lower()}"')
+                
+                # Note: No pre-calculation of dimensions here
+                # The layout engine will handle this with proper theme dimensions
+
             attr_str = ' '.join(attrs)
             return f'<img src="{browser_src}" alt="{alt}" {attr_str} />'
 
+        # First process images to add scaling attributes
         processed = re.sub(r'!\[([^\]|]+)(?:\|([0-9.]+)([xy]))?\]\(([^)\s]+)\)', replace_image, processed)
+        
+        # After processing columns, mark images that are within column divs
+        def mark_column_images(text: str) -> str:
+            """Add data-in-column attribute to images within column divs"""
+            import re
+            
+            # Find all column divs and mark images within them
+            def process_column_div(match):
+                opening_tag = match.group(1)
+                column_content = match.group(2)
+                # Add data-in-column="true" to all images within this column
+                marked_content = re.sub(
+                    r'(<img[^>]*?)(/?>)',
+                    r'\1 data-in-column="true"\2',
+                    column_content
+                )
+                return f'{opening_tag}{marked_content}</div>'
+            
+            # Process all column divs
+            result = re.sub(
+                r'(<div[^>]*class="[^\"]*\bcolumn\b[^\"]*"[^>]*>)(.*?)</div>',
+                process_column_div,
+                text,
+                flags=re.DOTALL
+            )
+            
+            return result
+        
+        processed = mark_column_images(processed)
         
         return processed
     

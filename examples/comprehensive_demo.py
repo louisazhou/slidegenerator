@@ -456,6 +456,64 @@ The bar chart shows relative task completion percentages. Authentication and API
 
 :::
 
+---
+
+# Two-column slide (60% / 40%)
+
+:::columns
+
+:::column{60%}
+
+### 📋 Project Status Table
+
+| Task | Owner | Progress |
+|------|-------|----------|
+| Authentication | Alice | 100% |
+| Database | Bob | 80% |
+| API Docs | Carol | 100% |
+| Analytics | Dave | 60% |
+
+:::
+
+:::column{40%}
+
+### ✍️ Notes
+
+All core features are either complete or in progress. Remaining items are performance tuning and UX polish.
+
+:::
+
+:::
+
+---
+
+# Two-column slide (Auto + default)
+
+:::columns
+
+:::column{auto}
+
+### 📋 Project Status Table
+
+| Task | Owner | Progress |
+|------|-------|----------|
+| Authentication | Alice | 100% |
+| Database | Bob | 80% |
+| API Docs | Carol | 100% |
+| Analytics | Dave | 60% |
+
+:::
+
+:::column
+
+### ✍️ Notes
+
+All core features are either complete or in progress. Remaining items are performance tuning and UX polish.
+
+:::
+
+:::
+
 """
     
     # Substitute figure placeholders with absolute paths so they render correctly

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Slide Content</title>
+<title>Paginated Slide Content</title>
 <style>
 /* Default theme for slide generation */
 /* Extracted from layout_engine.py hardcoded CSS */
@@ -194,17 +194,22 @@ th {
 /* Column width flex rules */
 .column[data-column-width="auto"] { flex: 0 0 auto; }
 .column[data-column-width="default"] { flex: 1 1 0; } 
+.slide{margin-bottom:40px;border:3px solid red;position:relative;}
+.slide:before{position:absolute;top:-26px;left:0;background:red;color:#fff;padding:4px 8px;font-weight:bold;content:attr(data-idx);}
 </style>
 </head>
 <body>
-<div class="slide" id="slide-0">
+<hr style="border:2px dashed #999;margin:40px 0;">
+<div class="slide" data-idx="0">
+<div class="slide" id="slide--1">
 <h1>🚀 Slide Generator - Complete Feature Demo</h1>
 <p>Welcome to the <strong>comprehensive demonstration</strong> of the <em>Slide Generator</em>!</p>
 <p>This presentation showcases <mark>all implemented features</mark> including <code>inline styling</code>, tables, themes, and more.</p>
-
 </div>
-<div class="page-break"><!-- slide --></div>
-<div class="slide" id="slide-1">
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;">
+<div class="slide" data-idx="1">
+<div class="slide" id="slide-0">
 <h1>✨ Inline Styling Features</h1>
 <h2>Basic Formatting</h2>
 <p><strong>Bold text</strong> using double asterisks or <strong>double underscores</strong>.</p>
@@ -213,18 +218,24 @@ th {
 <p><mark>Highlighted text</mark> using double equals for <mark>important information</mark>.</p>
 <p><u>Underlined text</u> using double plus signs for <u>emphasis or citations</u>.</p>
 <h2>Advanced Combinations</h2>
-<p data-list-levels="0,0,0,0,0" data-list-type="ul"><strong>Bold with <em>italic inside</em> for emphasis</strong><br><em>Italic with <strong>bold inside</strong> for variety</em><br><mark>Highlighted with <strong>bold inside</strong> for attention</mark><br>Underlined with <strong>bold inside</strong> for citations<br><code>Code with formatting</code> (note: formatting preserved where possible)</p>
+<ul>
+  <li><strong>Bold with <em>italic inside</em> for emphasis</strong></li>
+  <li><em>Italic with <strong>bold inside</strong> for variety</em></li>
+  <li><mark>Highlighted with <strong>bold inside</strong> for attention</mark></li>
+  <li>Underlined with <strong>bold inside</strong> for citations</li>
+  <li><code>Code with formatting</code> (note: formatting preserved where possible)</li>
+</ul>
 <h2>Real-World Examples</h2>
 <p>The <code>SlideGenerator</code> class provides a <strong>powerful API</strong> for converting <em>markdown</em> to <mark>professional presentations</mark> with <u>full formatting support</u>.</p>
-<p>Call <code>generator.generate(markdown, &quot;output.pptx&quot;)</code> where <strong>markdown</strong> is your source and <mark>output.pptx</mark> is the <u>final result</u>.</p>
-
+<p>Call <code>generator.generate(markdown, "output.pptx")</code> where <strong>markdown</strong> is your source and <mark>output.pptx</mark> is the <u>final result</u>.</p>
 </div>
-<div class="page-break"><!-- slide --></div>
-<div class="slide" id="slide-2">
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;">
+<div class="slide" data-idx="2">
+<div class="slide" id="slide-1">
 <h1>📊 Table Features - HTML Auto-Width</h1>
 <h2>Smart Column Distribution</h2>
-<table>
-<thead>
+<table><thead>
 <tr>
 <th>Feature</th>
 <th>Status</th>
@@ -257,11 +268,9 @@ th {
 <td>Redis caching + CDN</td>
 <td>Expected 50% speed improvement</td>
 </tr>
-</tbody>
-</table>
+</tbody></table>
 <h2>Compact Table Example</h2>
-<table>
-<thead>
+<table><thead>
 <tr>
 <th>Name</th>
 <th>Age</th>
@@ -288,23 +297,38 @@ th {
 <td>Tokyo</td>
 <td>Japan</td>
 </tr>
-</tbody>
-</table>
+</tbody></table>
 <p><strong>Key Features:</strong></p>
-<p data-list-levels="0,0,0" data-list-type="ul">✅ <strong>HTML auto-width</strong>: Columns sized by content, not equal distribution<br>✅ <strong>Theme-aware borders</strong>: Dark theme uses light borders, default uses dark<br>✅ <strong>Native PowerPoint tables</strong>: Perfect compatibility and professional appearance</p>
-
+<ul>
+  <li>✅ <strong>HTML auto-width</strong>: Columns sized by content, not equal distribution</li>
+  <li>✅ <strong>Theme-aware borders</strong>: Dark theme uses light borders, default uses dark</li>
+  <li>✅ <strong>Native PowerPoint tables</strong>: Perfect compatibility and professional appearance</li>
+</ul>
 </div>
-<div class="page-break"><!-- slide --></div>
-<div class="slide" id="slide-3">
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;">
+<div class="slide" data-idx="3">
+<div class="slide" id="slide-2">
 <h1>🎨 Theme Demonstration</h1>
 <h2>Default Theme Features</h2>
-<p data-list-levels="0,0,0,0" data-list-type="ul"><strong>Light background</strong> with dark text<br><strong>Black borders</strong> on tables for clear definition<br><strong>Professional color scheme</strong> suitable for business presentations<br><strong>High contrast</strong> for excellent readability</p>
+<ul>
+  <li><strong>Light background</strong> with dark text</li>
+  <li><strong>Black borders</strong> on tables for clear definition</li>
+  <li><strong>Professional color scheme</strong> suitable for business presentations</li>
+  <li><strong>High contrast</strong> for excellent readability</li>
+</ul>
 <h2>Dark Theme Features</h2>
-<p data-list-levels="0,0,0,0" data-list-type="ul"><strong>Dark background</strong> (#1a1a1a) for modern appearance<br><strong>Light gray borders</strong> (#e0e0e0) for visibility on dark background<br><strong>White text</strong> for optimal contrast<br><strong>Contemporary design</strong> perfect for tech presentations</p>
-
+<ul>
+  <li><strong>Dark background</strong> (#1a1a1a) for modern appearance</li>
+  <li><strong>Light gray borders</strong> (#e0e0e0) for visibility on dark background</li>
+  <li><strong>White text</strong> for optimal contrast</li>
+  <li><strong>Contemporary design</strong> perfect for tech presentations</li>
+</ul>
 </div>
-<div class="page-break"><!-- slide --></div>
-<div class="slide" id="slide-4">
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;">
+<div class="slide" data-idx="4">
+<div class="slide" id="slide-3">
 <h1>💻 Code Block Support</h1>
 <h2>Python Example</h2>
 <pre><code class="language-python">def fibonacci(n):
@@ -315,7 +339,7 @@ th {
 # Generate sequence
 for i in range(10):
     result = fibonacci(i)
-    print(f&quot;F({i}) = {result}&quot;)
+    print(f"F({i}) = {result}")
 </code></pre>
 <h2>JavaScript Example</h2>
 <pre><code class="language-javascript">async function fetchUserData(userId) {
@@ -329,6 +353,11 @@ for i in range(10):
 }
 </code></pre>
 <h2>SQL Example</h2>
+</div>
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;">
+<div class="slide" data-idx="5">
+<div class="slide" id="slide-4">
 <pre><code class="language-sql">-- Complex query with joins and aggregation
 SELECT 
     u.username,
@@ -341,23 +370,44 @@ GROUP BY u.id, u.username
 HAVING COUNT(p.id) &gt; 5
 ORDER BY avg_rating DESC;
 </code></pre>
-
 </div>
-<div class="page-break"><!-- slide --></div>
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;">
+<div class="slide" data-idx="6">
 <div class="slide" id="slide-5">
 <h1>📝 List Formatting</h1>
 <h2>Unordered Lists</h2>
-<p data-list-levels="0,0,1,1,1,0" data-list-type="ul"><strong>Primary feature</strong>: Full markdown support<br><strong>Secondary feature</strong>: Inline styling within lists<br><em>Nested items</em> with proper indentation<br><code>Code elements</code> in list items<br><mark>Highlighted content</mark> for emphasis<br><strong>Tertiary feature</strong>: Multiple nesting levels</p>
+<ul>
+  <li><strong>Primary feature</strong>: Full markdown support</li>
+  <li><strong>Secondary feature</strong>: Inline styling within lists</li>
+    <li><em>Nested items</em> with proper indentation</li>
+    <li><code>Code elements</code> in list items</li>
+    <li><mark>Highlighted content</mark> for emphasis</li>
+  <li><strong>Tertiary feature</strong>: Multiple nesting levels</li>
+</ul>
 <h2>Ordered Lists</h2>
-<p data-list-levels="0,1,1,1,0,1,1,1,0,1,1,1" data-list-type="ol"><strong>Setup Phase</strong><br>Install dependencies with <code>pip install -r requirements.txt</code><br>Configure environment variables<br>Initialize database schema<br><strong>Development Phase</strong><br>Write <mark>clean, maintainable code</mark><br>Add comprehensive <em>unit tests</em><br>Document <strong>public APIs</strong><br><strong>Deployment Phase</strong><br>Run <code>pytest</code> for quality assurance<br>Deploy to <mark>production environment</mark><br>Monitor <em>system performance</em></p>
-
+<ol>
+  <li><strong>Setup Phase</strong></li>
+    <li>Install dependencies with <code>pip install -r requirements.txt</code></li>
+    <li>Configure environment variables</li>
+    <li>Initialize database schema</li>
+  <li><strong>Development Phase</strong></li>
+    <li>Write <mark>clean, maintainable code</mark></li>
+    <li>Add comprehensive <em>unit tests</em></li>
+    <li>Document <strong>public APIs</strong></li>
+  <li><strong>Deployment Phase</strong></li>
+    <li>Run <code>pytest</code> for quality assurance</li>
+    <li>Deploy to <mark>production environment</mark></li>
+    <li>Monitor <em>system performance</em></li>
+</ol>
 </div>
-<div class="page-break"><!-- slide --></div>
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;">
+<div class="slide" data-idx="7">
 <div class="slide" id="slide-6">
 <h1>🔧 Technical Architecture</h1>
 <h2>Core Components</h2>
-<table>
-<thead>
+<table><thead>
 <tr>
 <th>Component</th>
 <th>Responsibility</th>
@@ -385,29 +435,45 @@ ORDER BY avg_rating DESC;
 <td>Manage visual themes</td>
 <td>CSS-based configuration, font size synchronization</td>
 </tr>
-</tbody>
-</table>
+</tbody></table>
 <h2>Processing Pipeline</h2>
 <p>The system processes content through these stages:</p>
-<p data-list-levels="0,0,0,0,0" data-list-type="ol"><strong>Markdown Input</strong> → Parse with markdown-it-py<br><strong>HTML Generation</strong> → Add inline styling support<br><strong>Browser Layout</strong> → Measure with Puppeteer engine<br><strong>Block Positioning</strong> → Calculate precise coordinates<br><strong>PowerPoint Output</strong> → Generate native PPTX format</p>
-
+<ol>
+  <li><strong>Markdown Input</strong> → Parse with markdown-it-py</li>
+  <li><strong>HTML Generation</strong> → Add inline styling support</li>
+  <li><strong>Browser Layout</strong> → Measure with Puppeteer engine</li>
+  <li><strong>Block Positioning</strong> → Calculate precise coordinates</li>
+  <li><strong>PowerPoint Output</strong> → Generate native PPTX format</li>
+</ol>
 </div>
-<div class="page-break"><!-- slide --></div>
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;">
+<div class="slide" data-idx="8">
 <div class="slide" id="slide-7">
 <h1>📏 Pagination &amp; Layout</h1>
 <h2>Intelligent Pagination</h2>
 <p>The system uses <strong>browser-based measurement</strong> for accurate pagination:</p>
-<p data-list-levels="0,0,0,0" data-list-type="ul">✅ <strong>Boundary detection</strong>: Content exceeding slide limits automatically flows to next slide<br>✅ <strong>Relative positioning</strong>: Accounts for CSS margins and spacing<br>✅ <strong>Overflow prevention</strong>: No content extends beyond slide boundaries<br>✅ <strong>Smart breaks</strong>: Preserves logical content grouping where possible</p>
+<ul>
+  <li>✅ <strong>Boundary detection</strong>: Content exceeding slide limits automatically flows to next slide</li>
+  <li>✅ <strong>Relative positioning</strong>: Accounts for CSS margins and spacing</li>
+  <li>✅ <strong>Overflow prevention</strong>: No content extends beyond slide boundaries</li>
+  <li>✅ <strong>Smart breaks</strong>: Preserves logical content grouping where possible</li>
+</ul>
 <h2>Layout Quality</h2>
-<p data-list-levels="0,0,0,0" data-list-type="ul"><strong>Pixel-perfect positioning</strong> using browser layout engine<br><strong>Consistent spacing</strong> matching CSS specifications<br><strong>Professional typography</strong> with proper font rendering<br><strong>Responsive design</strong> adapting to different content types</p>
-
+<ul>
+  <li><strong>Pixel-perfect positioning</strong> using browser layout engine</li>
+  <li><strong>Consistent spacing</strong> matching CSS specifications</li>
+  <li><strong>Professional typography</strong> with proper font rendering</li>
+  <li><strong>Responsive design</strong> adapting to different content types</li>
+</ul>
 </div>
-<div class="page-break"><!-- slide --></div>
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;">
+<div class="slide" data-idx="9">
 <div class="slide" id="slide-8">
 <h1>🎯 Quality Assurance</h1>
 <h2>Test Coverage</h2>
-<table>
-<thead>
+<table><thead>
 <tr>
 <th>Test Category</th>
 <th>Count</th>
@@ -435,13 +501,19 @@ ORDER BY avg_rating DESC;
 <td>8</td>
 <td>Edge case handling</td>
 </tr>
-</tbody>
-</table>
+</tbody></table>
 <h2>Validation Features</h2>
-<p data-list-levels="0,0,0,0,0" data-list-type="ul"><strong>Content completeness</strong>: All markdown elements preserved<br><strong>No overlaps</strong>: Shapes positioned without collision<br><strong>Boundary compliance</strong>: Content within slide limits<br><strong>Format consistency</strong>: Styling applied correctly<br><strong>Theme adherence</strong>: Colors and fonts match specifications</p>
-
+<ul>
+  <li><strong>Content completeness</strong>: All markdown elements preserved</li>
+  <li><strong>No overlaps</strong>: Shapes positioned without collision</li>
+  <li><strong>Boundary compliance</strong>: Content within slide limits</li>
+  <li><strong>Format consistency</strong>: Styling applied correctly</li>
+  <li><strong>Theme adherence</strong>: Colors and fonts match specifications</li>
+</ul>
 </div>
-<div class="page-break"><!-- slide --></div>
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;">
+<div class="slide" data-idx="10">
 <div class="slide" id="slide-9">
 <h1>🌟 Recent Improvements</h1>
 <h2>Table Column Width Fix ✅</h2>
@@ -454,14 +526,14 @@ ORDER BY avg_rating DESC;
 <strong>Solution</strong>: Theme-aware border colors with XML manipulation</p>
 <p><strong>Dark Theme</strong>: Light gray borders (<code>#e0e0e0</code>) for visibility
 <strong>Default Theme</strong>: Black borders (<code>#000</code>) for definition</p>
-
 </div>
-<div class="page-break"><!-- slide --></div>
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;">
+<div class="slide" data-idx="11">
 <div class="slide" id="slide-10">
 <h1>📈 Performance Metrics</h1>
 <h2>Processing Speed</h2>
-<table>
-<thead>
+<table><thead>
 <tr>
 <th>Content Type</th>
 <th>Processing Time</th>
@@ -489,24 +561,43 @@ ORDER BY avg_rating DESC;
 <td>~1.5 seconds</td>
 <td>3-5 slides</td>
 </tr>
-</tbody>
-</table>
+</tbody></table>
 <h2>Quality Metrics</h2>
-<p data-list-levels="0,0,0,0" data-list-type="ul">✅ <strong>99.8% formatting accuracy</strong> across all content types<br>✅ <strong>Zero overlaps</strong> in generated presentations<br>✅ <strong>100% boundary compliance</strong> - no content overflow<br>✅ <strong>Perfect theme consistency</strong> across all elements</p>
-
+<ul>
+  <li>✅ <strong>99.8% formatting accuracy</strong> across all content types</li>
+  <li>✅ <strong>Zero overlaps</strong> in generated presentations</li>
+  <li>✅ <strong>100% boundary compliance</strong> - no content overflow</li>
+  <li>✅ <strong>Perfect theme consistency</strong> across all elements</li>
+</ul>
 </div>
-<div class="page-break"><!-- slide --></div>
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;">
+<div class="slide" data-idx="12">
 <div class="slide" id="slide-11">
 <h1>🎉 Summary &amp; Next Steps</h1>
 <h2>What You've Experienced</h2>
-<p data-list-levels="0,0,0,0,0,0" data-list-type="ul">✅ <strong>Complete inline styling</strong> - bold, italic, code, highlights<br>✅ <strong>Smart table rendering</strong> - HTML auto-width with theme-aware borders<br>✅ <strong>Professional code blocks</strong> - syntax highlighting and proper formatting<br>✅ <strong>Intelligent pagination</strong> - browser-based measurement and positioning<br>✅ <strong>Theme support</strong> - default and dark themes with full consistency<br>✅ <strong>Quality assurance</strong> - comprehensive testing and validation</p>
+<ul>
+  <li>✅ <strong>Complete inline styling</strong> - bold, italic, code, highlights</li>
+  <li>✅ <strong>Smart table rendering</strong> - HTML auto-width with theme-aware borders</li>
+  <li>✅ <strong>Professional code blocks</strong> - syntax highlighting and proper formatting</li>
+  <li>✅ <strong>Intelligent pagination</strong> - browser-based measurement and positioning</li>
+  <li>✅ <strong>Theme support</strong> - default and dark themes with full consistency</li>
+  <li>✅ <strong>Quality assurance</strong> - comprehensive testing and validation</li>
+</ul>
 <h2>Ready for Production</h2>
 <p>This slide generator is <strong>production-ready</strong> with:</p>
-<p data-list-levels="0,0,0,0,0" data-list-type="ul">🚀 <strong>High performance</strong> browser-based rendering<br>🎯 <strong>Pixel-perfect accuracy</strong> in layout and positioning<br>🎨 <strong>Professional themes</strong> with consistent styling<br>🔧 <strong>Robust architecture</strong> with comprehensive error handling<br>✅ <strong>Extensive testing</strong> ensuring reliability and quality</p>
+<ul>
+  <li>🚀 <strong>High performance</strong> browser-based rendering</li>
+  <li>🎯 <strong>Pixel-perfect accuracy</strong> in layout and positioning</li>
+  <li>🎨 <strong>Professional themes</strong> with consistent styling</li>
+  <li>🔧 <strong>Robust architecture</strong> with comprehensive error handling</li>
+  <li>✅ <strong>Extensive testing</strong> ensuring reliability and quality</li>
+</ul>
 <p><strong>Thank you</strong> for exploring the <mark>complete feature set</mark>!</p>
-
 </div>
-<div class="page-break"><!-- slide --></div>
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;">
+<div class="slide" data-idx="13">
 <div class="slide" id="slide-12">
 <h1>🔗 Technical Details</h1>
 <h2>API Usage</h2>
@@ -515,30 +606,40 @@ ORDER BY avg_rating DESC;
 
 # Basic usage
 generator = SlideGenerator()
-generator.generate(markdown_content, &quot;output.pptx&quot;)
+generator.generate(markdown_content, "output.pptx")
 
 # With theme support
-generator = SlideGenerator(theme=&quot;dark&quot;)
-generator.generate(markdown_content, &quot;dark_presentation.pptx&quot;)
+generator = SlideGenerator(theme="dark")
+generator.generate(markdown_content, "dark_presentation.pptx")
 </code></pre>
 <h2>Configuration Options</h2>
-<p data-list-levels="0,0,0,0" data-list-type="ul"><strong>Themes</strong>: <code>"default"</code>, <code>"dark"</code><br><strong>Debug mode</strong>: Detailed processing information<br><strong>Output formats</strong>: PowerPoint (.pptx) with full compatibility<br><strong>Custom styling</strong>: CSS-based theme configuration</p>
+<ul>
+  <li><strong>Themes</strong>: <code>"default"</code>, <code>"dark"</code></li>
+  <li><strong>Debug mode</strong>: Detailed processing information</li>
+  <li><strong>Output formats</strong>: PowerPoint (.pptx) with full compatibility</li>
+  <li><strong>Custom styling</strong>: CSS-based theme configuration</li>
+</ul>
 <p><strong>End of demonstration</strong> - <mark>All features showcased</mark>! 🎊</p>
-
 </div>
-<div class="page-break"><!-- slide --></div>
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;">
+<div class="slide" data-idx="14">
 <div class="slide" id="slide-13">
 <h1>📈 Figures Demo</h1>
 <p>Bar chart (80% width):</p>
-<img src="chart_bar.png" alt="Bar Chart" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/assets/chart_bar.png" data-scale-x="0.8" data-scale-type="x" />
+<img src="file:///var/folders/c4/cx02wyp127gchsrd9y_2qdxc0000gn/T/tmppnffwtyv/chart_bar.png" alt="" style="width:635px;height:476px;font-size:16px;font-weight:400;font-style:normal;line-height:normal;color:{'r': 0, 'g': 0, 'b': 0};background-color:None;text-align:start" />
 <p>Pie chart (60% height):</p>
-<img src="chart_pie.png" alt="Pie Chart" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/assets/chart_pie.png" data-scale-y="0.6" data-scale-type="y" />
+</div>
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;">
+<div class="slide" data-idx="15">
+<div class="slide" id="slide-14">
+<img src="file:///var/folders/c4/cx02wyp127gchsrd9y_2qdxc0000gn/T/tmppnffwtyv/chart_pie.png" alt="" style="width:301px;height:301px;font-size:16px;font-weight:400;font-style:normal;line-height:normal;color:{'r': 0, 'g': 0, 'b': 0};background-color:None;text-align:start" />
 <h1>Two-column slide: table on left, text on right</h1>
-<div class="columns">
-<div class="column" data-column-width="default" style="flex:1 1 0;">
 <h3>📋 Project Status Table</h3>
-<table>
-<thead>
+<div class="columns">
+<div class="column">
+<table><thead>
 <tr>
 <th>Task</th>
 <th>Owner</th>
@@ -566,37 +667,39 @@ generator.generate(markdown_content, &quot;dark_presentation.pptx&quot;)
 <td>Dave</td>
 <td>60%</td>
 </tr>
-</tbody>
-</table>
+</tbody></table>
 </div>
-<div class="column" data-column-width="default" style="flex:1 1 0;">
+<div class="column">
 <h3>✍️ Notes</h3>
 <p>All core features are either complete or in progress. Remaining items are performance tuning and UX polish.</p>
 </div>
 </div>
-
 </div>
-<div class="page-break"><!-- slide --></div>
-<div class="slide" id="slide-14">
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;">
+<div class="slide" data-idx="16">
+<div class="slide" id="slide-15">
 <h1>📈 Figures Demo (Columns)</h1>
 <div class="columns">
-<div class="column" data-column-width="default" style="flex:1 1 0;">
-<img src="chart_bar.png" alt="Bar Chart" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/assets/chart_bar.png" data-scale-x="0.8" data-scale-type="x"  data-in-column="true"/></div>
-<div class="column" data-column-width="default" style="flex:1 1 0;">
+<div class="column">
+<img src="file:///var/folders/c4/cx02wyp127gchsrd9y_2qdxc0000gn/T/tmppnffwtyv/chart_bar.png" alt="" style="width:354px;height:265px;font-size:16px;font-weight:400;font-style:normal;line-height:normal;color:{'r': 0, 'g': 0, 'b': 0};background-color:None;text-align:start" />
+</div>
+<div class="column">
 <p>The bar chart shows relative task completion percentages. Authentication and API docs are finished; analytics is lagging.</p>
 </div>
 </div>
-
 </div>
-<div class="page-break"><!-- slide --></div>
-<div class="slide" id="slide-15">
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;">
+<div class="slide" data-idx="17">
+<div class="slide" id="slide-16">
 <h1>🖼️ Figure + Table Demo</h1>
 <div class="columns">
-<div class="column" data-column-width="default" style="flex:1 1 0;">
-<img src="chart_pie.png" alt="Pie Chart" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/assets/chart_pie.png" data-scale-y="0.6" data-scale-type="y"  data-in-column="true"/></div>
-<div class="column" data-column-width="default" style="flex:1 1 0;">
-<table>
-<thead>
+<div class="column">
+<img src="file:///var/folders/c4/cx02wyp127gchsrd9y_2qdxc0000gn/T/tmppnffwtyv/chart_pie.png" alt="" style="width:301px;height:301px;font-size:16px;font-weight:400;font-style:normal;line-height:normal;color:{'r': 0, 'g': 0, 'b': 0};background-color:None;text-align:start" />
+</div>
+<div class="column">
+<table><thead>
 <tr>
 <th>Segment</th>
 <th>%</th>
@@ -615,65 +718,19 @@ generator.generate(markdown_content, &quot;dark_presentation.pptx&quot;)
 <td>Blocked</td>
 <td>10</td>
 </tr>
-</tbody>
-</table>
+</tbody></table>
 </div>
 </div>
-
-</div>
-<div class="page-break"><!-- slide --></div>
-<div class="slide" id="slide-16">
-<h1>Two-column slide (60% / 40%)</h1>
-<div class="columns">
-<div class="column" data-column-width="60%" style="flex:0 0 60%;">
-<h3>📋 Project Status Table</h3>
-<table>
-<thead>
-<tr>
-<th>Task</th>
-<th>Owner</th>
-<th>Progress</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Authentication</td>
-<td>Alice</td>
-<td>100%</td>
-</tr>
-<tr>
-<td>Database</td>
-<td>Bob</td>
-<td>80%</td>
-</tr>
-<tr>
-<td>API Docs</td>
-<td>Carol</td>
-<td>100%</td>
-</tr>
-<tr>
-<td>Analytics</td>
-<td>Dave</td>
-<td>60%</td>
-</tr>
-</tbody>
-</table>
-</div>
-<div class="column" data-column-width="40%" style="flex:0 0 40%;">
-<h3>✍️ Notes</h3>
-<p>All core features are either complete or in progress. Remaining items are performance tuning and UX polish.</p>
 </div>
 </div>
-
-</div>
-<div class="page-break"><!-- slide --></div>
+<hr style="border:2px dashed #999;margin:40px 0;">
+<div class="slide" data-idx="18">
 <div class="slide" id="slide-17">
-<h1>Two-column slide (Auto + default)</h1>
-<div class="columns">
-<div class="column" data-column-width="auto" style="flex:0 0 auto;">
+<h1>Two-column slide (60% / 40%)</h1>
 <h3>📋 Project Status Table</h3>
-<table>
-<thead>
+<div class="columns">
+<div class="column">
+<table><thead>
 <tr>
 <th>Task</th>
 <th>Owner</th>
@@ -701,13 +758,58 @@ generator.generate(markdown_content, &quot;dark_presentation.pptx&quot;)
 <td>Dave</td>
 <td>60%</td>
 </tr>
-</tbody>
-</table>
+</tbody></table>
 </div>
-<div class="column" data-column-width="default" style="flex:1 1 0;">
+<div class="column">
 <h3>✍️ Notes</h3>
 <p>All core features are either complete or in progress. Remaining items are performance tuning and UX polish.</p>
 </div>
 </div>
 </div>
-</body></html>
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;">
+<div class="slide" data-idx="19">
+<div class="slide" id="slide-18">
+<h1>Two-column slide (Auto + default)</h1>
+<h3>📋 Project Status Table</h3>
+<div class="columns">
+<div class="column">
+<table><thead>
+<tr>
+<th>Task</th>
+<th>Owner</th>
+<th>Progress</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Authentication</td>
+<td>Alice</td>
+<td>100%</td>
+</tr>
+<tr>
+<td>Database</td>
+<td>Bob</td>
+<td>80%</td>
+</tr>
+<tr>
+<td>API Docs</td>
+<td>Carol</td>
+<td>100%</td>
+</tr>
+<tr>
+<td>Analytics</td>
+<td>Dave</td>
+<td>60%</td>
+</tr>
+</tbody></table>
+</div>
+<div class="column">
+<h3>✍️ Notes</h3>
+<p>All core features are either complete or in progress. Remaining items are performance tuning and UX polish.</p>
+</div>
+</div>
+</div>
+</div>
+</body>
+</html>

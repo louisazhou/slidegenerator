@@ -58,7 +58,7 @@ class PPTXRenderer:
             match = re.search(pattern, css_content, re.IGNORECASE | re.DOTALL)
             if match:
                 px_size = int(match.group(1))
-                pt_size = max(10, int(px_size * 0.75))  # Convert px to pt, minimum 10pt
+                pt_size = int(px_size * 0.75)  # Convert px to pt
                 
                 if element == 'ul, ol':
                     config['font_sizes']['li'] = pt_size

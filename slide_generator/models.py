@@ -21,6 +21,12 @@ class Block:
     table_column_widths: Optional[list] = None
     src: Optional[str] = None  # For images
     className: Optional[str] = None  # For CSS class names
+    scaleX: Optional[str] = None  # For image scaling data
+    scaleY: Optional[str] = None  # For image scaling data
+    scaleType: Optional[str] = None  # For image scaling type
+    inColumn: Optional[str] = None  # Whether image is in a column layout
+    parentColumnWidth: Optional[float] = None  # Width of parent column in px
+    columnMode: Optional[str] = None  # 'auto', 'default', or percentage token
     
     @property
     def width(self):
@@ -90,5 +96,11 @@ class Block:
             style=element.get('style', {}),
             table_column_widths=element.get('tableColumnWidths'),
             src=element.get('src'),
-            className=element.get('className')
+            className=element.get('className'),
+            scaleX=element.get('scaleX'),
+            scaleY=element.get('scaleY'),
+            scaleType=element.get('scaleType'),
+            inColumn=element.get('inColumn'),
+            parentColumnWidth=element.get('parentColumnWidth'),
+            columnMode=element.get('columnMode')
         ) 

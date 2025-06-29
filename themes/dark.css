@@ -8,6 +8,8 @@
     --slide-aspect-ratio: 16/9;  /* 16:9 aspect ratio */
     --slide-padding: 19px;       /* Configurable slide padding in pixels */
     --slide-font-family: 'Arial'; /* Font family that matches PowerPoint exactly */
+    --column-gap: 32px;          /* Gap between columns */
+    --column-padding: 8px;       /* Padding inside each column */
     
     /* Table styling deltas */
     --table-font-delta: -2pt;    /* Table font size = body - 2pt */
@@ -164,7 +166,7 @@ th {
 /* Two-column layout support */
 .columns {
   display: flex;
-  gap: 32px;
+  gap: var(--column-gap);
   align-items: flex-start; /* Keep columns aligned to top */
   break-inside: avoid; /* Prevent page breaks inside column container */
   page-break-inside: avoid;
@@ -172,7 +174,7 @@ th {
 
 .column {
   flex: 1 1 0;
-  padding: 0 8px;
+  padding: 0 var(--column-padding);
   min-width: 0; /* Prevent columns from overflowing */
   break-inside: avoid;
   page-break-inside: avoid;
@@ -182,4 +184,8 @@ th {
 .column table {
   width: max-content;
   max-width: 100%;
-} 
+}
+
+/* Column width flex rules */
+.column[data-column-width="auto"] { flex: 0 0 auto; }
+.column[data-column-width="default"] { flex: 1 1 0; } 
