@@ -5,12 +5,11 @@ import tempfile
 import os
 import json
 import re
-from typing import List, Optional, Callable, Dict, Union
+from typing import List, Optional, Callable
 from pathlib import Path
-from pyppeteer import launch
-from pptx.util import Inches
 from PIL import Image
 from html import unescape
+from bs4 import BeautifulSoup
 
 from .models import Block
 from .markdown_parser import MarkdownParser
@@ -166,12 +165,9 @@ class PaginationRule:
         self.priority = priority  # Higher priority rules are checked first
 
 
-def _calculate_page_utilization(current_page: List[Block], max_height: int) -> float:
-    """Calculate how much of the page height is currently used (0.0 to 1.0)."""
-    if not current_page:
-        return 0.0
-    total_height = sum(block.height for block in current_page)
-    return min(total_height / max_height, 1.0)
+def _calculate_page_utilization(*_, **__):
+    """(Removed) No longer used – kept as stub for backward compatibility."""
+    pass
 
 
 def _get_page_content_types(current_page: List[Block]) -> set:
@@ -246,16 +242,18 @@ def _should_keep_content_group_together(current_page: List[Block], new_block: Bl
     existing_height = sum(b.height for b in current_page[:recent_heading_idx])
     available_space = max_height - existing_height
     
-    # Content grouping logic working correctly - debug removed
-    
-    # Keep group together if it fits within 95% of available space
-    return group_height <= available_space * 0.95
+    # Additional: if new_block belongs to same .column container as any block in group, force allow
+    if new_block.parentClassName and 'column' in new_block.parentClassName:
+        for b in group_blocks:
+            if b.parentClassName == new_block.parentClassName:
+                return True
 
-def _has_room_for_table(current_page: List[Block], max_height: int) -> bool:
-    """Check if there's enough room to add a typical table (150px) to current page."""
-    current_height = sum(block.height for block in current_page)
-    return (current_height + 150) <= max_height
-
+    # Allow slight overflow (≤ 10 %) so that a compact heading+paragraph+image
+    # group isn't split across slides. This specifically fixes the "Figures
+    # Demo / Bar chart" slide where the combined height exceeded the limit by
+    # just a few pixels.
+    allowable = available_space * 1.10  # 10 % tolerance
+    return group_height <= allowable
 
 # Define pagination rules in order of priority
 PAGINATION_RULES = [
@@ -279,17 +277,6 @@ PAGINATION_RULES = [
         priority=25
     ),
     
-    # Rule 2: Allow heading sections to have their first heavy content
-    PaginationRule(
-        name="allow_heading_with_content",
-        condition=lambda page, block, max_h: (
-            _is_heading_section(page) and
-            (block.height > 200 or block.tag in ['img', 'table'])
-        ),
-        action="allow",
-        priority=20
-    ),
-    
     # Rule 2: Multiple large images should be separated
     PaginationRule(
         name="separate_multiple_large_images",
@@ -300,33 +287,6 @@ PAGINATION_RULES = [
         ),
         action="break",
         priority=10
-    ),
-    
-    # Rule 3: If page is >60% full and we're adding large content, check if room for table
-    PaginationRule(
-        name="reserve_space_for_table",
-        condition=lambda page, block, max_h: (
-            _calculate_page_utilization(page, max_h) > 0.6 and
-            block.height > 150 and
-            block.tag == 'img' and
-            not _has_room_for_table(page, max_h)
-        ),
-        action="break",
-        priority=15
-    ),
-    
-    # Rule 4: If image is 60% height, allow table if there's room
-    PaginationRule(
-        name="allow_60_percent_image_with_table",
-        condition=lambda page, block, max_h: (
-            len(page) == 1 and 
-            page[0].tag == 'img' and 
-            page[0].height <= max_h * 0.6 and 
-            block.tag == 'table' and
-            _has_room_for_table(page, max_h)
-        ),
-        action="allow",
-        priority=18
     ),
 ]
 
@@ -429,6 +389,10 @@ def paginate(blocks: List[Block], max_height_px: int = 540, padding_px: int = 19
                 # If this block would extend beyond the page boundary, start new page
                 if relative_bottom > max_height_px:
                     should_start_new_page = True
+        
+        # Fallback: limit number of blocks per slide to prevent overcrowding
+        # if not should_start_new_page and len(current_page) >= 18:
+        #     should_start_new_page = True
         
         if should_start_new_page:
             # Only add non-empty pages
@@ -562,6 +526,11 @@ class LayoutEngine:
                 const rect = el.getBoundingClientRect();
                 const computedStyle = window.getComputedStyle(el);
                 
+                // Include vertical margins for better pagination accuracy
+                const marginTop = parseFloat(computedStyle.marginTop) || 0;
+                const marginBottom = parseFloat(computedStyle.marginBottom) || 0;
+                const adjustedHeight = rect.height + marginTop + marginBottom;
+                
                 // Get content, preserving HTML for inline formatting and data attributes
                 let textContent;
                 
@@ -598,7 +567,7 @@ class LayoutEngine:
                     x: rect.left,
                     y: rect.top,
                     width: rect.width,
-                    height: rect.height,
+                    height: adjustedHeight,
                     element: el,  // Store reference to the element for parent checking
                     parentTagName: el.parentElement ? el.parentElement.tagName.toLowerCase() : null,
                     parentClassName: el.parentElement ? el.parentElement.className : null,
@@ -664,6 +633,10 @@ class LayoutEngine:
                     const mode = parentColumn.getAttribute('data-column-width');
                     if (mode) item['columnMode'] = mode;
                 }
+
+                // Capture unique bid stamped earlier
+                const bid = el.getAttribute('data-bid');
+                if (bid) item['bid'] = bid;
 
                 result.push(item);
             });
@@ -794,7 +767,7 @@ class LayoutEngine:
         blocks = self._merge_consecutive_lists(blocks)
         
         # --- Determine usable page height (slide height minus padding) ---
-        slide_height_px = self.css_reader.get_px_value('slide-height')
+        slide_height_px = page_height if page_height else self.css_reader.get_px_value('slide-height')
         padding_px = self.css_reader.get_px_value('slide-padding')
         
         usable_height_px = slide_height_px - 2 * padding_px
@@ -855,8 +828,8 @@ class LayoutEngine:
             is_ordered = list_tag == 'ol'
             
             for i, (item_text, level) in enumerate(items_with_levels):
-                # Clean the item content but preserve inline formatting
-                clean_text = self._clean_html_for_measurement(item_text)
+                # Preserve inline formatting tags (strong, em, code, mark, u)
+                clean_text = item_text.strip()
                 
                 # Don't add manual bullets/numbers - PowerPoint will handle this via paragraph.level
                 formatted_items.append(clean_text)
@@ -959,7 +932,22 @@ class LayoutEngine:
                             processed_html[tag_close_end:])
             iteration += 1
         
-        return processed_html
+        # ------------------------------------------------------------------
+        # 4) WYSIWYG SUPPORT – stamp every measurable element with bid
+        # ------------------------------------------------------------------
+        soup = BeautifulSoup(processed_html, 'html.parser')
+        bid_counter = 0
+        for el in soup.select('.slide *'):
+            # Skip page-break markers – they are separate divs we already handle
+            if el.has_attr('data-bid'):
+                continue
+            el['data-bid'] = f'b{bid_counter}'
+            bid_counter += 1
+
+        # Save pristine soup for later DOM slicing in debug HTML
+        self._original_soup = soup
+
+        return str(soup)
     
     def _extract_list_items_with_levels(self, list_content, list_tag, base_level=0):
         """Extract list items with their nesting levels"""
@@ -1227,9 +1215,64 @@ class LayoutEngine:
                     if target_width is not None and target_height is not None:
                         old_dims = f"{block.width}x{block.height}"
                         
+                        # ------------------------------------------------------------------
+                        # NEW: Clamp image height to remaining vertical space on the slide
+                        # ------------------------------------------------------------------
+                        try:
+                            # Total inner slide height (viewport minus padding)
+                            slide_inner_h = self.image_scaler.content_height  # px
+                            
+                            # Vertical space until slide bottom
+                            remaining_h = max(0, slide_inner_h - block.y)
+                            
+                            # How much vertical space is left until either slide bottom or the next block
+                            next_block_y = None
+                            for other in blocks:
+                                if other is block:
+                                    continue
+                                if other.y > block.y:
+                                    next_block_y = other.y if next_block_y is None else min(next_block_y, other.y)
+                            if next_block_y is not None:
+                                remaining_h = min(remaining_h, next_block_y - block.y)
+                            
+                            # Leave a small margin (same 5 % used elsewhere)
+                            max_allowed_h = remaining_h * 0.95
+                            if target_height > max_allowed_h and max_allowed_h > 0:
+                                # Shrink proportionally so aspect ratio is kept
+                                shrink_factor = max_allowed_h / target_height
+                                target_height = max_allowed_h
+                                target_width = target_width * shrink_factor
+                                if self.debug:
+                                    print(f"↕️  Clamped image {block.src} to remaining space: {target_width:.0f}x{target_height:.0f} (remaining {remaining_h:.0f}px)")
+                        except Exception as e:
+                            # In debug mode report but continue gracefully
+                            if self.debug:
+                                print(f"⚠️  Failed to clamp image height for {block.src}: {e}")
+                        
+                        # --------------------------------------------------
+                        # HORIZONTAL CLAMP (symmetry with vertical logic)
+                        # --------------------------------------------------
+                        try:
+                            if in_column and parent_col_width:
+                                avail_w = float(parent_col_width) - (block.x if block.x else 0)
+                            else:
+                                avail_w = self.image_scaler.content_width - block.x
+
+                            avail_w = max(0, avail_w * 0.95)  # 5% safety margin
+
+                            if target_width > avail_w and avail_w > 0:
+                                shrink_factor = avail_w / target_width
+                                target_width = avail_w
+                                target_height = target_height * shrink_factor
+                                if self.debug:
+                                    print(f"↔️  Clamped image {block.src} to available width: {target_width:.0f}x{target_height:.0f} (avail {avail_w:.0f}px)")
+                        except Exception as e:
+                            if self.debug:
+                                print(f"⚠️  Failed horizontal clamp for {block.src}: {e}")
+                        
                         # Update block dimensions
-                        block.w = target_width
-                        block.h = target_height
+                        block.w = int(target_width)
+                        block.h = int(target_height)
                         
                         context = "column" if in_column else "full-width"
                         if self.debug:
@@ -1271,241 +1314,67 @@ class LayoutEngine:
             html_parts.append(f'<div class="slide" data-idx="{page_idx}">')
             html_parts.append('<div class="slide" id="slide-' + str(page_idx-1) + '">')
             
-            # Reconstruct HTML with proper column structure
-            html_parts.append(self._reconstruct_html_with_columns(page_blocks, temp_dir))
+            # Use WYSIWYG slice – copy original DOM nodes for this page
+            bids_this_page = [blk.bid for blk in page_blocks if hasattr(blk, 'bid')]
+            html_parts.append(self._slice_dom_for_page(bids_this_page))
             
             html_parts.append('</div>')
             html_parts.append('</div>')
 
         html_parts.extend(["</body>", "</html>"])
-        return "\n".join(html_parts)
-    
-    def _reconstruct_html_with_columns(self, page_blocks: List[Block], temp_dir: str) -> str:
-        """
-        Reconstruct HTML preserving column layouts using spatial analysis.
-        
-        This uses spatial positioning to detect side-by-side content and recreate 
-        column structure for debugging purposes. PowerPoint gets the correct layout 
-        from the original HTML with proper markdown-based column detection.
-        """
-        if not page_blocks:
-            return ""
-        
-        html_parts = []
-        i = 0
-        
-        while i < len(page_blocks):
-            block = page_blocks[i]
-            
-            # Check if this starts a column layout (side-by-side blocks)
-            column_blocks = self._detect_spatial_column_layout(page_blocks, i)
-            
-            if len(column_blocks) > 1:
-                # Generate column HTML structure
-                html_parts.append('<div class="columns">')
-                
-                # Group blocks into left and right columns based on X position
-                left_blocks = []
-                right_blocks = []
-                
-                # Sort by X position to determine left/right
-                sorted_blocks = sorted(column_blocks, key=lambda b: b.x)
-                mid_x = (sorted_blocks[0].x + sorted_blocks[-1].x) / 2
-                
-                for col_block in column_blocks:
-                    if col_block.x < mid_x:
-                        left_blocks.append(col_block)
-                    else:
-                        right_blocks.append(col_block)
-                
-                # Generate left column
-                if left_blocks:
-                    html_parts.append('<div class="column">')
-                    for left_block in sorted(left_blocks, key=lambda b: b.y):
-                        html_parts.append(self._block_to_html(left_block, temp_dir))
-                    html_parts.append('</div>')
-                
-                # Generate right column  
-                if right_blocks:
-                    html_parts.append('<div class="column">')
-                    for right_block in sorted(right_blocks, key=lambda b: b.y):
-                        html_parts.append(self._block_to_html(right_block, temp_dir))
-                    html_parts.append('</div>')
-                
-                html_parts.append('</div>')
-                
-                # Skip all processed blocks
-                i += len(column_blocks)
-            else:
-                # Single block, not in column layout
-                html_parts.append(self._block_to_html(block, temp_dir))
-                i += 1
-        
-        return '\n'.join(html_parts)
-    
-    def _detect_spatial_column_layout(self, page_blocks: List[Block], start_idx: int) -> List[Block]:
-        """
-        Detect if blocks starting at start_idx form a column layout using spatial analysis.
-        Returns list of blocks that should be grouped together.
-        """
-        if start_idx >= len(page_blocks):
-            return [page_blocks[start_idx]] if start_idx < len(page_blocks) else []
-        
-        base_block = page_blocks[start_idx]
-        column_blocks = [base_block]
-        
-        # Look ahead for spatially related blocks
-        for i in range(start_idx + 1, min(start_idx + 6, len(page_blocks))):
-            next_block = page_blocks[i]
-            
-            # Check if blocks are side-by-side (different X, similar Y)
-            x_diff = abs(next_block.x - base_block.x)
-            y_diff = abs(next_block.y - base_block.y)
-            
-            # Criteria for column layout: significant X difference, small Y difference
-            if x_diff > 200 and y_diff <= 100 and x_diff <= 600:
-                column_blocks.append(next_block)
-            else:
-                break
-        
-        # Only return as column layout if we found multiple spatially related blocks
-        if len(column_blocks) > 1:
-            return column_blocks
-        else:
-            return [base_block]
-    
+        paginated_html = "\n".join(html_parts)
 
+        # Copy images used in this HTML from temp_dir to output/debug_assets
+        if temp_dir:
+            import os, shutil, re
+            output_dir = Path.cwd() / "output" / "debug_assets"
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            # Find all <img src="..."> paths in HTML
+            for match in re.finditer(r'<img[^>]+src="([^">]+)"', paginated_html):
+                src = match.group(1)
+                # Only copy if src is a simple filename (no path separators)
+                if src and not any(sep in src for sep in ['/', '\\']):
+                    src_path = os.path.join(temp_dir, src)
+                    if os.path.exists(src_path):
+                        dest_path = output_dir / src
+                        try:
+                            shutil.copy2(src_path, dest_path)
+                        except Exception:
+                            pass
+
+            # Update img src to point to debug_assets folder relative path
+            paginated_html = paginated_html.replace('src="', 'src="debug_assets/')
+
+        return paginated_html
     
-    def _block_to_html(self, block: Block, temp_dir: str) -> str:
-        """Convert a Block object back to HTML."""
-        
-        # Handle different block types
-        if block.tag == 'h1':
-            return f'<h1>{block.content}</h1>'
-        elif block.tag == 'h2':
-            return f'<h2>{block.content}</h2>'
-        elif block.tag == 'h3':
-            return f'<h3>{block.content}</h3>'
-        elif block.tag == 'p':
-            # Handle list data
-            if 'data-list-levels' in block.content:
-                # Convert data-list-levels back to proper HTML lists
-                return self._convert_data_lists_to_html_lists(block.content)
-            else:
-                return f'<p>{block.content}</p>'
-        elif block.tag == 'table':
-            return f'<table>{block.content}</table>'
-        elif block.tag == 'pre':
-            return f'<pre>{block.content}</pre>'
-        elif block.tag == 'img':
-            # For images, preserve the original dimensions and scaling attributes
-            style_parts = []
-            
-            if self.debug and hasattr(block, 'src'):
-                print(f"🖼️ Converting image block to HTML: {block.src}")
-                print(f"   Block ID: {id(block)} at position ({block.x}, {block.y})")
-                print(f"   Block dimensions: {getattr(block, 'width', 'None')}x{getattr(block, 'height', 'None')}")
-                print(f"   Block w/h attrs: {getattr(block, 'w', 'None')}x{getattr(block, 'h', 'None')}")
-            
-            # Add width and height from block dimensions if available (these take priority)
-            if hasattr(block, 'width') and block.width:
-                style_parts.append(f"width:{int(block.width)}px")
-            if hasattr(block, 'height') and block.height:
-                style_parts.append(f"height:{int(block.height)}px")
-            
-            # Add any additional styles from block.style, but skip width/height
-            if hasattr(block, 'style') and block.style:
-                for key, value in block.style.items():
-                    # Always skip width/height from original style - use block dimensions instead
-                    if key.lower() in ['width', 'height']:
-                        continue
-                    # Convert camelCase to kebab-case
-                    css_key = re.sub(r'([A-Z])', r'-\1', key).lower()
-                    style_parts.append(f"{css_key}:{value}")
-            
-            if self.debug and hasattr(block, 'src'):
-                print(f"   Generated style: {';'.join(style_parts)}")
-            
-            style_attr = f' style="{";".join(style_parts)}"' if style_parts else ''
-            
-            # Fix image src for display
-            if hasattr(block, 'src') and block.src:
-                # Convert relative path to absolute file URL
-                filename = block.src.split("/")[-1]
-                alt_text = getattr(block, 'alt', '') or block.content or ''
-                return f'<img src="file://{temp_dir}/{filename}" alt="{alt_text}"{style_attr} />'
-            else:
-                # Use content which should contain the img tag
-                img_html = block.content
-                # Fix relative image src to absolute file URLs
-                img_html = re.sub(r'src="([^"]+)"', lambda m: f'src="file://{temp_dir}/{m.group(1)}"' if not m.group(1).startswith('file://') else m.group(0), img_html)
-                return img_html
-        elif block.tag == 'div':
-            # Handle column divs
-            if hasattr(block, 'className') and block.className and 'column' in block.className:
-                return f'<div class="{block.className}">{block.content}</div>'
-            else:
-                return f'<div>{block.content}</div>'
-        else:
-            return f'<{block.tag}>{block.content}</{block.tag}>'
-    
-    def _convert_data_lists_to_html_lists(self, html_content: str) -> str:
-        """Convert data-list-levels back to proper HTML lists for paginated display."""
-        
-        def convert_list_paragraph(match):
-            full_content = match.group(0)
-            
-            # Extract list levels and type
-            levels_match = re.search(r'data-list-levels="([^"]*)"', full_content)
-            type_match = re.search(r'data-list-type="([^"]*)"', full_content)
-            
-            if not levels_match or not type_match:
-                return full_content
-            
-            list_type = type_match.group(1)
-            levels_str = levels_match.group(1)
-            
-            # Extract the actual content
-            content_match = re.search(r'<p[^>]*>(.*?)</p>', full_content, re.DOTALL)
-            if not content_match:
-                return full_content
-            
-            inner_content = content_match.group(1)
-            items = inner_content.split('<br>')
-            
-            # Parse levels
-            try:
-                levels = [int(x) for x in levels_str.split(',') if x.strip()]
-            except:
-                levels = [0] * len(items)
-            
-            # Ensure we have the same number of levels as items
-            while len(levels) < len(items):
-                levels.append(0)
-            
-            # Build proper nested HTML list structure
-            tag = 'ul' if list_type == 'ul' else 'ol'
-            result = []
-            
-            for i, (item, level) in enumerate(zip(items, levels)):
-                clean_item = item.strip()
-                if not clean_item:
-                    continue
-                
-                # Simple approach: just create a flat list for now
-                # More complex nesting would require tracking the nesting stack
-                if i == 0:
-                    result.append(f'<{tag}>')
-                
-                # Add indentation based on level
-                indent = '  ' * (level + 1)
-                result.append(f'{indent}<li>{clean_item}</li>')
-                
-                if i == len(items) - 1:
-                    result.append(f'</{tag}>')
-            
-            return '\n'.join(result) if result else full_content
-        
-        # Apply list conversion
-        list_pattern = r'<p[^>]*data-list-levels[^>]*>.*?</p>'
-        return re.sub(list_pattern, convert_list_paragraph, html_content, flags=re.DOTALL)
+    def _slice_dom_for_page(self, bids):
+        """Copy the minimal DOM subtrees that contain all bids, preserving wrappers
+        like .columns/.column so the debug HTML matches the measured layout."""
+        if not hasattr(self, '_original_soup') or self._original_soup is None:
+            return ''
+
+        src = self._original_soup
+        copied_roots = []        # original nodes that will be deep-copied once
+        copied_root_ids = set()  # use id() to avoid duplicates
+
+        for bid in bids:
+            if not bid:
+                continue
+            node = src.select_one(f'[data-bid="{bid}"]')
+            if not node:
+                continue
+
+            # climb until parent is the slide container (has class "slide")
+            anc = node
+            while anc.parent and not (anc.parent.has_attr('class') and 'slide' in anc.parent['class']):
+                anc = anc.parent
+
+            # anc is now direct child of slide (or node itself if already)
+            if id(anc) not in copied_root_ids:
+                copied_roots.append(anc)
+                copied_root_ids.add(id(anc))
+
+        # Deep-copy each root to avoid mutating original soup
+        html_parts = [str(root) for root in copied_roots]
+        return '\n'.join(html_parts)

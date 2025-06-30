@@ -6,7 +6,7 @@ PowerPoint renderer for converting layout blocks to PowerPoint slides.
 from pptx import Presentation
 from pptx.util import Inches, Pt
 from pptx.dml.color import RGBColor
-from pptx.enum.text import PP_ALIGN
+from pptx.enum.text import PP_ALIGN, MSO_AUTO_SIZE
 from .models import Block
 from .theme_loader import get_css
 from typing import List, Dict, Optional
@@ -132,13 +132,14 @@ class PPTXRenderer:
         colors = {}  # NO FALLBACKS - extract from CSS or fail
         
         # Required color types that MUST be defined in CSS
-        required_colors = ['text', 'background', 'table_border', 'table_text', 'code_text', 'heading_text']
+        required_colors = ['text', 'background', 'table_border', 'table_text', 'code_text', 'heading_text', 'highlight']
         
         # Extract colors from CSS rules
         color_patterns = {
             'text': [
-                r'body\s*{[^}]*color:\s*([^;}\s]+)',
-                r'p\s*{[^}]*color:\s*([^;}\s]+)'
+                # Match 'color:' in body rule but skip 'background-color:'
+                r'body\s*{[^}]*?(?<!background-)color:\s*([^;}\s]+)',
+                r'p\s*{[^}]*?(?<!background-)color:\s*([^;}\s]+)'
             ],
             'background': [
                 r'body\s*{[^}]*background-color:\s*([^;}\s]+)',
@@ -155,11 +156,14 @@ class PPTXRenderer:
             'code_text': [
                 r'pre\s*{[^}]*color:\s*([^;}\s]+)',  # Look for separate pre rule
                 r'code\s*{[^}]*color:\s*([^;}\s]+)',
-                r'pre,?\s*code\s*{[^}]*color:\s*([^;}\s]+)'  # Keep for backwards compatibility
+                # r'pre,?\s*code\s*{[^}]*color:\s*([^;}\s]+)'  # Keep for backwards compatibility
             ],
             'heading_text': [
                 r'h[1-6]\s*{[^}]*color:\s*([^;}\s]+)',
                 r'h1\s*{[^}]*color:\s*([^;}\s]+)'
+            ],
+            'highlight': [
+                r'mark\s*{[^}]*?(?<!-)color:\s*([^;}\s]+)'
             ]
         }
         
@@ -272,6 +276,15 @@ class PPTXRenderer:
             slide_layout = prs.slide_layouts[6]  # Blank layout
             slide = prs.slides.add_slide(slide_layout)
             
+            # Apply CSS-defined slide background color for any theme
+            bg_hex = self.theme_config['colors'].get('background')
+            if bg_hex and bg_hex.startswith('#'):
+                r, g, b = self._hex_to_rgb(bg_hex)
+                background = slide.background
+                fill = background.fill
+                fill.solid()
+                fill.fore_color.rgb = RGBColor(r, g, b)
+            
             # Track cumulative vertical offset (in px) required to compensate for min-height adjustments
             self._page_offset_px = 0
             
@@ -280,18 +293,16 @@ class PPTXRenderer:
                 # Adjust top position by current cumulative offset
                 block._adjusted_top_px = block.y + self._page_offset_px  # stash for use in _add_element_to_slide
 
-                # Dynamically compute extra height based on line-height to compensate for font leading
-                extra_height_px = 0
-                if block.is_paragraph() or block.is_heading() or block.is_list() or block.is_code_block():
-                    lh = None
-                    if block.style and 'lineHeight' in block.style and isinstance(block.style['lineHeight'], str) and block.style['lineHeight'].endswith('px'):
-                        try:
-                            lh = float(block.style['lineHeight'].replace('px', ''))
-                        except:
-                            lh = None
-                    if lh and lh > 0:
-                        lines = max(1, math.ceil(block.height / lh))
-                        extra_height_px = int(lh * 0.30 * lines)  # 30% leading per line
+                # Use a conservative, uniform padding to guard against minor
+                # browser-vs-PowerPoint rendering differences, instead of the
+                # former aggressive 30 % line-leading heuristic which made
+                # text boxes far taller than necessary.
+
+                EXTRA_BUFFER_PX = 2  # single-digit safety cushion
+
+                extra_height_px = EXTRA_BUFFER_PX if (
+                    block.is_paragraph() or block.is_heading() or block.is_list()
+                ) else 0
 
                 # Render the block at its adjusted position
                 self._add_element_to_slide(slide, block, adjusted_top_px=block._adjusted_top_px, extra_padding_px=extra_height_px)
@@ -350,25 +361,19 @@ class PPTXRenderer:
             if self.debug:
                 print(f"⚠️ Processing unconverted {block.tag} block - converting to nested list format")
             
-            # Extract list items from raw HTML
-            items = re.findall(r'<li[^>]*>(.*?)</li>', content, re.DOTALL | re.IGNORECASE)
-            if items:
-                # Clean each item and create level data (all level 0 for simple lists)
-                cleaned_items = []
-                for item in items:
-                    # Clean HTML tags but preserve inline formatting
-                    clean_item = re.sub(r'<[^>]*>', '', item).strip()
-                    cleaned_items.append(clean_item)
-                
-                # Create the format expected by _add_nested_list_paragraphs
-                list_content = '<br>'.join(cleaned_items)
-                level_data = ','.join('0' for _ in items)  # All items at level 0
-                list_type = block.tag
-                
-                self._add_nested_list_paragraphs(paragraph, list_content, level_data, list_type)
-            else:
-                # Fallback to regular text processing if no items found
-                self._parse_html_to_runs(paragraph, content)
+            # Extract list items from raw HTML, keep inline formatting tags
+            raw_items = re.findall(r'<li[^>]*>(.*?)</li>', content, re.DOTALL | re.IGNORECASE)
+            # Remove empty strings produced by trailing <br> or whitespace
+            items = [itm.strip() for itm in raw_items if itm.strip()]
+            
+            cleaned_items = [ re.sub(r'^<p[^>]*>|</p>$', '', itm, flags=re.IGNORECASE).strip() for itm in items ]
+            
+            # Create the format expected by _add_nested_list_paragraphs
+            list_content = '<br>'.join(cleaned_items)
+            level_data = ','.join('0' for _ in items)  # All items at level 0
+            list_type = block.tag
+            
+            self._add_nested_list_paragraphs(paragraph, list_content, level_data, list_type)
         else:
             # Regular content - parse HTML tags and create runs with appropriate formatting
             self._parse_html_to_runs(paragraph, content)
@@ -403,13 +408,18 @@ class PPTXRenderer:
     def _add_nested_list_paragraphs(self, first_paragraph, content, level_data, list_type):
         """Add additional paragraphs to handle nested lists within a text frame."""
         
-        # Split content by <br> tags to get individual list items
-        items = content.split('<br>')
-        levels = [int(x) for x in level_data.split(',')]
+        # Split content by <br> tags (attributes possible) to get individual list items
+        import re as _re
+        items = [i for i in _re.split(r'<br[^>]*>', content) if i != '']
+        levels = [int(x) for x in level_data.split(',')]  # already exact order from layout engine
         
         if len(items) != len(levels):
-            print(f"⚠️ Mismatch: {len(items)} items, {len(levels)} levels")
-            return
+            # Fallback: align to min length to avoid crashes but warn in debug mode
+            if self.debug:
+                print(f"⚠️ Mismatch list items vs levels ({len(items)} vs {len(levels)}). Truncating to match.")
+            min_len = min(len(items), len(levels))
+            items = items[:min_len]
+            levels = levels[:min_len]
         
         # Get or create ol_counters for ordered lists
         ol_counters = {}
@@ -444,6 +454,19 @@ class PPTXRenderer:
             # Prepend bullet/number run
             bullet_run = para.add_run()
             bullet_run.text = bullet_text
+            # Determine bullet size strictly from CSS theme (no silent fallback)
+            if 'li' in self.theme_config['font_sizes']:
+                base_size = self.theme_config['font_sizes']['li']
+            elif 'p' in self.theme_config['font_sizes']:
+                base_size = self.theme_config['font_sizes']['p']
+            else:
+                raise ValueError("❌ CSS theme is missing required font-size for 'li' or 'p'.")
+            bullet_run.font.size = Pt(base_size)
+            bullet_run.font.name = self.theme_config['font_family']
+            # Apply theme text color to bullet symbol
+            text_hex = self.theme_config['colors'].get('text')
+            if text_hex and text_hex.startswith('#'):
+                bullet_run.font.color.rgb = RGBColor(*self._hex_to_rgb(text_hex))
 
             # Parse inline HTML to runs preserving combinations
             self._parse_html_to_runs(para, item_html)
@@ -455,26 +478,29 @@ class PPTXRenderer:
         # Stack to track nested formatting
         format_stack = []
         
-        # Regular expression to find HTML tags and text
-        html_pattern = r'(</?(?:strong|em|code|mark|b|i|u)>)|([^<]+)'
+        # Allow attributes inside tags (e.g., <strong data-bid="b12">)
+        html_pattern = r'(</?(?:strong|em|code|mark|b|i|u)(?:\s+[^>]*?)?>)|([^<]+)'
         
         # Split content into tokens (tags and text)
         tokens = re.findall(html_pattern, html_content, re.IGNORECASE)
         
         for tag, text in tokens:
             if tag:
-                # Handle HTML tags
-                tag = tag.lower()
-                if tag.startswith('</'):
-                    # Closing tag - pop from format stack
-                    tag_name = tag[2:-1]  # Remove </ and >
-                    if format_stack and format_stack[-1] == tag_name:
-                        format_stack.pop()
+                # Normalise tag string for easier processing
+                tag_lower = tag.lower()
+                # Determine if this is a closing tag and extract the tag name without attributes
+                if tag_lower.startswith('</'):
+                    close_match = re.match(r'</\s*([a-z0-9]+)', tag_lower)
+                    if close_match:
+                        tag_name = close_match.group(1)
+                        if format_stack and format_stack[-1] == tag_name:
+                            format_stack.pop()
                 else:
-                    # Opening tag - push to format stack
-                    tag_name = tag[1:-1]  # Remove < and >
-                    if tag_name in ['strong', 'b', 'em', 'i', 'code', 'mark', 'u']:
-                        format_stack.append(tag_name)
+                    open_match = re.match(r'<\s*([a-z0-9]+)', tag_lower)
+                    if open_match:
+                        tag_name = open_match.group(1)
+                        if tag_name in ['strong', 'b', 'em', 'i', 'code', 'mark', 'u']:
+                            format_stack.append(tag_name)
             elif text:
                 # Handle text content - preserve spaces but unescape HTML entities
                 text = unescape(text)
@@ -506,13 +532,24 @@ class PPTXRenderer:
                         elif fmt == 'mark':
                             # Highlight formatting - use bright background color simulation
                             # Since we can't set background, we'll use bright text color
-                            run.font.color.rgb = RGBColor(255, 140, 0)  # Orange highlight color
+                            highlight_hex = self.theme_config['colors'].get('highlight')
+                            if not highlight_hex:
+                                raise ValueError("❌ CSS theme missing highlight color (mark rule). Please define in CSS.")
+                            run.font.color.rgb = RGBColor(*self._hex_to_rgb(highlight_hex))
                             run.font.bold = True  # Make highlighted text bold too
     
                     # Always set font family to match CSS exactly (unless it's code)
                     if not is_code:
                         run.font.name = self.theme_config['font_family']
     
+                    # Ensure minimum font size of 8pt for visibility
+                    if run.font.size and run.font.size.pt < 8:
+                        run.font.size = Pt(8)
+    
+                    # Do not silently apply default size; leave as-is so missing size surfaces
+        
+        return  # Parsing complete – no additional defaults applied
+        
     def _add_element_to_slide(self, slide, block: Block, adjusted_top_px: Optional[int] = None, extra_padding_px: int = 0):
         """Add a Block element to a slide."""
         # Convert browser coordinates to slide coordinates using CSS-defined dimensions
@@ -534,8 +571,16 @@ class PPTXRenderer:
         effective_height_px = block.height + extra_padding_px
         height = Inches(effective_height_px * y_scale)
         
-        # For text-based blocks, use the remaining slide width instead of tight content width
-        is_text_block = block.tag in ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'] or block.is_list_item() or block.tag in ['ul', 'ol', 'pre']
+        # For text-based blocks we sometimes widen the text frame to the remaining
+        # slide width (to minimise unwanted additional wrapping).  When we do so
+        # we must shrink the height proportionally, otherwise the shape appears
+        # far taller than its rendered content.
+
+        is_text_block = (
+            block.tag in ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']
+            or block.is_list_item()
+            or block.tag in ['ul', 'ol', 'pre']
+        )
 
         if is_text_block:
             # Calculate width as slide width minus left margin so line wrapping matches HTML measurement
@@ -600,6 +645,12 @@ class PPTXRenderer:
         text_frame.margin_bottom = 0
         text_frame.word_wrap = True
         
+        # Let PowerPoint shrink the shape to fit its text once content is added
+        try:
+            text_frame.auto_size = MSO_AUTO_SIZE.SHAPE_TO_FIT_TEXT
+        except Exception:
+            pass  # older python-pptx versions may not support auto_size
+        
         # Remove default paragraph spacing for all new paragraphs created later
         for para in text_frame.paragraphs:
             para.space_before = Pt(0)
@@ -634,25 +685,19 @@ class PPTXRenderer:
             if self.debug:
                 print(f"⚠️ Processing unconverted {block.tag} block - converting to nested list format")
             
-            # Extract list items from raw HTML
-            items = re.findall(r'<li[^>]*>(.*?)</li>', content, re.DOTALL | re.IGNORECASE)
-            if items:
-                # Clean each item and create level data (all level 0 for simple lists)
-                cleaned_items = []
-                for item in items:
-                    # Clean HTML tags but preserve inline formatting
-                    clean_item = re.sub(r'<[^>]*>', '', item).strip()
-                    cleaned_items.append(clean_item)
-                
-                # Create the format expected by _add_nested_list_paragraphs
-                list_content = '<br>'.join(cleaned_items)
-                level_data = ','.join('0' for _ in items)  # All items at level 0
-                list_type = block.tag
-                
-                self._add_nested_list_paragraphs(p, list_content, level_data, list_type)
-            else:
-                # Fallback to regular text processing if no items found
-                self._add_formatted_text(p, block)
+            # Extract list items from raw HTML, keep inline formatting tags
+            raw_items = re.findall(r'<li[^>]*>(.*?)</li>', content, re.DOTALL | re.IGNORECASE)
+            # Remove empty strings produced by trailing <br> or whitespace
+            items = [itm.strip() for itm in raw_items if itm.strip()]
+            
+            cleaned_items = [ re.sub(r'^<p[^>]*>|</p>$', '', itm, flags=re.IGNORECASE).strip() for itm in items ]
+            
+            # Create the format expected by _add_nested_list_paragraphs
+            list_content = '<br>'.join(cleaned_items)
+            level_data = ','.join('0' for _ in items)  # All items at level 0
+            list_type = block.tag
+            
+            self._add_nested_list_paragraphs(p, list_content, level_data, list_type)
         else:
             # Regular content - use single paragraph approach
             self._add_formatted_text(p, block)
@@ -726,6 +771,21 @@ class PPTXRenderer:
                 if para.font.size:
                     para.font.size = Pt(max(10, int(para.font.size.pt * 0.8))) 
 
+        # Apply default theme text color where none is set yet
+        default_text_hex = self.theme_config['colors'].get('text')
+        if default_text_hex and default_text_hex.startswith('#'):
+            default_rgb = RGBColor(*self._hex_to_rgb(default_text_hex))
+            for para in paragraphs_to_format:
+                for run in para.runs:
+                    try:
+                        already = (run.font.color is not None and
+                                   hasattr(run.font.color, 'rgb') and
+                                   run.font.color.rgb is not None)
+                    except AttributeError:
+                        already = False
+                    if not already:
+                        run.font.color.rgb = default_rgb
+
     def _add_table_to_slide(self, slide, block: Block, left, top, width, height):
         """Add a PowerPoint table to the slide from HTML table content."""
         from html import unescape
@@ -759,7 +819,7 @@ class PPTXRenderer:
         estimated_table_height = estimated_row_height * rows
         table_shape = slide.shapes.add_table(rows, cols, left, top, table_width, estimated_table_height)
         table = table_shape.table
-        
+
         # Get theme colors for table styling
         border_color = self.theme_config['colors']['table_border']
         text_color = self.theme_config['colors']['table_text']
@@ -830,12 +890,14 @@ class PPTXRenderer:
         if self.debug:
             print("🎨 Skipped built-in PowerPoint table styles – using raw XML borders only")
         
+        # Safety-pad each column width by 10 % to compensate for borders & margins
+        SAFETY_PCT = 1.10 # universal pad; tweakable per theme
         # Use HTML-calculated column widths if available
         if hasattr(block, 'table_column_widths') and block.table_column_widths:
             for col_idx, col in enumerate(table.columns):
                 if col_idx < len(block.table_column_widths):
                     # Use the HTML-calculated column width directly
-                    html_col_width = block.table_column_widths[col_idx]
+                    html_col_width = block.table_column_widths[col_idx] * SAFETY_PCT
                     col.width = px(html_col_width)
         # Otherwise let PowerPoint auto-size columns
         
@@ -974,16 +1036,19 @@ class PPTXRenderer:
         
         body_rows = re.findall(r'<tr[^>]*>(.*?)</tr>', tbody_content, re.DOTALL | re.IGNORECASE)
         for row_html in body_rows:
-            cells = re.findall(r'<td[^>]*>(.*?)</td>', row_html, re.DOTALL | re.IGNORECASE)
-            if cells:  # Only add rows that have td cells (not th cells)
-                row_data = []
-                for cell_html in cells:
-                    row_data.append({
-                        'content': cell_html.strip(),
-                        'is_header': False
-                    })
-                if row_data:
-                    table_data['rows'].append(row_data)
+            td_cells = re.findall(r'<td[^>]*>(.*?)</td>', row_html, re.DOTALL | re.IGNORECASE)
+            th_cells = re.findall(r'<th[^>]*>(.*?)</th>', row_html, re.DOTALL | re.IGNORECASE)
+
+            if th_cells and not table_data['has_header']:
+                # Treat this as an implicit header row when no <thead> present
+                table_data['has_header'] = True
+                row_data = [{'content': c.strip(), 'is_header': True} for c in th_cells]
+                table_data['rows'].append(row_data)
+                continue
+
+            if td_cells:
+                row_data = [{'content': c.strip(), 'is_header': False} for c in td_cells]
+                table_data['rows'].append(row_data)
         
         return table_data
 

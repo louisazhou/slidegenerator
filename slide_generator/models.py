@@ -27,6 +27,8 @@ class Block:
     inColumn: Optional[str] = None  # Whether image is in a column layout
     parentColumnWidth: Optional[float] = None  # Width of parent column in px
     columnMode: Optional[str] = None  # 'auto', 'default', or percentage token
+    parentClassName: Optional[str] = None  # class of the direct parent element
+    bid: Optional[str] = None  # unique block id for WYSIWYG slicing
     
     @property
     def width(self):
@@ -102,5 +104,7 @@ class Block:
             scaleType=element.get('scaleType'),
             inColumn=element.get('inColumn'),
             parentColumnWidth=element.get('parentColumnWidth'),
-            columnMode=element.get('columnMode')
+            columnMode=element.get('columnMode'),
+            parentClassName=element.get('parentClassName'),
+            bid=element.get('bid')
         ) 

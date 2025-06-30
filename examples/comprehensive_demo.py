@@ -420,7 +420,7 @@ All core features are either complete or in progress. Remaining items are perfor
 
 :::column
 
-![Bar Chart|0.8x]({bar_fig})
+![Bar Chart]({bar_fig})
 
 :::
 
@@ -440,7 +440,7 @@ The bar chart shows relative task completion percentages. Authentication and API
 
 :::column
 
-![Pie Chart|0.6y]({pie_fig})
+![Pie Chart]({pie_fig})
 
 :::
 
