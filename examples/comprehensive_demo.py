@@ -83,6 +83,14 @@ This presentation showcases ==all implemented features== including `inline styli
 
 ++Underlined text++ using double plus signs for ++emphasis or citations++.
 
+~~strikethrough text~~ using double tilde for ~~deleted text~~.
+
+^^wavy underlined text^^ using double caret for ^^emphasized information^^.
+
+A sentence with a [Google](https://google.com) hyperlink embedded.
+
+[Colorful text]{.red} demonstrates inline color customization.
+
 ## Advanced Combinations
 
 - **Bold with *italic inside* for emphasis**

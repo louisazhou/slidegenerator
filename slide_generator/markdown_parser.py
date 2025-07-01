@@ -29,6 +29,14 @@ class MarkdownParser:
         
         # Enable additional features
         self.markdown_processor.enable(['table', 'strikethrough'])
+        
+        # Try to enable the attrs plugin for class-based attributes like {.red}
+        try:
+            from mdit_py_plugins.attrs import attrs_plugin
+            self.markdown_processor.use(attrs_plugin)
+        except ImportError:
+            # Fallback: custom preprocessing will convert {...} syntax instead
+            pass
     
     def parse(self, markdown_text: str) -> str:
         """
@@ -48,6 +56,60 @@ class MarkdownParser:
         
         return html
     
+    def _validate_fenced_blocks(self, markdown_text: str) -> None:
+        """Ensure triple-colon fenced blocks are properly opened / closed.
+
+        The rules enforced are minimal but catch the most common authoring
+        mistakes so that the rest of the pipeline can rely on valid HTML:
+
+        1. Every opening ":::xyz" has a matching closing ":::".
+        2. ":::column" must be nested directly inside a ":::columns" block.
+        3. A ":::fit-slide" block may *contain* columns but cannot itself be
+           placed *inside* any column.*
+
+        A ``ValueError`` with a line number is raised on violation so that the
+        caller (tests or CLI) can surface a helpful error message to the user.
+        """
+        from typing import List
+
+        stack: List[str] = []  # keeps the sequence of open blocks
+
+        for lineno, raw_line in enumerate(markdown_text.splitlines(), 1):
+            line = raw_line.strip()
+
+            if not line.startswith(":::"):
+                continue
+
+            # -------------------------
+            # Closing fence
+            # -------------------------
+            if line == ":::":
+                if not stack:
+                    raise ValueError(f"Unmatched closing ':::' at line {lineno}")
+                stack.pop()
+                continue
+
+            # -------------------------
+            # Opening fences
+            # -------------------------
+            if line.startswith(":::columns"):
+                stack.append("columns")
+            elif line.startswith(":::column"):
+                if not stack or stack[-1] != "columns":
+                    raise ValueError(f"':::column' outside ':::columns' (line {lineno})")
+                stack.append("column")
+            elif line.startswith(":::fit-slide"):
+                if any(b in ("columns", "column") for b in stack):
+                    raise ValueError(f"':::fit-slide' nested inside column block (line {lineno})")
+                stack.append("fit-slide")
+            else:
+                # Generic custom fenced block – treat like other for balance check
+                stack.append("other")
+
+        # If we exit with still-open blocks, report the last one for context
+        if stack:
+            raise ValueError("Missing closing ':::' for fenced block opened earlier")
+
     def _preprocess_custom_syntax(self, markdown_text: str) -> str:
         """
         Preprocess custom syntax that isn't supported by markdown-it-py.
@@ -58,16 +120,33 @@ class MarkdownParser:
         Returns:
             Processed markdown with custom syntax converted
         """
+        # Validate fenced-block structure *before* we start mutating the text
+        self._validate_fenced_blocks(markdown_text)
+
         import re
         
         # Convert ==highlight== to HTML <mark> tags
         # This needs to be done before markdown processing to avoid conflicts
         processed = re.sub(r'==(.*?)==', r'<mark>\1</mark>', markdown_text)
         
-        # Convert ++underline++ to HTML <u> tags
-        # Using ++ to avoid conflict with markdown bold (**bold**)
+        # Convert ++underline++ (single) and ^^wavy^^ underline first
         processed = re.sub(r'\+\+(.*?)\+\+', r'<u>\1</u>', processed)
+        processed = re.sub(r'\^\^(.*?)\^\^', r'<u data-wavy="true">\1</u>', processed)
+
+        # Convert ~~strikethrough~~ to <del>
+        processed = re.sub(r'~~(.*?)~~', r'<del>\1</del>', processed)
         
+        # ---------------------------------------------
+        # Inline color classes using markdown-it attrs
+        # e.g. [text]{.red} → <span class="red">text</span>
+        # ---------------------------------------------
+        def replace_color(match):
+            inner_text = match.group(1)
+            class_name = match.group(2)
+            return f'<span class="{class_name}">{inner_text}</span>'
+
+        processed = re.sub(r'\[([^\]]+)\]\{\.([A-Za-z0-9_-]+)\}', replace_color, processed)
+
         # Handle Pandoc-style multi-column blocks
         def convert_columns(text: str) -> str:
             lines = text.split('\n')

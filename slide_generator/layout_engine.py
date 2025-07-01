@@ -164,12 +164,6 @@ class PaginationRule:
         self.action = action  # "break" or "allow"
         self.priority = priority  # Higher priority rules are checked first
 
-
-def _calculate_page_utilization(*_, **__):
-    """(Removed) No longer used – kept as stub for backward compatibility."""
-    pass
-
-
 def _get_page_content_types(current_page: List[Block]) -> set:
     """Get set of content types on current page."""
     types = set()
@@ -368,9 +362,7 @@ def paginate(blocks: List[Block], max_height_px: int = 540, padding_px: int = 19
             # Calculate where this block would end relative to the page start
             if page_start_y is None:
                 page_start_y = current_page[0].y
-            
-
-            
+                  
             # Apply content-aware pagination rules first
             rule_decision = _should_break_page(current_page, block, max_height_px)
             
@@ -383,8 +375,6 @@ def paginate(blocks: List[Block], max_height_px: int = 540, padding_px: int = 19
                 # Simple height check - no spatial analysis needed
                 relative_y = block.y - page_start_y
                 relative_bottom = relative_y + block_height
-                
-                # Debug code removed - pagination working correctly
                 
                 # If this block would extend beyond the page boundary, start new page
                 if relative_bottom > max_height_px:
@@ -442,12 +432,7 @@ class LayoutEngine:
     async def measure_layout(self, html_content, temp_dir=None):
         """Use Puppeteer to measure HTML element layout."""
         from pyppeteer import launch
-        import tempfile
         import os
-        import shutil
-        import re
-        from pathlib import Path
-        from .theme_loader import get_css
         
         # Get slide dimensions from CSS theme
         viewport_width = self.css_reader.get_px_value('slide-width')
@@ -825,7 +810,6 @@ class LayoutEngine:
             
             # Format list items for PowerPoint (flat text with level metadata)
             formatted_items = []
-            is_ordered = list_tag == 'ol'
             
             for i, (item_text, level) in enumerate(items_with_levels):
                 # Preserve inline formatting tags (strong, em, code, mark, u)
@@ -957,7 +941,6 @@ class LayoutEngine:
         
         # Use a more robust approach: find top-level <li> tags only
         current_pos = 0
-        depth = 0
         
         while current_pos < len(list_content):
             # Find next <li> or </li> tag
@@ -1298,6 +1281,7 @@ class LayoutEngine:
             "<title>Paginated Slide Content</title>",
             "<style>",
             css_content,
+            "/* list bullet helper for debug view will be injected later */",
             ".slide{margin-bottom:40px;border:3px solid red;position:relative;}",
             ".slide:before{position:absolute;top:-26px;left:0;background:red;color:#fff;padding:4px 8px;font-weight:bold;content:attr(data-idx);}",
             "</style>",
@@ -1306,22 +1290,59 @@ class LayoutEngine:
         ]
 
         # Build HTML based on the actual paginated blocks structure
-        for page_idx, page_blocks in enumerate(pages):
+        for page_idx, page_blocks in enumerate(pages, start=1):
             if not page_blocks:
                 continue
                 
             html_parts.append('<hr style="border:2px dashed #999;margin:40px 0;">')
-            html_parts.append(f'<div class="slide" data-idx="{page_idx}">')
-            html_parts.append('<div class="slide" id="slide-' + str(page_idx-1) + '">')
+            html_parts.append(f'<div class="slide" id="slide-{page_idx}" data-idx="{page_idx}">')
             
             # Use WYSIWYG slice – copy original DOM nodes for this page
             bids_this_page = [blk.bid for blk in page_blocks if hasattr(blk, 'bid')]
-            html_parts.append(self._slice_dom_for_page(bids_this_page))
-            
-            html_parts.append('</div>')
-            html_parts.append('</div>')
+            page_html = self._slice_dom_for_page(bids_this_page)
 
-        html_parts.extend(["</body>", "</html>"])
+            # ---- Beautify lists for debug view ----
+            try:
+                from bs4 import BeautifulSoup as _BS
+                soup_page = _BS(page_html, 'html.parser')
+                for p in soup_page.select('p[data-list-levels]'):
+                    levels = [int(x) for x in p['data-list-levels'].split(',')]
+                    list_type = p.get('data-list-type', 'ul')
+                    # counters per nesting level for ordered lists
+                    counters = {}
+                    import re as _re
+                    raw_html = p.decode_contents()
+                    # split on any <br>, <br/>, or <br /> (case-insensitive)
+                    segments = [seg for seg in _re.split(r'<br[^>]*>', raw_html, flags=_re.IGNORECASE) if seg.strip()]
+                    new_html_parts = []
+                    for seg_idx, seg in enumerate(segments):
+                        level = levels[seg_idx] if seg_idx < len(levels) else 0
+                        if list_type == 'ol':
+                            # update counter for this level
+                            counters[level] = counters.get(level, 0) + 1
+                            # reset deeper level counters
+                            deeper = [k for k in counters.keys() if k > level]
+                            for k in deeper:
+                                del counters[k]
+                            bullet = f"{counters[level]}."
+                        else:
+                            bullet = '•'
+                        indent = 20 * level
+                        new_html_parts.append(f'<span class="dbg-list" style="margin-left:{indent}px">{bullet}&nbsp;{seg.strip()}</span>')
+                    p.clear()
+                    p.append(_BS(''.join(new_html_parts), 'html.parser'))
+                page_html = str(soup_page)
+            except Exception:
+                pass
+
+            html_parts.append(page_html)
+            html_parts.append('</div>')  # close .slide
+
+        # Small CSS for debug bullets
+        html_parts.extend([
+            "<style>.dbg-list{display:block;text-indent:-1em;padding-left:1em;margin-left:20px;margin-top:0;margin-bottom:0;line-height:inherit;}</style>",
+            "</body>", "</html>"])
+
         paginated_html = "\n".join(html_parts)
 
         # Copy images used in this HTML from temp_dir to output/debug_assets

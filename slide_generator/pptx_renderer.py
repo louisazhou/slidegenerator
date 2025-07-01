@@ -15,6 +15,21 @@ from pptx.oxml import parse_xml
 from pptx.oxml.ns import nsdecls, qn
 import math
 
+# Supported named colors for inline coloring via markdown-it attrs
+COLOR_MAP = {
+    "red": (255, 0, 0),
+    "blue": (0, 102, 204),
+    "green": (0, 153, 0),
+    "orange": (255, 128, 0),
+    "purple": (153, 0, 153),
+    "gray": (128, 128, 128),
+    "black": (0, 0, 0),
+    "white": (255, 255, 255),
+    "yellow": (255, 255, 0),
+    # custom shades
+    "dodgerblue": (30, 144, 255),
+}
+
 # Helper function to convert pixels to inches
 def px(pixels):
     return Inches(pixels / 96)
@@ -479,7 +494,8 @@ class PPTXRenderer:
         format_stack = []
         
         # Allow attributes inside tags (e.g., <strong data-bid="b12">)
-        html_pattern = r'(</?(?:strong|em|code|mark|b|i|u)(?:\s+[^>]*?)?>)|([^<]+)'
+        # Extended to recognise <a> hyperlinks and <span class="color"> for inline colors
+        html_pattern = r'(</?(?:strong|em|code|mark|b|i|u|del|a|span)(?:\s+[^>]*?)?>)|([^<]+)'
         
         # Split content into tokens (tags and text)
         tokens = re.findall(html_pattern, html_content, re.IGNORECASE)
@@ -493,14 +509,60 @@ class PPTXRenderer:
                     close_match = re.match(r'</\s*([a-z0-9]+)', tag_lower)
                     if close_match:
                         tag_name = close_match.group(1)
-                        if format_stack and format_stack[-1] == tag_name:
+
+                        # Standard formatting tags (including underline variations)
+                        if format_stack and (format_stack[-1] == tag_name or (tag_name == 'u' and format_stack[-1].startswith('u'))):
                             format_stack.pop()
+
+                        # Hyperlink / color closing
+                        elif tag_name == 'a':
+                            for i in range(len(format_stack) - 1, -1, -1):
+                                if format_stack[i].startswith('link:'):
+                                    format_stack.pop(i)
+                                    break
+                        elif tag_name == 'span':
+                            for i in range(len(format_stack) - 1, -1, -1):
+                                if format_stack[i].startswith('color:'):
+                                    format_stack.pop(i)
+                                    break
                 else:
                     open_match = re.match(r'<\s*([a-z0-9]+)', tag_lower)
                     if open_match:
                         tag_name = open_match.group(1)
-                        if tag_name in ['strong', 'b', 'em', 'i', 'code', 'mark', 'u']:
-                            format_stack.append(tag_name)
+
+                        # --------------------------------------
+                        # Inline formatting tags
+                        # --------------------------------------
+                        if tag_name in ['strong', 'b', 'em', 'i', 'code', 'mark', 'u', 'del']:
+                            if tag_name == 'u' and ('data-wavy="true"' in tag_lower or 'wavy' in tag_lower):
+                                format_stack.append('u_wavy')
+                            elif tag_name == 'u':
+                                format_stack.append('u')
+                            else:
+                                # For all other supported tags (strong, em, etc.)
+                                format_stack.append(tag_name)
+
+                        # --------------------------------------
+                        # Hyperlinks (<a href="...">)
+                        # --------------------------------------
+                        elif tag_name == 'a':
+                            href_match = re.search(r'href\s*=\s*"([^"]+)"', tag_lower)
+                            if href_match:
+                                url = href_match.group(1)
+                                format_stack.append(f'link:{url}')
+
+                        # --------------------------------------
+                        # Color spans (<span class="red">)
+                        # --------------------------------------
+                        elif tag_name == 'span':
+                            class_match = re.search(r'class\s*=\s*"([^\"]+)"', tag_lower)
+                            if class_match:
+                                classes = class_match.group(1).split()
+                                for cls in classes:
+                                    if cls in COLOR_MAP:
+                                        format_stack.append(f'color:{cls}')
+                                        break  # use first matching color class
+
             elif text:
                 # Handle text content - preserve spaces but unescape HTML entities
                 text = unescape(text)
@@ -509,7 +571,10 @@ class PPTXRenderer:
                     run.text = text
                     
                     # Apply formatting based on current format stack
+                    color_name = None
+                    hyperlink_url = None
                     is_code = False
+
                     for fmt in format_stack:
                         if fmt in ['strong', 'b']:
                             run.font.bold = True
@@ -517,6 +582,16 @@ class PPTXRenderer:
                             run.font.italic = True
                         elif fmt == 'u':
                             run.font.underline = True
+                        elif fmt == 'u_wavy':
+                            try:
+                                from pptx.enum.text import MSO_UNDERLINE
+                                run.font.underline = MSO_UNDERLINE.WAVY_LINE
+                            except Exception:
+                                run.font.underline = True
+                        elif fmt == 'del':
+                            # run.font.strike = True # This one doesn't work and fails silently
+                            # Fallback for older python-pptx versions (see GH issue #574 https://github.com/scanny/python-pptx/issues/574)
+                            run.font._element.attrib['strike'] = 'sngStrike'
                         elif fmt == 'code':
                             run.font.name = 'Courier New'
                             is_code = True
@@ -537,7 +612,26 @@ class PPTXRenderer:
                                 raise ValueError("❌ CSS theme missing highlight color (mark rule). Please define in CSS.")
                             run.font.color.rgb = RGBColor(*self._hex_to_rgb(highlight_hex))
                             run.font.bold = True  # Make highlighted text bold too
-    
+                        elif isinstance(fmt, str) and fmt.startswith('link:'):
+                            hyperlink_url = fmt.split(':', 1)[1]
+                        elif isinstance(fmt, str) and fmt.startswith('color:'):
+                            color_name = fmt.split(':', 1)[1]
+
+                    # ---------------------------------------------
+                    # Apply color and hyperlink after processing fmt
+                    # ---------------------------------------------
+                    if color_name:
+                        rgb = COLOR_MAP[color_name]
+                        run.font.color.rgb = RGBColor(*rgb)
+
+                    if hyperlink_url:
+                        run.hyperlink.address = hyperlink_url
+                        # Ensure link is visually distinct if no explicit color
+                        if not color_name and not is_code:
+                            run.font.color.rgb = RGBColor(*COLOR_MAP["blue"])
+                        if run.font.underline is None:
+                            run.font.underline = True
+
                     # Always set font family to match CSS exactly (unless it's code)
                     if not is_code:
                         run.font.name = self.theme_config['font_family']

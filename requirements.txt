@@ -11,7 +11,7 @@ websockets>=10.0
 pytest>=6.2.0
 pytest-asyncio>=0.18.0
 
-# Visual Testing Dependencies (for Step 4)
+# Visual Testing Dependencies 
 Pillow>=8.3.0
 numpy>=1.21.0
 
