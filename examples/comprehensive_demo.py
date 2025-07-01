@@ -426,7 +426,7 @@ All core features are either complete or in progress. Remaining items are perfor
 
 :::columns
 
-:::column
+:::column {width=60%}
 
 ![Bar Chart]({bar_fig})
 
@@ -470,7 +470,7 @@ The bar chart shows relative task completion percentages. Authentication and API
 
 :::columns
 
-:::column{60%}
+:::column {width=60%}
 
 ### 📋 Project Status Table
 
@@ -483,7 +483,7 @@ The bar chart shows relative task completion percentages. Authentication and API
 
 :::
 
-:::column{40%}
+:::column {width=40%}
 
 ### ✍️ Notes
 
@@ -499,7 +499,7 @@ All core features are either complete or in progress. Remaining items are perfor
 
 :::columns
 
-:::column{auto}
+:::column {width=auto}
 
 ### 📋 Project Status Table
 

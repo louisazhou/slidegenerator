@@ -30,13 +30,9 @@ class MarkdownParser:
         # Enable additional features
         self.markdown_processor.enable(['table', 'strikethrough'])
         
-        # Try to enable the attrs plugin for class-based attributes like {.red}
-        try:
-            from mdit_py_plugins.attrs import attrs_plugin
-            self.markdown_processor.use(attrs_plugin)
-        except ImportError:
-            # Fallback: custom preprocessing will convert {...} syntax instead
-            pass
+        # Require attrs_plugin – ensures {.class key=val} syntax works; fail fast if missing
+        from mdit_py_plugins.attrs import attrs_plugin  # will raise ImportError if not installed
+        self.markdown_processor.use(attrs_plugin)
     
     def parse(self, markdown_text: str) -> str:
         """
@@ -136,17 +132,14 @@ class MarkdownParser:
         # Convert ~~strikethrough~~ to <del>
         processed = re.sub(r'~~(.*?)~~', r'<del>\1</del>', processed)
         
-        # ---------------------------------------------
-        # Inline color classes using markdown-it attrs
-        # e.g. [text]{.red} → <span class="red">text</span>
-        # ---------------------------------------------
-        def replace_color(match):
-            inner_text = match.group(1)
-            class_name = match.group(2)
-            return f'<span class="{class_name}">{inner_text}</span>'
+        # Explicitly convert inline attribute syntax like [text]{.red}
+        def _convert_inline_attrs(text: str) -> str:
+            import re as _re
+            pattern = r'\[([^\]]+)\]\{\.(\w[\w-]*)\}'
+            return _re.sub(pattern, r'<span class="\2">\1</span>', text)
 
-        processed = re.sub(r'\[([^\]]+)\]\{\.([A-Za-z0-9_-]+)\}', replace_color, processed)
-
+        processed = _convert_inline_attrs(processed)
+        
         # Handle Pandoc-style multi-column blocks
         def convert_columns(text: str) -> str:
             lines = text.split('\n')
@@ -164,9 +157,10 @@ class MarkdownParser:
                         line = lines[i].strip()
                         
                         if line.startswith(':::column'):
-                            # Detect optional width attribute, e.g., :::column{60%} or :::column{auto}
+                            # Detect optional width attribute – supports legacy ":::column{60%}" or
+                            # attrs-style ":::column {width=60%}"
                             import re as _re
-                            width_match = _re.match(r':::column\{([^}]+)\}', line)
+                            width_match = _re.match(r':::column\s+\{([^}]+)\}', line)
                             if width_match:
                                 pending_width = width_match.group(1).strip()
                             else:

@@ -521,10 +521,11 @@ class PPTXRenderer:
                                     format_stack.pop(i)
                                     break
                         elif tag_name == 'span':
-                            for i in range(len(format_stack) - 1, -1, -1):
-                                if format_stack[i].startswith('color:'):
-                                    format_stack.pop(i)
-                                    break
+                            # Pop any attributes added by a span (color, underline, strike, bold/italic)
+                            while format_stack and (
+                                format_stack[-1].startswith('color:') or
+                                format_stack[-1] in ['u', 'u_wavy', 'del', 'strong', 'b', 'em', 'i', 'mark']):
+                                format_stack.pop()
                 else:
                     open_match = re.match(r'<\s*([a-z0-9]+)', tag_lower)
                     if open_match:
@@ -552,16 +553,26 @@ class PPTXRenderer:
                                 format_stack.append(f'link:{url}')
 
                         # --------------------------------------
-                        # Color spans (<span class="red">)
+                        # Tag may carry class attributes (color, styles)
                         # --------------------------------------
-                        elif tag_name == 'span':
-                            class_match = re.search(r'class\s*=\s*"([^\"]+)"', tag_lower)
-                            if class_match:
-                                classes = class_match.group(1).split()
-                                for cls in classes:
-                                    if cls in COLOR_MAP:
-                                        format_stack.append(f'color:{cls}')
-                                        break  # use first matching color class
+                        class_match = re.search(r'class\s*=\s*"([^"]+)"', tag_lower)
+                        if class_match:
+                            classes = class_match.group(1).split()
+                            for cls in classes:
+                                if cls in COLOR_MAP:
+                                    format_stack.append(f'color:{cls}')
+                                elif cls in ['highlight']:
+                                    format_stack.append('mark')
+                                elif cls in ['underline', 'u']:
+                                    format_stack.append('u')
+                                elif cls in ['wavy', 'wavy-underline']:
+                                    format_stack.append('u_wavy')
+                                elif cls in ['strike', 'strikethrough']:
+                                    format_stack.append('del')
+                                elif cls in ['bold', 'strong']:
+                                    format_stack.append('strong')
+                                elif cls in ['italic', 'em']:
+                                    format_stack.append('em')
 
             elif text:
                 # Handle text content - preserve spaces but unescape HTML entities
