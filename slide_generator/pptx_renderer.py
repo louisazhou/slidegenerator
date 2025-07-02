@@ -72,8 +72,9 @@ class PPTXRenderer:
         for element, pattern in font_size_patterns.items():
             match = re.search(pattern, css_content, re.IGNORECASE | re.DOTALL)
             if match:
-                px_size = int(match.group(1))
-                pt_size = int(px_size * 0.75)  # Convert px to pt
+                px_size = int(match.group(1)) # PowerPoint/Microsoft Office's point system is 1 px ≈ 1 pt at standard screen resolution so we don't need to do 1 CSS px = 0.75 CSS pt (at 96 DPI) Web Standards
+                # Use half-point precision for better accuracy (PowerPoint supports 9.5pt, 10.5pt, etc.)
+                pt_size = round(px_size * 2) / 2  # Round to nearest 0.5pt
                 
                 if element == 'ul, ol':
                     config['font_sizes']['li'] = pt_size
@@ -121,15 +122,15 @@ class PPTXRenderer:
         
         # Parse table styling deltas from CSS variables - REQUIRED
         font_delta_match = re.search(r'--table-font-delta:\s*(-?\d+)pt', css_content)
-        border_width_match = re.search(r'--table-border-width:\s*([\d.]+)pt', css_content)
+        width_safety_match = re.search(r'--table-width-safety:\s*([\d.]+)', css_content)
         
-        if not font_delta_match or not border_width_match:
+        if not font_delta_match or not width_safety_match:
             raise ValueError(f"❌ CSS theme '{self.theme}' missing required table styling variables. "
-                           f"Add '--table-font-delta: -Xpt' and '--table-border-width: X.Xpt' to :root in themes/{self.theme}.css")
+                           f"Add '--table-font-delta: -Xpt' and '--table-width-safety: X.XX' to :root in themes/{self.theme}.css")
         
         config['table_deltas'] = {
             'font_delta': int(font_delta_match.group(1)),
-            'border_width_pt': float(border_width_match.group(1))
+            'width_safety': float(width_safety_match.group(1))
         }
             
         # Calculate inches from pixels (96 DPI standard)
@@ -995,14 +996,14 @@ class PPTXRenderer:
         if self.debug:
             print("🎨 Skipped built-in PowerPoint table styles – using raw XML borders only")
         
-        # Safety-pad each column width by 10 % to compensate for borders & margins
-        SAFETY_PCT = 1.10 # universal pad; tweakable per theme
+        # Use configurable safety padding from CSS theme for table width compensation
+        width_safety = self.theme_config['table_deltas']['width_safety']  # from CSS: --table-width-safety
         # Use HTML-calculated column widths if available
         if hasattr(block, 'table_column_widths') and block.table_column_widths:
             for col_idx, col in enumerate(table.columns):
                 if col_idx < len(block.table_column_widths):
-                    # Use the HTML-calculated column width directly
-                    html_col_width = block.table_column_widths[col_idx] * SAFETY_PCT
+                    # Use the HTML-calculated column width with CSS-configurable safety buffer
+                    html_col_width = block.table_column_widths[col_idx] * width_safety
                     col.width = px(html_col_width)
         # Otherwise let PowerPoint auto-size columns
         
@@ -1058,9 +1059,12 @@ class PPTXRenderer:
         # ------------------------------------------------------------------
         try:
             border_hex_final = border_color.lstrip('#') if border_color else '000000'
+            # NOTE: Border thickness cannot be controlled via python-pptx
+            # PowerPoint ignores XML border width even when valid
+            # Using standard border application (color only)
             self._apply_table_borders(table, border_hex_final)
             if self.debug:
-                print(f"🔒 Applied raw XML borders with color #{border_hex_final} and width 12700 EMU")
+                print(f"🔒 Applied raw XML borders with color #{border_hex_final} (thickness: PowerPoint default)")
         except Exception as e:
             if self.debug:
                 print(f"⚠️  Raw XML border application failed: {e}")
@@ -1073,8 +1077,8 @@ class PPTXRenderer:
         # ------------------------------------------------------------------
         if self.theme == "default":
             try:
-                border_pt = self.theme_config['table_deltas']['border_width_pt']  # e.g. 0.25
-                border_emu = int(max(0.1, border_pt) * 12700)  # convert pt → EMU; enforce min width
+                # NOTE: Using hardcoded border thickness since python-pptx cannot control it
+                border_emu = 12700  # Standard 1pt thickness in EMU
                 hex_col = self.theme_config['colors']['table_border'].lstrip('#') or '000000'
 
                 tblPr = table._tbl.tblPr
@@ -1096,7 +1100,7 @@ class PPTXRenderer:
                 tblPr.append(parse_xml(grid_xml))
 
                 if self.debug:
-                    print(f"🔲 Injected tblBorders grid: {border_pt}pt #{hex_col}")
+                    print(f"🔲 Injected tblBorders grid: 1pt #{hex_col} (thickness: PowerPoint default)")
             except Exception as e:
                 if self.debug:
                     print(f"⚠️  tblBorders injection failed: {e}")
@@ -1161,22 +1165,23 @@ class PPTXRenderer:
     # Table border helpers
     # ------------------------------------------------------------------
 
-    def _apply_table_borders(self, table, color_hex: str = "000000", width: str = "12700"):
+    def _apply_table_borders(self, table, color_hex: str = "000000"):
         """Apply solid borders to every cell in the table using raw XML.
-
+        
         Args:
             table: python-pptx table object
             color_hex: Hex string without '#', e.g. '000000'
-            width: Line width in EMUs as string. 12700 ≈ 0.5pt, 25400 ≈ 1pt.
         """
         color_hex = color_hex.lstrip('#').lower()
 
-        # XML snippet for a solid line
         def _solid_line_xml(side):
             return (
-                f'<a:{side} w="{width}" {nsdecls("a")}>'
+                f'<a:{side} w="12700" {nsdecls("a")}>'
                 f'<a:solidFill><a:srgbClr val="{color_hex}"/></a:solidFill>'
                 f'<a:prstDash val="solid"/>'
+                f'<a:round/>'
+                f'<a:headEnd type="none" w="med" len="med"/>'
+                f'<a:tailEnd type="none" w="med" len="med"/>'
                 f'</a:{side}>'
             )
 
@@ -1189,11 +1194,14 @@ class PPTXRenderer:
                         ln = parse_xml(_solid_line_xml(border_side))
                         tcPr.append(ln)
                     else:
-                        # Update existing line
-                        ln.set('w', width)
-                        # Clear children then add new solidFill
+                        ln.set('w', "12700")
                         ln.clear()
                         ln.append(parse_xml(f'<a:solidFill><a:srgbClr val="{color_hex}"/></a:solidFill>'))
                         ln.append(parse_xml('<a:prstDash val="solid"/>'))
+                        ln.append(parse_xml('<a:round/>'))
+                        ln.append(parse_xml('<a:headEnd type="none" w="med" len="med"/>'))
+                        ln.append(parse_xml('<a:tailEnd type="none" w="med" len="med"/>'))
         
-        # Helper ends here (no recursive calls) 
+        if self.debug:
+            print(f"🔲 Applied enhanced table borders: w=12700 EMUs, color=#{color_hex}")
+            print(f"   Added headEnd/tailEnd for reliable line width application") 

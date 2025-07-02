@@ -13,7 +13,11 @@
     
     /* Table styling deltas */
     --table-font-delta: -2pt;    /* Table font size = body - 2pt */
-    --table-border-width: 0.25pt; /* Much thinner table borders */
+    --table-width-safety: 1.10;  /* 10% safety buffer for table width (1.10 = 110%) */
+    /* NOTE: --table-border-width removed - python-pptx limitation
+     * PowerPoint ignores border thickness in XML even when valid
+     * Only border COLOR can be controlled via python-pptx
+     * For custom thickness: use PPTX templates or VBA/Aspose.Slides */
 }
 
 body {
@@ -125,7 +129,7 @@ pre code {
 
 code {
     font-family: 'Courier New', monospace;
-    font-size: 14px;
+    font-size: 10px;
     background-color: #2d2d2d;
     color: #ffffff;
     padding: 2px 4px;

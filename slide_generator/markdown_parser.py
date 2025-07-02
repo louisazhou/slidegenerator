@@ -30,7 +30,7 @@ class MarkdownParser:
         # Enable additional features
         self.markdown_processor.enable(['table', 'strikethrough'])
         
-        # Require attrs_plugin – ensures {.class key=val} syntax works; fail fast if missing
+        # Require attrs_plugin – ensures {.class key=val} syntax works
         from mdit_py_plugins.attrs import attrs_plugin  # will raise ImportError if not installed
         self.markdown_processor.use(attrs_plugin)
     
@@ -105,7 +105,7 @@ class MarkdownParser:
         # If we exit with still-open blocks, report the last one for context
         if stack:
             raise ValueError("Missing closing ':::' for fenced block opened earlier")
-
+    
     def _preprocess_custom_syntax(self, markdown_text: str) -> str:
         """
         Preprocess custom syntax that isn't supported by markdown-it-py.
@@ -209,15 +209,22 @@ class MarkdownParser:
                             # Apply image preprocessing to column content first
                             processed_column = self._preprocess_custom_syntax(c.strip())
                             column_html = md.render(processed_column)
-                            width_attr = f'data-column-width="{width_token}"'
+                            
+                            # Extract just the value part for CSS matching
+                            if '=' in width_token:
+                                css_value = width_token.split('=')[1]  # "width=auto" -> "auto"
+                            else:
+                                css_value = width_token
+                                
+                            width_attr = f'data-column-width="{css_value}"'  # Use clean value
                             style_attr = ''
-                            if width_token.endswith('%') or width_token == 'auto' or width_token == 'default':
-                                if width_token == 'auto':
+                            if css_value.endswith('%') or css_value == 'auto' or css_value == 'default':
+                                if css_value == 'auto':
                                     style_attr = 'style="flex:0 0 auto;"'
-                                elif width_token == 'default':
+                                elif css_value == 'default':
                                     style_attr = 'style="flex:1 1 0;"'
                                 else:  # percentage
-                                    style_attr = f'style="flex:0 0 {width_token};"'
+                                    style_attr = f'style="flex:0 0 {css_value};"'
                             col_html.append(f'<div class="column" {width_attr} {style_attr}>\n{column_html}</div>')
                     out_lines.append('<div class="columns">')
                     out_lines.extend(col_html)
@@ -251,9 +258,6 @@ class MarkdownParser:
                 # The layout engine will calculate exact dimensions using theme CSS values
                 attrs.append(f'data-scale-{axis.lower()}="{scale}"')
                 attrs.append(f'data-scale-type="{axis.lower()}"')
-                
-                # Note: No pre-calculation of dimensions here
-                # The layout engine will handle this with proper theme dimensions
 
             attr_str = ' '.join(attrs)
             return f'<img src="{browser_src}" alt="{alt}" {attr_str} />'

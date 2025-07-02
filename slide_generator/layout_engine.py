@@ -87,7 +87,9 @@ class ImageScaler:
         self.column_width = (self.content_width - css_reader.get_column_gap()) / 2
     
     def calculate_image_dimensions(self, image_path: str, scale_x: Optional[str] = None, 
-                                 scale_y: Optional[str] = None, in_column: bool = False, parent_column_width: Optional[float] = None) -> tuple:
+                                 scale_y: Optional[str] = None, in_column: bool = False, 
+                                 parent_column_width: Optional[float] = None,
+                                 apply_constraints: bool = False) -> tuple:
         """
         Calculate target image dimensions based on scaling parameters.
         
@@ -96,6 +98,8 @@ class ImageScaler:
             scale_x: X-axis scale factor (as string)
             scale_y: Y-axis scale factor (as string)  
             in_column: Whether the image is in a column layout
+            parent_column_width: Width of parent column in px
+            apply_constraints: Whether to apply automatic size constraints (default: False for old logic compatibility)
             
         Returns:
             Tuple of (target_width, target_height)
@@ -123,14 +127,14 @@ class ImageScaler:
             base_width = self.content_width
         base_height = self.content_height
         
-        # Calculate target dimensions based on scaling
+        # Calculate target dimensions based on scaling - USE PURE PERCENTAGE SCALING (OLD LOGIC)
         if scale_x:
             scale_factor = float(scale_x)
             target_width = base_width * scale_factor
             target_height = target_width / aspect_ratio
             
-            # Check if height exceeds boundaries
-            if target_height > base_height:
+            # Only apply constraints if explicitly requested (not default behavior)
+            if apply_constraints and target_height > base_height:
                 target_height = base_height * 0.95  # Leave margin
                 target_width = target_height * aspect_ratio
                 if self.debug:
@@ -142,8 +146,8 @@ class ImageScaler:
             target_height = base_height * scale_factor
             target_width = target_height * aspect_ratio
             
-            # Check if width exceeds boundaries
-            if target_width > base_width:
+            # Only apply constraints if explicitly requested (not default behavior)
+            if apply_constraints and target_width > base_width:
                 target_width = base_width * 0.95  # Leave margin
                 target_height = target_width / aspect_ratio
                 if self.debug:
@@ -243,11 +247,14 @@ def _should_keep_content_group_together(current_page: List[Block], new_block: Bl
                 return True
 
     # Allow slight overflow (≤ 10 %) so that a compact heading+paragraph+image
-    # group isn't split across slides. This specifically fixes the "Figures
-    # Demo / Bar chart" slide where the combined height exceeded the limit by
-    # just a few pixels.
-    allowable = available_space * 1.10  # 10 % tolerance
-    return group_height <= allowable
+    # group isn't split across slides. This specifically fixes issues where the combined height exceeded the limit by just a few pixels.
+    allowable = available_space * 1.10
+    
+    # Only allow grouping if the group fits within allowable space
+    if group_height <= allowable:
+        return True
+    
+    return False
 
 # Define pagination rules in order of priority
 PAGINATION_RULES = [
@@ -429,215 +436,6 @@ class LayoutEngine:
         self.css_reader = CSSVariableReader(theme)
         self.image_scaler = ImageScaler(self.css_reader, debug)
     
-    async def measure_layout(self, html_content, temp_dir=None):
-        """Use Puppeteer to measure HTML element layout."""
-        from pyppeteer import launch
-        import os
-        
-        # Get slide dimensions from CSS theme
-        viewport_width = self.css_reader.get_px_value('slide-width')
-        viewport_height = self.css_reader.get_px_value('slide-height')
-        
-        # Copy images to temp directory (without scaling yet)
-        if temp_dir:
-            html_content = self._copy_images_for_measurement(html_content, temp_dir)
-        
-        browser = await launch()
-        page = await browser.newPage()
-        
-        # Set viewport size to match CSS theme dimensions
-        await page.setViewport({'width': viewport_width, 'height': viewport_height})
-        
-        # Write HTML to temp file and load it so images can be accessed
-        if temp_dir:
-            html_file_path = os.path.join(temp_dir, "measurement.html")
-            with open(html_file_path, 'w', encoding='utf-8') as f:
-                f.write(html_content)
-            
-            # Load from file so relative image URLs work
-            await page.goto(f'file://{html_file_path}')
-        else:
-            # Fallback to setContent if no temp_dir (images may not work)
-            await page.setContent(html_content)
-        
-        # Extract layout information for all elements
-        layout_info = await page.evaluate('''() => {
-            const elements = document.querySelectorAll('.slide *, .page-break');
-            const result = [];
-            
-            Array.from(elements).forEach(el => {
-                // Handle page breaks
-                if (el.classList && el.classList.contains('page-break')) {
-                    result.push({
-                        tagName: 'div',
-                        className: 'page-break',
-                        textContent: '<!-- slide -->',
-                        x: 0,
-                        y: 0,
-                        width: 0,
-                        height: 0,
-                        role: 'page_break'
-                    });
-                    return;
-                }
-                
-                // Skip script/style elements entirely
-                if (el.tagName.toLowerCase() === 'script' || el.tagName.toLowerCase() === 'style') {
-                    return;
-                }
-
-                // Skip non-img elements that are empty
-                if (el.tagName.toLowerCase() !== 'img' && !el.textContent.trim()) {
-                    return;
-                }
-                
-                // Skip li elements - we'll process their parent ul/ol instead
-                if (el.tagName.toLowerCase() === 'li') {
-                    return;
-                }
-                
-                // Skip column container divs entirely - we only want their children
-                if (el.className && (el.className.includes('columns') || el.className.includes('column'))) {
-                    return;
-                }
-                
-                // Skip elements that are children of elements we've already processed
-                for (const parent of result) {
-                    if (parent.element && parent.element.contains(el)) {
-                        return; // skip - this element is a child of an already processed element
-                    }
-                }
-                
-                const rect = el.getBoundingClientRect();
-                const computedStyle = window.getComputedStyle(el);
-                
-                // Include vertical margins for better pagination accuracy
-                const marginTop = parseFloat(computedStyle.marginTop) || 0;
-                const marginBottom = parseFloat(computedStyle.marginBottom) || 0;
-                const adjustedHeight = rect.height + marginTop + marginBottom;
-                
-                // Get content, preserving HTML for inline formatting and data attributes
-                let textContent;
-                
-                // For paragraph elements with data attributes, preserve the outer HTML
-                if (el.tagName.toLowerCase() === 'p' && (el.hasAttribute('data-list-levels') || el.hasAttribute('data-list-type'))) {
-                    textContent = el.outerHTML.trim();
-                } else {
-                    // For other elements, preserve innerHTML to keep formatting tags
-                    textContent = el.innerHTML.trim();
-                    
-                    // If innerHTML is the same as textContent, use textContent to avoid unnecessary HTML
-                    if (textContent === el.textContent.trim()) {
-                        textContent = el.textContent.trim();
-                    }
-                }
-                
-                // Extract table column widths if this is a table
-                let tableColumnWidths = null;
-                if (el.tagName.toLowerCase() === 'table') {
-                    const firstRow = el.querySelector('tr');
-                    if (firstRow) {
-                        const cells = firstRow.querySelectorAll('th, td');
-                        tableColumnWidths = Array.from(cells).map(cell => {
-                            const cellRect = cell.getBoundingClientRect();
-                            return cellRect.width;
-                        });
-                    }
-                }
-
-                const item = {
-                    tagName: el.tagName.toLowerCase(),
-                    className: el.className,
-                    textContent: textContent,
-                    x: rect.left,
-                    y: rect.top,
-                    width: rect.width,
-                    height: adjustedHeight,
-                    element: el,  // Store reference to the element for parent checking
-                    parentTagName: el.parentElement ? el.parentElement.tagName.toLowerCase() : null,
-                    parentClassName: el.parentElement ? el.parentElement.className : null,
-                    tableColumnWidths: tableColumnWidths,  // Add column width information
-                    style: {
-                        fontSize: computedStyle.fontSize,
-                        fontWeight: computedStyle.fontWeight,
-                        fontStyle: computedStyle.fontStyle,
-                        lineHeight: computedStyle.lineHeight,
-                        color: (() => {
-                            const color = computedStyle.color;
-                            const match = color.match(/rgb\\((\\d+), (\\d+), (\\d+)\\)/);
-                            if (match) {
-                                return {
-                                    r: parseInt(match[1]),
-                                    g: parseInt(match[2]),
-                                    b: parseInt(match[3])
-                                };
-                            }
-                            return null;
-                        })(),
-                        backgroundColor: (() => {
-                            const bgColor = computedStyle.backgroundColor;
-                            if (bgColor === 'rgba(0, 0, 0, 0)' || bgColor === 'transparent') {
-                                return null;
-                            }
-                            const match = bgColor.match(/rgb\\((\\d+), (\\d+), (\\d+)\\)/);
-                            if (match) {
-                                return {
-                                    r: parseInt(match[1]),
-                                    g: parseInt(match[2]),
-                                    b: parseInt(match[3])
-                                };
-                            }
-                            return null;
-                        })(),
-                        textAlign: computedStyle.textAlign
-                    }
-                };
-
-                // If this is an image, capture src attribute and scaling data
-                if (el.tagName.toLowerCase() === 'img') {
-                    const filepath = el.getAttribute('data-filepath');
-                    item['src'] = filepath ? filepath : el.getAttribute('src');
-                    
-                    // Capture scaling data attributes for column-aware adjustments
-                    const scaleX = el.getAttribute('data-scale-x');
-                    const scaleY = el.getAttribute('data-scale-y');
-                    const scaleType = el.getAttribute('data-scale-type');
-                    const inColumn = el.getAttribute('data-in-column');
-                    
-                    if (scaleX) item['scaleX'] = scaleX;
-                    if (scaleY) item['scaleY'] = scaleY;
-                    if (scaleType) item['scaleType'] = scaleType;
-                    if (inColumn) item['inColumn'] = inColumn;
-                }
-
-                // Capture parent column information (width + mode)
-                const parentColumn = el.closest('.column');
-                if (parentColumn) {
-                    const colRect = parentColumn.getBoundingClientRect();
-                    item['parentColumnWidth'] = colRect.width;
-                    const mode = parentColumn.getAttribute('data-column-width');
-                    if (mode) item['columnMode'] = mode;
-                }
-
-                // Capture unique bid stamped earlier
-                const bid = el.getAttribute('data-bid');
-                if (bid) item['bid'] = bid;
-
-                result.push(item);
-            });
-            
-            // Remove the element references before returning
-            return result.map(item => {
-                const { element, ...rest } = item;
-                return rest;
-            });
-        }''')
-        
-        # Close the browser
-        await browser.close()
-        
-        return layout_info
-    
     def convert_markdown_to_html(self, markdown_text):
         """Convert markdown to HTML with layout CSS."""
         # Handle empty or whitespace-only content
@@ -679,7 +477,7 @@ class LayoutEngine:
         
         return full_html
     
-    def measure_and_paginate(self, markdown_text: str, page_height: int = 540, temp_dir: Optional[str] = None) -> List[List[Block]]:
+    def measure_and_paginate(self, markdown_text: str, page_height: int = 540, temp_dir: Optional[str] = None, *, use_wrapped_layout: bool = False) -> List[List[Block]]:
         """
         Convert markdown to HTML, measure layout, and return paginated Block objects.
         
@@ -687,6 +485,7 @@ class LayoutEngine:
             markdown_text: Markdown content to process
             page_height: Maximum height in pixels for a single slide
             temp_dir: Optional directory for debug files
+            use_wrapped_layout: Flag to use wrapped layout
             
         Returns:
             List of pages, where each page is a list of Block objects
@@ -711,41 +510,45 @@ class LayoutEngine:
         # Store temp_dir for image processing
         self._current_temp_dir = temp_dir
         
-        # Preprocess HTML to match what will be rendered in PowerPoint
-        processed_html = self._preprocess_html_for_measurement(html_content)
+        # Always use structured pptx-box parser
+        from .layout_parser import parse_html_with_structured_layout
         
-        # Save the HTML content to a file for debugging
-        with open(os.path.join(temp_dir, "input.html"), "w", encoding='utf-8') as f:
-            f.write(html_content)
-        with open(os.path.join(temp_dir, "processed.html"), "w", encoding='utf-8') as f:
-            f.write(processed_html)
-        
-        # Also save to output directory for easy access
         if self.debug:
-            # Use absolute path to workspace root output directory (NOT relative to script location)
-            # This ensures consistent behavior regardless of execution directory
-            current_working_dir = Path.cwd()
-            output_dir = current_working_dir / "output"
-            output_dir.mkdir(exist_ok=True)
-            
-            # Images remain in their original locations (examples/assets/)
-            
-            # Clear file names that indicate their purpose:
-            # - conversion_result_*.html = Final converted content ready for PowerPoint (for technical debugging)
-            with open(output_dir / f"conversion_result_{self.theme}.html", "w", encoding='utf-8') as f:
-                f.write(processed_html)
+            print("🏗️  Using structured pptx-box parser")
         
-        # Measure layout using Puppeteer on the processed HTML
-        layout_info = asyncio.run(self.measure_layout(processed_html, temp_dir))
+        import asyncio
+        loop = asyncio.get_event_loop()
+        blocks = loop.run_until_complete(
+            parse_html_with_structured_layout(
+                html_content, 
+                theme=self.theme, 
+                temp_dir=temp_dir, 
+                debug=self.debug
+            )
+        )
         
-        # Save layout information for debugging
-        with open(os.path.join(temp_dir, "layout_info.json"), "w") as f:
-            json.dump(layout_info, f, indent=2)
+        if self.debug:
+            print(f"🧱 Structured parser created {len(blocks)} Block objects")
         
-        # Convert raw layout data to Block objects
-        blocks = [Block.from_element(element) for element in layout_info]
+        # Set up _original_soup for debug HTML generation and add bid attributes
+        # Use the same BID assignment logic as legacy preprocessing
+        processed_html_for_bids = self._preprocess_html_for_measurement(html_content)
+        from bs4 import BeautifulSoup
+        self._original_soup = BeautifulSoup(processed_html_for_bids, 'html.parser')
         
-        # Apply intelligent image scaling based on column context
+        # Re-run structured parser with properly preprocessed HTML
+        import asyncio
+        loop = asyncio.get_event_loop()
+        blocks = loop.run_until_complete(
+            parse_html_with_structured_layout(
+                processed_html_for_bids, 
+                theme=self.theme, 
+                temp_dir=temp_dir, 
+                debug=self.debug
+            )
+        )
+        
+        # Apply intelligent image scaling based on column context (same as legacy parser)
         blocks = self._apply_intelligent_image_scaling_to_blocks(blocks, temp_dir)
         
         # Merge consecutive list items into text blocks
@@ -765,7 +568,9 @@ class LayoutEngine:
         
         # Generate paginated debug HTML to show actual slide structure
         if self.debug:
-            paginated_html = self._generate_paginated_debug_html(pages, processed_html, temp_dir)
+            # Debug HTML is simply the original HTML content after preprocessing
+            debug_html = html_content
+            paginated_html = self._generate_paginated_debug_html(pages, debug_html, temp_dir)
             
             # Save to output directory for easy viewing
             current_working_dir = Path.cwd()
@@ -1020,58 +825,6 @@ class LayoutEngine:
             
         return items_with_levels
 
-    def _clean_html_for_measurement_preserve_lists(self, text):
-        """Clean HTML tags but preserve inline formatting and list structure for measurement."""
-        
-        # First, handle inline formatting tags that we want to preserve
-        # Convert them to a temporary format
-        text = re.sub(r'<(strong|b)(?:[^>]*)>(.*?)</\1>', r'**\2**', text, flags=re.IGNORECASE | re.DOTALL)
-        text = re.sub(r'<(em|i)(?:[^>]*)>(.*?)</\1>', r'*\2*', text, flags=re.IGNORECASE | re.DOTALL)
-        text = re.sub(r'<code(?:[^>]*)>(.*?)</code>', r'`\1`', text, flags=re.IGNORECASE | re.DOTALL)
-        text = re.sub(r'<mark(?:[^>]*)>(.*?)</mark>', r'==\1==', text, flags=re.IGNORECASE | re.DOTALL)
-        
-        # Handle nested lists by converting them to indented text
-        def convert_nested_list(match):
-            list_tag = match.group(1).lower()
-            list_content = match.group(2)
-            
-            # Extract nested list items
-            nested_items = re.findall(r'<li[^>]*>(.*?)</li>', list_content, re.DOTALL | re.IGNORECASE)
-            
-            if not nested_items:
-                return ""
-            
-            # Format nested items with additional indentation
-            formatted_nested = []
-            is_ordered = list_tag == 'ol'
-            
-            for i, item in enumerate(nested_items):
-                # Clean the nested item
-                clean_item = self._clean_html_for_measurement(item)
-                if is_ordered:
-                    formatted_nested.append(f"    {i + 1}. {clean_item}")
-                else:
-                    formatted_nested.append(f"    • {clean_item}")
-            
-            return '<br>' + '<br>'.join(formatted_nested)
-        
-        # Convert nested lists to indented text
-        text = re.sub(r'<(ul|ol)[^>]*>(.*?)</\1>', convert_nested_list, text, flags=re.DOTALL | re.IGNORECASE)
-        
-        # Remove any remaining HTML tags
-        text = re.sub(r'<[^>]+>', '', text)
-        
-        # Clean up whitespace
-        text = re.sub(r'\s+', ' ', text).strip()
-        
-        # Convert back to HTML formatting tags
-        text = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', text)
-        text = re.sub(r'\*(.*?)\*', r'<em>\1</em>', text)
-        text = re.sub(r'`(.*?)`', r'<code>\1</code>', text)
-        text = re.sub(r'==(.*?)==', r'<mark>\1</mark>', text)
-        
-        return unescape(text)
-
     def _clean_html_for_measurement(self, text):
         """Clean HTML tags but preserve inline formatting for measurement."""
         
@@ -1176,12 +929,22 @@ class LayoutEngine:
     def _apply_intelligent_image_scaling_to_blocks(self, blocks: List[Block], temp_dir: str) -> List[Block]:
         """
         Apply intelligent image scaling to Block objects based on their scaling attributes.
-        This is called after browser measurement captures the scaling data.
+        This implements the 6-step algorithm:
+        1. Try to apply "X% of available width" (excluding padding, considering columns)
+        2. Check if resulting height would exceed current page
+        3. Calculate available height (total height - padding - all content above)
+        4. Reverse-engineer scaling % to fit available height
+        5. Apply the adjusted scaling
+        6. Provide final dimensions to PPTX
         """
         if self.debug:
             print(f"🔍 Applying intelligent image scaling to {len(blocks)} blocks...")
         
-        for block in blocks:
+        # Track pagination context for accurate height constraints
+        usable_height = self.css_reader.get_px_value('slide-height') - 2 * self.css_reader.get_px_value('slide-padding')
+        current_page_height = 0
+        
+        for i, block in enumerate(blocks):
             if block.is_image() and hasattr(block, 'src'):
                 # Check if this block has scaling information
                 scale_x = getattr(block, 'scaleX', None)
@@ -1189,77 +952,70 @@ class LayoutEngine:
                 in_column = getattr(block, 'inColumn', None) == 'true'
                 
                 if scale_x or scale_y:
-                    # Use ImageScaler to calculate correct dimensions
+                    # STEP 1: Apply requested percentage of available width
                     parent_col_width = getattr(block, 'parentColumnWidth', None)
-                    target_width, target_height = self.image_scaler.calculate_image_dimensions(
+                    initial_width, initial_height = self.image_scaler.calculate_image_dimensions(
                         block.src, scale_x, scale_y, in_column=in_column, parent_column_width=parent_col_width
                     )
                     
-                    if target_width is not None and target_height is not None:
+                    if initial_width is not None and initial_height is not None:
+                        # STEP 2 & 3: Calculate available height more accurately
+                        # Look for natural page breaks (new headings) to determine page boundaries
+                        page_start_idx = 0
+                        for j in range(i-1, -1, -1):
+                            if blocks[j].tag == 'h1':  # Major heading indicates likely page start
+                                page_start_idx = j
+                                break
+                        
+                        # Calculate content height from likely page start to this image
+                        content_above_height = sum(b.height for b in blocks[page_start_idx:i])
+                        available_height = usable_height - content_above_height
+                        
+                        final_width = initial_width
+                        final_height = initial_height
+                        
+                        # STEP 4: Only constrain if image really exceeds reasonable bounds  
+                        # Be more generous with height constraints to avoid unnecessary scaling
+                        max_reasonable_height = usable_height * 0.70  # Allow up to 70% of slide height
+                        
+                        if initial_height > max_reasonable_height:
+                            # STEP 5: Apply height-constrained scaling
+                            from PIL import Image
+                            try:
+                                with Image.open(block.src) as img:
+                                    original_width, original_height = img.size
+                                    aspect_ratio = original_width / original_height
+                                    
+                                    # Use 70% of slide height as maximum, not available height
+                                    final_height = max_reasonable_height
+                                    final_width = final_height * aspect_ratio
+                                    
+                                    if self.debug:
+                                        original_scale = float(scale_x) if scale_x else float(scale_y)
+                                        new_scale = final_width / (self.image_scaler.content_width * (1 if not in_column else 0.5))
+                                        print(f"📐 Height-constrained scaling for {block.src}:")
+                                        print(f"   Original request: {original_scale*100}% -> {initial_width:.0f}x{initial_height:.0f}")
+                                        print(f"   Max reasonable height: {max_reasonable_height:.0f}px")
+                                        print(f"   Adjusted to: {new_scale*100:.1f}% -> {final_width:.0f}x{final_height:.0f}")
+                            except Exception as e:
+                                if self.debug:
+                                    print(f"⚠️ Could not load image {block.src} for aspect ratio: {e}")
+                                # Fallback: use requested size but warn about potential overflow
+                                final_width = initial_width
+                                final_height = initial_height
+                        elif self.debug:
+                            # Image fits reasonably within slide bounds
+                            print(f"📐 Keeping original scale for {block.src}: {final_width:.0f}x{final_height:.0f} (within {max_reasonable_height:.0f}px limit)")
+                        
+                        # STEP 6: Update block dimensions with final calculated values
                         old_dims = f"{block.width}x{block.height}"
-                        
-                        # ------------------------------------------------------------------
-                        # NEW: Clamp image height to remaining vertical space on the slide
-                        # ------------------------------------------------------------------
-                        try:
-                            # Total inner slide height (viewport minus padding)
-                            slide_inner_h = self.image_scaler.content_height  # px
-                            
-                            # Vertical space until slide bottom
-                            remaining_h = max(0, slide_inner_h - block.y)
-                            
-                            # How much vertical space is left until either slide bottom or the next block
-                            next_block_y = None
-                            for other in blocks:
-                                if other is block:
-                                    continue
-                                if other.y > block.y:
-                                    next_block_y = other.y if next_block_y is None else min(next_block_y, other.y)
-                            if next_block_y is not None:
-                                remaining_h = min(remaining_h, next_block_y - block.y)
-                            
-                            # Leave a small margin (same 5 % used elsewhere)
-                            max_allowed_h = remaining_h * 0.95
-                            if target_height > max_allowed_h and max_allowed_h > 0:
-                                # Shrink proportionally so aspect ratio is kept
-                                shrink_factor = max_allowed_h / target_height
-                                target_height = max_allowed_h
-                                target_width = target_width * shrink_factor
-                                if self.debug:
-                                    print(f"↕️  Clamped image {block.src} to remaining space: {target_width:.0f}x{target_height:.0f} (remaining {remaining_h:.0f}px)")
-                        except Exception as e:
-                            # In debug mode report but continue gracefully
-                            if self.debug:
-                                print(f"⚠️  Failed to clamp image height for {block.src}: {e}")
-                        
-                        # --------------------------------------------------
-                        # HORIZONTAL CLAMP (symmetry with vertical logic)
-                        # --------------------------------------------------
-                        try:
-                            if in_column and parent_col_width:
-                                avail_w = float(parent_col_width) - (block.x if block.x else 0)
-                            else:
-                                avail_w = self.image_scaler.content_width - block.x
-
-                            avail_w = max(0, avail_w * 0.95)  # 5% safety margin
-
-                            if target_width > avail_w and avail_w > 0:
-                                shrink_factor = avail_w / target_width
-                                target_width = avail_w
-                                target_height = target_height * shrink_factor
-                                if self.debug:
-                                    print(f"↔️  Clamped image {block.src} to available width: {target_width:.0f}x{target_height:.0f} (avail {avail_w:.0f}px)")
-                        except Exception as e:
-                            if self.debug:
-                                print(f"⚠️  Failed horizontal clamp for {block.src}: {e}")
-                        
-                        # Update block dimensions
-                        block.w = int(target_width)
-                        block.h = int(target_height)
+                        block.w = int(final_width)
+                        block.h = int(final_height)
                         
                         context = "column" if in_column else "full-width"
+                        constraint_type = "height-constrained" if initial_height > max_reasonable_height else "original-scale"
                         if self.debug:
-                            print(f"📐 Scaled block {block.src}: {old_dims} -> {target_width:.0f}x{target_height:.0f} ({context})")
+                            print(f"📐 Scaled block {block.src}: {old_dims} -> {final_width:.0f}x{final_height:.0f} ({context}, {constraint_type})")
                     elif self.debug:
                         print(f"⚠️ Failed to calculate dimensions for {block.src}")
                 elif self.debug and block.is_image():
@@ -1350,22 +1106,74 @@ class LayoutEngine:
             import os, shutil, re
             output_dir = Path.cwd() / "output" / "debug_assets"
             output_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Track which images we've copied
+            copied_images = {}
 
-            # Find all <img src="..."> paths in HTML
-            for match in re.finditer(r'<img[^>]+src="([^">]+)"', paginated_html):
-                src = match.group(1)
-                # Only copy if src is a simple filename (no path separators)
-                if src and not any(sep in src for sep in ['/', '\\']):
-                    src_path = os.path.join(temp_dir, src)
-                    if os.path.exists(src_path):
-                        dest_path = output_dir / src
+            # Find all <img> tags in HTML and extract src and data-filepath
+            for match in re.finditer(r'<img[^>]+', paginated_html):
+                img_tag = match.group(0)
+                
+                # Extract src and data-filepath attributes
+                src_match = re.search(r'src="([^"]+)"', img_tag)
+                filepath_match = re.search(r'data-filepath="([^"]+)"', img_tag)
+                
+                if src_match:
+                    src = src_match.group(1)
+                    original_filepath = filepath_match.group(1) if filepath_match else None
+                    
+                    # Determine the source file to copy
+                    source_file = None
+                    filename = None
+                    
+                    if src.startswith('file://'):
+                        # Extract path from file:// URL
+                        file_path = src[7:]  # Remove 'file://' prefix
+                        if os.path.exists(file_path):
+                            source_file = file_path
+                            filename = os.path.basename(file_path)
+                    elif original_filepath and os.path.exists(original_filepath):
+                        # Use the original filepath
+                        source_file = original_filepath
+                        filename = os.path.basename(original_filepath)
+                    elif not any(sep in src for sep in ['/', '\\']):
+                        # Simple filename, check in temp_dir
+                        temp_file = os.path.join(temp_dir, src)
+                        if os.path.exists(temp_file):
+                            source_file = temp_file
+                            filename = src
+                    
+                    # Copy the file if we found a valid source and haven't copied it yet
+                    if source_file and filename and filename not in copied_images:
+                        dest_path = output_dir / filename
                         try:
-                            shutil.copy2(src_path, dest_path)
-                        except Exception:
-                            pass
+                            shutil.copy2(source_file, dest_path)
+                            copied_images[filename] = str(dest_path)
+                            if self.debug:
+                                print(f"📁 Copied image for debug HTML: {filename}")
+                        except Exception as e:
+                            if self.debug:
+                                print(f"⚠️ Failed to copy image {filename}: {e}")
 
-            # Update img src to point to debug_assets folder relative path
-            paginated_html = paginated_html.replace('src="', 'src="debug_assets/')
+            # Update img src to point to debug_assets folder
+            def fix_img_src(match):
+                full_match = match.group(0)
+                src = match.group(1)
+                
+                # Handle different types of src attributes
+                if src.startswith('file://'):
+                    # Extract filename from file:// URL
+                    file_path = src[7:]
+                    filename = os.path.basename(file_path)
+                    if filename in copied_images:
+                        return full_match.replace(f'src="{src}"', f'src="debug_assets/{filename}"')
+                elif not any(sep in src for sep in ['/', '\\']) and not src.startswith('debug_assets/'):
+                    # Simple filename that should be in debug_assets
+                    return full_match.replace(f'src="{src}"', f'src="debug_assets/{src}"')
+                
+                return full_match
+                    
+            paginated_html = re.sub(r'src="([^"]*)"', fix_img_src, paginated_html)
 
         return paginated_html
     

@@ -21,7 +21,11 @@
     
     /* Table styling deltas */
     --table-font-delta: -2pt;    /* Table font size = body - 2pt */
-    --table-border-width: 0.25pt; /* Much thinner table borders */
+    --table-width-safety: 1.10;  /* 10% safety buffer for table width (1.10 = 110%) */
+    /* NOTE: --table-border-width removed - python-pptx limitation
+     * PowerPoint ignores border thickness in XML even when valid
+     * Only border COLOR can be controlled via python-pptx
+     * For custom thickness: use PPTX templates or VBA/Aspose.Slides */
 }
 
 body {
@@ -133,7 +137,7 @@ pre code {
 
 code {
     font-family: 'Courier New', monospace;
-    font-size: 14px;
+    font-size: 10px;
     background-color: #2d2d2d;
     color: #ffffff;
     padding: 2px 4px;
@@ -579,7 +583,7 @@ generator.generate(markdown_content, "dark_presentation.pptx")
 <div class="slide" id="slide-14">
 <h1 data-bid="b424">📈 Figures Demo (Columns)</h1>
 <div class="columns" data-bid="b425">
-<div class="column" data-bid="b426" data-column-width="width=60%" style="flex:0 0 width=60%;">
+<div class="column" data-bid="b426" data-column-width="60%" style="flex:0 0 60%;">
 <img alt="Bar Chart" data-bid="b427" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/assets/chart_bar.png" data-in-column="true" src="chart_bar.png"/></div>
 <div class="column" data-bid="b428" data-column-width="default" style="flex:1 1 0;">
 <p data-bid="b429">The bar chart shows relative task completion percentages. Authentication and API docs are finished; analytics is lagging.</p>
@@ -622,7 +626,7 @@ generator.generate(markdown_content, "dark_presentation.pptx")
 <div class="slide" id="slide-16">
 <h1 data-bid="b450">Two-column slide (60% / 40%)</h1>
 <div class="columns" data-bid="b451">
-<div class="column" data-bid="b452" data-column-width="width=60%" style="flex:0 0 width=60%;">
+<div class="column" data-bid="b452" data-column-width="60%" style="flex:0 0 60%;">
 <h3 data-bid="b453">📋 Project Status Table</h3>
 <table data-bid="b454">
 <thead data-bid="b455">
@@ -656,7 +660,7 @@ generator.generate(markdown_content, "dark_presentation.pptx")
 </tbody>
 </table>
 </div>
-<div class="column" data-bid="b477" data-column-width="width=40%" style="flex:0 0 width=40%;">
+<div class="column" data-bid="b477" data-column-width="40%" style="flex:0 0 40%;">
 <h3 data-bid="b478">✍️ Notes</h3>
 <p data-bid="b479">All core features are either complete or in progress. Remaining items are performance tuning and UX polish.</p>
 </div>
@@ -666,7 +670,7 @@ generator.generate(markdown_content, "dark_presentation.pptx")
 <div class="slide" id="slide-17">
 <h1 data-bid="b480">Two-column slide (Auto + default)</h1>
 <div class="columns" data-bid="b481">
-<div class="column" data-bid="b482" data-column-width="width=auto">
+<div class="column" data-bid="b482" data-column-width="auto" style="flex:0 0 auto;">
 <h3 data-bid="b483">📋 Project Status Table</h3>
 <table data-bid="b484">
 <thead data-bid="b485">

@@ -48,7 +48,10 @@ class SlideGenerator:
             print(f"🗂️ Using temp directory: {temp_dir}")
         
         # Step 1: Layout engine processes markdown and returns paginated blocks
-        pages = self.layout_engine.measure_and_paginate(markdown_text, temp_dir=temp_dir)
+        pages = self.layout_engine.measure_and_paginate(
+            markdown_text,
+            temp_dir=temp_dir
+        )
         
         # Step 2: PPTX renderer converts pages to PowerPoint presentation
         self.pptx_renderer.render(pages, output_path)
