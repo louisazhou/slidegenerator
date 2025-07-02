@@ -1,9 +1,5 @@
 """Layout engine for measuring HTML elements and pagination."""
-
-import asyncio
 import tempfile
-import os
-import json
 import re
 from typing import List, Optional, Callable
 from pathlib import Path
@@ -477,7 +473,7 @@ class LayoutEngine:
         
         return full_html
     
-    def measure_and_paginate(self, markdown_text: str, page_height: int = 540, temp_dir: Optional[str] = None, *, use_wrapped_layout: bool = False) -> List[List[Block]]:
+    def measure_and_paginate(self, markdown_text: str, page_height: int = 540, temp_dir: Optional[str] = None) -> List[List[Block]]:
         """
         Convert markdown to HTML, measure layout, and return paginated Block objects.
         
@@ -485,7 +481,6 @@ class LayoutEngine:
             markdown_text: Markdown content to process
             page_height: Maximum height in pixels for a single slide
             temp_dir: Optional directory for debug files
-            use_wrapped_layout: Flag to use wrapped layout
             
         Returns:
             List of pages, where each page is a list of Block objects
@@ -548,7 +543,7 @@ class LayoutEngine:
             )
         )
         
-        # Apply intelligent image scaling based on column context (same as legacy parser)
+        # Apply intelligent image scaling based on column context 
         blocks = self._apply_intelligent_image_scaling_to_blocks(blocks, temp_dir)
         
         # Merge consecutive list items into text blocks
@@ -600,7 +595,7 @@ class LayoutEngine:
         # This must be done BEFORE any other processing to ensure images display correctly
         temp_dir = getattr(self, '_current_temp_dir', None)
         if temp_dir:
-            html_content = self._prepare_images_for_measurement(html_content, temp_dir)
+            html_content = self._copy_images_for_measurement(html_content, temp_dir)
         
         def process_list_content(match):
             """Process a single list (ul or ol) and convert to formatted text with level information"""
@@ -915,16 +910,6 @@ class LayoutEngine:
                     print(f"⚠️ Image file not found: {file_path}")
         
         return updated_html
-
-    def _prepare_images_for_measurement(self, html_content: str, temp_dir: str) -> str:
-        """
-        Copy image files to temp directory and convert file:// URLs to relative URLs
-        so the browser can access them for proper dimension measurement.
-        Image scaling happens later after browser measurement.
-        """
-        return self._copy_images_for_measurement(html_content, temp_dir)
-
-
 
     def _apply_intelligent_image_scaling_to_blocks(self, blocks: List[Block], temp_dir: str) -> List[Block]:
         """

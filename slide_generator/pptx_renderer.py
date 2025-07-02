@@ -15,20 +15,8 @@ from pptx.oxml import parse_xml
 from pptx.oxml.ns import nsdecls, qn
 import math
 
-# Supported named colors for inline coloring via markdown-it attrs
-COLOR_MAP = {
-    "red": (255, 0, 0),
-    "blue": (0, 102, 204),
-    "green": (0, 153, 0),
-    "orange": (255, 128, 0),
-    "purple": (153, 0, 153),
-    "gray": (128, 128, 128),
-    "black": (0, 0, 0),
-    "white": (255, 255, 255),
-    "yellow": (255, 255, 0),
-    # custom shades
-    "dodgerblue": (30, 144, 255),
-}
+# No hard-coded COLOR_MAP anymore.  Colors are parsed from theme CSS so users
+# can extend / override simply by adding `.mycolor { color: #RRGGBB; }`.
 
 # Helper function to convert pixels to inches
 def px(pixels):
@@ -49,7 +37,7 @@ class PPTXRenderer:
         """Parse CSS theme to extract font sizes and styling configuration."""
         css_content = get_css(self.theme)
         
-        # NO FALLBACKS - Extract font sizes from CSS or fail
+        # Extract font sizes from CSS or fail
         config = {
             'font_sizes': {},
             'line_height': None,
@@ -140,6 +128,31 @@ class PPTXRenderer:
         # Extract colors from CSS theme - REQUIRED
         config['colors'] = self._extract_colors_from_css(css_content)
         
+        # -----------------------------------------------------------------
+        # Inline colour classes (e.g. .red { color: #ff0000 })
+        # -----------------------------------------------------------------
+        class_colors = {}
+        class_color_pattern = r'\.([a-zA-Z0-9_-]+)\s*\{[^}]*?color:\s*([^;}{]+)'
+        for cls, val in re.findall(class_color_pattern, css_content, re.IGNORECASE | re.DOTALL):
+            val = val.strip()
+            rgb = None
+            if val.startswith('#') and len(val) in (4, 7):  # #rgb or #rrggbb
+                hexval = val[1:]
+                if len(hexval) == 3:
+                    hexval = ''.join([c*2 for c in hexval])
+                try:
+                    rgb = tuple(int(hexval[i:i+2], 16) for i in (0, 2, 4))
+                except ValueError:
+                    rgb = None
+            else:
+                # rgb(r,g,b) or named colours are ignored for now
+                rgb_match = re.match(r'rgb\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)', val, re.IGNORECASE)
+                if rgb_match:
+                    rgb = tuple(int(rgb_match.group(i)) for i in range(1,4))
+            if rgb:
+                class_colors[cls] = rgb
+
+        config['class_colors'] = class_colors
         return config
     
     def _extract_colors_from_css(self, css_content: str) -> Dict:
@@ -309,16 +322,21 @@ class PPTXRenderer:
                 # Adjust top position by current cumulative offset
                 block._adjusted_top_px = block.y + self._page_offset_px  # stash for use in _add_element_to_slide
 
-                # Use a conservative, uniform padding to guard against minor
-                # browser-vs-PowerPoint rendering differences, instead of the
-                # former aggressive 30 % line-leading heuristic which made
-                # text boxes far taller than necessary.
+                # --- Dynamic safety cushion --------------------------------
+                # Paragraphs & headings rarely need more than ~2 px, but when
+                # we later explode a single HTML <p> that represents an entire
+                # list into multiple PPT paragraphs, PowerPoint adds extra
+                # bullet leading that the browser never reported.  Empirically
+                # that overhead is ~2 px per list item plus a small constant.
 
-                EXTRA_BUFFER_PX = 2  # single-digit safety cushion
-
-                extra_height_px = EXTRA_BUFFER_PX if (
-                    block.is_paragraph() or block.is_heading() or block.is_list()
-                ) else 0
+                list_like = (block.is_list() or (block.tag == 'p' and 'data-list-levels' in block.content))
+                if list_like:
+                    items = block.content.count('<br') + 1  # how many bullets
+                    extra_height_px = 4 + 2.3 * items  # 4-px headroom, then 2.3 px per bullet
+                elif block.is_paragraph() or block.is_heading():
+                    extra_height_px = 2
+                else:
+                    extra_height_px = 0
 
                 # Render the block at its adjusted position
                 self._add_element_to_slide(slide, block, adjusted_top_px=block._adjusted_top_px, extra_padding_px=extra_height_px)
@@ -348,9 +366,31 @@ class PPTXRenderer:
         # Get the raw content and preprocess for highlighting
         content = block.content
         
-        # Convert HTML line breaks to newlines for PowerPoint
-        content = re.sub(r'<br\s*/?>', '\n', content, flags=re.IGNORECASE)
-        
+        # ------------------------------------------------------------------
+        # STEP 1 – Preserve real <br> tags but collapse stray newlines
+        # ------------------------------------------------------------------
+        #   • Markdown soft-breaks (single "\n" without two trailing spaces) are
+        #     rendered by browsers as a whitespace, but python-pptx renders them
+        #     as hard line breaks – resulting in unexpected extra lines.
+        #   • We therefore:
+        #       1. Temporarily replace <br> tags with a sentinel token.
+        #       2. Collapse *all* remaining newline characters to spaces so they
+        #          behave like in the browser.
+        #       3. Re-insert real line breaks by converting the sentinel token
+        #          back to "\n" (which pptx treats as an explicit break).
+        # ------------------------------------------------------------------
+
+        BR_SENTINEL = "__PPTX_BR__"
+
+        # 1) Protect genuine <br> tags
+        content = re.sub(r'<br\s*/?>', BR_SENTINEL, content, flags=re.IGNORECASE)
+
+        # 2) Collapse stray newlines (both LF and CRLF) that browsers treat as spaces
+        content = re.sub(r'[\r\n]+', ' ', content)
+
+        # 3) Restore deliberate line breaks
+        content = content.replace(BR_SENTINEL, '\n')
+
         # Preprocess ==highlight== syntax (convert to HTML)
         content = re.sub(r'==(.*?)==', r'<mark>\1</mark>', content)
         
@@ -560,7 +600,7 @@ class PPTXRenderer:
                         if class_match:
                             classes = class_match.group(1).split()
                             for cls in classes:
-                                if cls in COLOR_MAP:
+                                if cls in self.theme_config.get('class_colors', {}):
                                     format_stack.append(f'color:{cls}')
                                 elif cls in ['highlight']:
                                     format_stack.append('mark')
@@ -633,14 +673,16 @@ class PPTXRenderer:
                     # Apply color and hyperlink after processing fmt
                     # ---------------------------------------------
                     if color_name:
-                        rgb = COLOR_MAP[color_name]
-                        run.font.color.rgb = RGBColor(*rgb)
+                        rgb_map = self.theme_config.get('class_colors', {})
+                        if color_name in rgb_map:
+                            run.font.color.rgb = RGBColor(*rgb_map[color_name])
 
                     if hyperlink_url:
                         run.hyperlink.address = hyperlink_url
                         # Ensure link is visually distinct if no explicit color
                         if not color_name and not is_code:
-                            run.font.color.rgb = RGBColor(*COLOR_MAP["blue"])
+                            default_blue = self.theme_config.get('class_colors', {}).get('blue', (0,102,204))
+                            run.font.color.rgb = RGBColor(*default_blue)
                         if run.font.underline is None:
                             run.font.underline = True
 

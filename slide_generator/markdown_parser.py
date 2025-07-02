@@ -12,7 +12,7 @@ class MarkdownParser:
     Enhanced markdown parser with page break support using markdown-it-py.
     """
     
-    def __init__(self, extensions: Optional[List[str]] = None):
+    def __init__(self):
         """
         Initialize the markdown parser.
         
@@ -30,9 +30,57 @@ class MarkdownParser:
         # Enable additional features
         self.markdown_processor.enable(['table', 'strikethrough'])
         
-        # Require attrs_plugin – ensures {.class key=val} syntax works
-        from mdit_py_plugins.attrs import attrs_plugin  # will raise ImportError if not installed
-        self.markdown_processor.use(attrs_plugin)
+        # ---------------------------------------------------------
+        # PLUGIN ECOSYSTEM
+        # ---------------------------------------------------------
+        # 1) attrs_plugin      : `{.class #id key=val}` inline/block attributes (already relied on)
+        # 2) container_plugin  : `:::note`, `:::columns`, `:::column`, etc.  
+        #                       Used for call-outs and our column layout (replaces heavy regex).
+        # 3) dollarmath_plugin : `$...$` / `$$...$$` math support inside slides.
+        # 4) front_matter_plugin: YAML front-matter (`---`) for per-deck config that can override
+        #                       CSS variables (e.g. slide width/height) – no effect yet but parsed.
+        # 5) tasklists_plugin  : GitHub style `- [x] Done` checkboxes (renders <input> elements).
+        # 6) deflist_plugin    : Definition lists (`Term\n: definition`). Gives <dl>/<dt>/<dd> HTML.
+        #
+        # NOTE  The renderer / layout engine treats these as normal block/inline HTML so no
+        #       additional Python changes are required right now. Enabling them early guarantees
+        #       markdown authored with these syntaxes will not break the pipeline.
+
+        from mdit_py_plugins.attrs import attrs_plugin
+        from mdit_py_plugins.container import container_plugin
+        from mdit_py_plugins.dollarmath import dollarmath_plugin
+        from mdit_py_plugins.front_matter import front_matter_plugin
+        from mdit_py_plugins.tasklists import tasklists_plugin
+        from mdit_py_plugins.deflist import deflist_plugin
+
+        # ------------------------------------------------------------------
+        # Plugin registration chain
+        # ------------------------------------------------------------------
+        # NOTE on columns/column:
+        # We experimented with `container_plugin('columns')` & `('column')` to
+        # replace our hand-rolled :::columns/:::column regex logic.  It worked
+        # syntactically but still required a lot of post-processing (flex styles,
+        # width parsing, bid stamping, image marking).  The net result was more
+        # code than the current custom `convert_columns()` helper, so we're
+        # deferring the switch.  The two lines are left commented so the intent
+        # is visible when we revisit.
+        #
+        # NOTE on tasklists/deflist:
+        # Similar story: enabling them renders correct HTML, but our list-merge
+        # pagination step would need extra logic to keep checkbox inputs / <dl>
+        # pairs intact.  We'll re-enable once list handling is refactored.
+
+        self.markdown_processor = (
+            self.markdown_processor
+                .use(attrs_plugin)                     # {.class #id key=val}
+                # .use(container_plugin, 'columns')   # see note above
+                # .use(container_plugin, 'column')    # see note above
+                .use(container_plugin, 'note')         # admonition / call-out boxes
+                .use(dollarmath_plugin)                # inline & block math
+                .use(front_matter_plugin)              # YAML front-matter parsing
+                # .use(tasklists_plugin)              # see note above
+                # .use(deflist_plugin)                # see note above
+        )
     
     def parse(self, markdown_text: str) -> str:
         """
@@ -132,14 +180,15 @@ class MarkdownParser:
         # Convert ~~strikethrough~~ to <del>
         processed = re.sub(r'~~(.*?)~~', r'<del>\1</del>', processed)
         
-        # Explicitly convert inline attribute syntax like [text]{.red}
-        def _convert_inline_attrs(text: str) -> str:
-            import re as _re
-            pattern = r'\[([^\]]+)\]\{\.(\w[\w-]*)\}'
-            return _re.sub(pattern, r'<span class="\2">\1</span>', text)
+        # ------------------------------------------------------------------
+        # Fallback inline attrs conversion
+        # ------------------------------------------------------------------
+        # markdown-it-attrs presently does **not** transform inline `[text]{.red}`
+        # when running under the CommonMark preset (see GH issue #70).  Until the
+        # plugin supports it natively we convert the syntax to a `<span>` so the
+        # downstream HTML carries the class and our renderer can map it.
+        processed = re.sub(r'\[([^\]]+)\]\{\.([a-zA-Z0-9_-]+)\}', r'<span class="\2">\1</span>', processed)
 
-        processed = _convert_inline_attrs(processed)
-        
         # Handle Pandoc-style multi-column blocks
         def convert_columns(text: str) -> str:
             lines = text.split('\n')
@@ -437,26 +486,6 @@ class MarkdownParser:
         # If there are page breaks, slide count is page breaks + 1
         # If no page breaks, it's just 1 slide
         return page_breaks + 1
-    
-    def add_extension(self, extension: str) -> None:
-        """
-        Add a new extension to the parser.
-        
-        Args:
-            extension: Extension name to add (for compatibility)
-        """
-        # markdown-it-py handles extensions differently
-        # Most common extensions are already enabled
-        pass
-    
-    def get_extensions(self) -> List[str]:
-        """
-        Get list of currently enabled extensions.
-        
-        Returns:
-            List of extension names (for compatibility)
-        """
-        return ['table', 'strikethrough', 'linkify', 'typographer']
 
 
 def parse_markdown(markdown_text: str, extensions: Optional[List[str]] = None) -> str:

@@ -546,65 +546,35 @@ def generate_theme_demos():
     
     demos_generated = []
     
-    # Generate default theme demo (Legacy Parser)
-    print("🎨 Generating DEFAULT theme demonstration (Legacy Parser)...")
+    # Generate default theme demo
+    print("🎨 Generating DEFAULT theme demonstration…")
     try:
         generator_default = SlideGenerator(theme="default", debug=True)
         default_path = str(output_dir / "comprehensive_demo_default.pptx")
         generator_default.generate(demo_content, default_path)
         
         if os.path.exists(default_path):
-            demos_generated.append(("Default Theme PPTX (Legacy)", default_path))
+            demos_generated.append(("Default Theme PPTX", default_path))
             print(f"✅ Default theme PPTX created: {default_path}")
         else:
             print("❌ Failed to create default theme PPTX")
     except Exception as e:
         print(f"❌ Error generating default theme PPTX: {e}")
         
-    # Generate default theme demo (Structured Parser)
-    print("🏗️  Generating DEFAULT theme demonstration (Structured Parser)...")
-    try:
-        generator_structured = SlideGenerator(theme="default", debug=True)
-        structured_path = str(output_dir / "comprehensive_demo_default_structured.pptx")
-        generator_structured.generate(demo_content, structured_path)
-        
-        if os.path.exists(structured_path):
-            demos_generated.append(("Default Theme PPTX (Structured)", structured_path))
-            print(f"✅ Default theme PPTX (structured) created: {structured_path}")
-        else:
-            print("❌ Failed to create default theme PPTX (structured)")
-    except Exception as e:
-        print(f"❌ Error generating default theme PPTX (structured): {e}")
-        
-    # Generate dark theme demo (Legacy Parser)
-    print("🌙 Generating DARK theme demonstration (Legacy Parser)...")
+    # Generate dark theme demo
+    print("🌙 Generating DARK theme demonstration…")
     try:
         generator_dark = SlideGenerator(theme="dark", debug=True)
         dark_path = str(output_dir / "comprehensive_demo_dark.pptx")
         generator_dark.generate(demo_content, dark_path)
         
         if os.path.exists(dark_path):
-            demos_generated.append(("Dark Theme PPTX (Legacy)", dark_path))
+            demos_generated.append(("Dark Theme PPTX", dark_path))
             print(f"✅ Dark theme PPTX created: {dark_path}")
         else:
             print("❌ Failed to create dark theme PPTX")
     except Exception as e:
         print(f"❌ Error generating dark theme PPTX: {e}")
-        
-    # Generate dark theme demo (Structured Parser)
-    print("🏗️  Generating DARK theme demonstration (Structured Parser)...")
-    try:
-        generator_dark_structured = SlideGenerator(theme="dark", debug=True)
-        dark_structured_path = str(output_dir / "comprehensive_demo_dark_structured.pptx")
-        generator_dark_structured.generate(demo_content, dark_structured_path)
-        
-        if os.path.exists(dark_structured_path):
-            demos_generated.append(("Dark Theme PPTX (Structured)", dark_structured_path))
-            print(f"✅ Dark theme PPTX (structured) created: {dark_structured_path}")
-        else:
-            print("❌ Failed to create dark theme PPTX (structured)")
-    except Exception as e:
-        print(f"❌ Error generating dark theme PPTX (structured): {e}")
     
     return demos_generated
 
