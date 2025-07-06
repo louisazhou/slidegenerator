@@ -35,7 +35,6 @@ class MarkdownParser:
         # ---------------------------------------------------------
         # 1) attrs_plugin      : `{.class #id key=val}` inline/block attributes (already relied on)
         # 2) container_plugin  : `:::note`, `:::columns`, `:::column`, etc.  
-        #                       Used for call-outs and our column layout (replaces heavy regex).
         # 3) dollarmath_plugin : `$...$` / `$$...$$` math support inside slides.
         # 4) front_matter_plugin: YAML front-matter (`---`) for per-deck config that can override
         #                       CSS variables (e.g. slide width/height) – no effect yet but parsed.
@@ -52,6 +51,7 @@ class MarkdownParser:
         from mdit_py_plugins.front_matter import front_matter_plugin
         from mdit_py_plugins.tasklists import tasklists_plugin
         from mdit_py_plugins.deflist import deflist_plugin
+        from mdit_py_plugins.admon import admon_plugin  # ✅ NEW – admonition support
 
         # ------------------------------------------------------------------
         # Plugin registration chain
@@ -80,6 +80,7 @@ class MarkdownParser:
                 .use(front_matter_plugin)              # YAML front-matter parsing
                 # .use(tasklists_plugin)              # see note above
                 # .use(deflist_plugin)                # see note above
+                .use(admon_plugin)                     # ✅ enable admonition blocks
         )
     
     def parse(self, markdown_text: str) -> str:
@@ -97,7 +98,22 @@ class MarkdownParser:
         
         # Convert markdown to HTML
         html = self.markdown_processor.render(processed_text)
-        
+
+        # ------------------------------------------------------------------
+        # POST-PROCESSING – stamp admonition boxes so downstream HTML / PPTX can
+        # recognise them quickly (bonus: Puppeteer preview styling hook).
+        # ------------------------------------------------------------------
+        import re
+
+        def _add_data_attr(match):
+            tag = match.group(0)
+            # Skip if attribute already present (double-processing safeguard)
+            if 'data-box-type="admonition"' in tag:
+                return tag
+            return tag[:-1] + ' data-box-type="admonition">'
+
+        html = re.sub(r'<div[^>]*class="[^"]*\badmonition\b[^"]*"[^>]*>', _add_data_attr, html)
+
         return html
     
     def _validate_fenced_blocks(self, markdown_text: str) -> None:
@@ -247,17 +263,10 @@ class MarkdownParser:
                     col_html = []
                     for width_token, c in columns:
                         if c.strip():  # Only add non-empty columns
-                            # Parse the column content as markdown with table support
-                            from markdown_it import MarkdownIt
-                            md = MarkdownIt().enable('table')
-                            if hasattr(self, 'extensions') and self.extensions:
-                                for ext in self.extensions:
-                                    if hasattr(md, 'use'):
-                                        md = md.use(ext)
-                            
-                            # Apply image preprocessing to column content first
+                            # Reuse main markdown_processor so all plugins (e.g. admonition)
+                            # are active. We still need to run preprocessing beforehand.
                             processed_column = self._preprocess_custom_syntax(c.strip())
-                            column_html = md.render(processed_column)
+                            column_html = self.markdown_processor.render(processed_column)
                             
                             # Extract just the value part for CSS matching
                             if '=' in width_token:

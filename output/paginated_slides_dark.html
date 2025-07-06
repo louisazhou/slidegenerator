@@ -218,6 +218,33 @@ mark {
 .white { color: rgb(255,255,255); }
 .yellow { color: rgb(255,255,0); }
 .dodgerblue { color: rgb(30,144,255); } 
+
+/* Admonition blocks */
+.admonition { padding: 8px 12px; margin: 10px 0; border-left: 4px solid #2196F3; background-color: #424242; color:#e0e0e0; }
+.admonition-title { font-weight:bold;margin-top:0;margin-bottom:4px;font-size:10px; }
+
+.admonition.note,.admonition.summary { border-color:#42A5F5; background:#37474F; }
+.admonition.info { border-color:#29B6F6; background:#35525C; }
+.admonition.tip { border-color:#66BB6A; background:#2E3E2E; }
+.admonition.warning,.admonition.caution { border-color:#FFA726; background:#4A3D1B; }
+.admonition.danger,.admonition.error,.admonition.failure { border-color:#EF5350; background:#4C2626; }
+.admonition.attention { border-color:#FFB300; background:#4A3F14; } 
+
+/* ------------------------------------------------------------------
+   Minimal icon support (same mapping as default theme) so that browser
+   and PPTX have consistent sizing.
+-------------------------------------------------------------------*/
+.admonition-title::before { margin-right:4px; }
+.admonition.note > .admonition-title::before,
+.admonition.summary > .admonition-title::before { content:"📝"; }
+.admonition.info > .admonition-title::before { content:"ℹ️"; }
+.admonition.tip > .admonition-title::before { content:"💡"; }
+.admonition.warning > .admonition-title::before,
+.admonition.caution > .admonition-title::before { content:"⚠️"; }
+.admonition.danger > .admonition-title::before { content:"🚫"; }
+.admonition.error > .admonition-title::before,
+.admonition.failure > .admonition-title::before { content:"❌"; }
+.admonition.attention > .admonition-title::before { content:"👀"; } 
 /* list bullet helper for debug view will be injected later */
 .slide{margin-bottom:40px;border:3px solid red;position:relative;}
 .slide:before{position:absolute;top:-26px;left:0;background:red;color:#fff;padding:4px 8px;font-weight:bold;content:attr(data-idx);}
@@ -383,158 +410,216 @@ ORDER BY avg_rating DESC;
 </div>
 <hr style="border:2px dashed #999;margin:40px 0;">
 <div class="slide" id="slide-8" data-idx="8">
-<h1 data-bid="b188">🔧 Technical Architecture</h1>
-<h2 data-bid="b189">Core Components</h2>
-<table data-bid="b190">
-<thead data-bid="b191">
-<tr data-bid="b192">
-<th data-bid="b193">Component</th>
-<th data-bid="b194">Responsibility</th>
-<th data-bid="b195">Key Features</th>
-</tr>
-</thead>
-<tbody data-bid="b196">
-<tr data-bid="b197">
-<td data-bid="b198"><strong data-bid="b199">MarkdownParser</strong></td>
-<td data-bid="b200">Parse markdown to HTML</td>
-<td data-bid="b201">Enhanced with <code data-bid="b202">markdown-it-py</code>, custom syntax support</td>
-</tr>
-<tr data-bid="b203">
-<td data-bid="b204"><strong data-bid="b205">LayoutEngine</strong></td>
-<td data-bid="b206">Measure and position elements</td>
-<td data-bid="b207">Browser-based measurement, accurate pagination</td>
-</tr>
-<tr data-bid="b208">
-<td data-bid="b209"><strong data-bid="b210">PPTXRenderer</strong></td>
-<td data-bid="b211">Generate PowerPoint files</td>
-<td data-bid="b212">Native table support, theme-aware styling</td>
-</tr>
-<tr data-bid="b213">
-<td data-bid="b214"><strong data-bid="b215">ThemeLoader</strong></td>
-<td data-bid="b216">Manage visual themes</td>
-<td data-bid="b217">CSS-based configuration, font size synchronization</td>
-</tr>
-</tbody>
-</table>
-<h2 data-bid="b218">Processing Pipeline</h2>
-<p data-bid="b219">The system processes content through these stages:</p>
-<p data-bid="b220" data-list-levels="0,0,0,0,0" data-list-type="ol"><span class="dbg-list" style="margin-left:0px">1. <strong data-bid="b221">Markdown Input</strong> → Parse with markdown-it-py</span><span class="dbg-list" style="margin-left:0px">2. <strong data-bid="b223">HTML Generation</strong> → Add inline styling support</span><span class="dbg-list" style="margin-left:0px">3. <strong data-bid="b225">Browser Layout</strong> → Measure with Puppeteer engine</span><span class="dbg-list" style="margin-left:0px">4. <strong data-bid="b227">Block Positioning</strong> → Calculate precise coordinates</span><span class="dbg-list" style="margin-left:0px">5. <strong data-bid="b229">PowerPoint Output</strong> → Generate native PPTX format</span></p>
+<h1 data-bid="b188">⚠️ Admonition Demo</h1>
+<p data-bid="b189">Below are examples of every admonition style currently supported by the slide generator:</p>
+<div class="admonition note" data-bid="b190" data-box-type="admonition">
+<p class="admonition-title">Note</p>
+<p>This is a friendly note.</p>
+</div>
+<div class="admonition info" data-bid="b191" data-box-type="admonition">
+<p class="admonition-title">Information</p>
+<p>Additional information for the reader.</p>
+</div>
+<div class="admonition tip" data-bid="b192" data-box-type="admonition">
+<p class="admonition-title">Tip</p>
+<p>Quick pro-tip to speed up your workflow.</p>
+</div>
+<div class="admonition warning" data-bid="b193" data-box-type="admonition">
+<p class="admonition-title">Watch Out</p>
+<p>Something risky here. Proceed with caution when performing this step.</p>
+</div>
+<div class="admonition caution" data-bid="b194" data-box-type="admonition">
+<p class="admonition-title">Caution</p>
+<p>Be careful — this operation cannot be undone.</p>
+</div>
+<div class="admonition danger" data-bid="b195" data-box-type="admonition">
+<p class="admonition-title">Danger</p>
+<p>Serious danger ahead. Backup your data first!</p>
+</div>
+<div class="admonition error" data-bid="b196" data-box-type="admonition">
+<p class="admonition-title">Error</p>
+<p>The system encountered a fatal error.</p>
+</div>
 </div>
 <hr style="border:2px dashed #999;margin:40px 0;">
 <div class="slide" id="slide-9" data-idx="9">
-<h1 data-bid="b230">📏 Pagination &amp; Layout</h1>
-<h2 data-bid="b231">Intelligent Pagination</h2>
-<p data-bid="b232">The system uses <strong data-bid="b233">browser-based measurement</strong> for accurate pagination:</p>
-<p data-bid="b234" data-list-levels="0,0,0,0" data-list-type="ul"><span class="dbg-list" style="margin-left:0px">• ✅ <strong data-bid="b235">Boundary detection</strong>: Content exceeding slide limits automatically flows to next slide</span><span class="dbg-list" style="margin-left:0px">• ✅ <strong data-bid="b237">Relative positioning</strong>: Accounts for CSS margins and spacing</span><span class="dbg-list" style="margin-left:0px">• ✅ <strong data-bid="b239">Overflow prevention</strong>: No content extends beyond slide boundaries</span><span class="dbg-list" style="margin-left:0px">• ✅ <strong data-bid="b241">Smart breaks</strong>: Preserves logical content grouping where possible</span></p>
-<h2 data-bid="b242">Layout Quality</h2>
-<p data-bid="b243" data-list-levels="0,0,0,0" data-list-type="ul"><span class="dbg-list" style="margin-left:0px">• <strong data-bid="b244">Pixel-perfect positioning</strong> using browser layout engine</span><span class="dbg-list" style="margin-left:0px">• <strong data-bid="b246">Consistent spacing</strong> matching CSS specifications</span><span class="dbg-list" style="margin-left:0px">• <strong data-bid="b248">Professional typography</strong> with proper font rendering</span><span class="dbg-list" style="margin-left:0px">• <strong data-bid="b250">Responsive design</strong> adapting to different content types</span></p>
+<div class="admonition attention" data-bid="b197" data-box-type="admonition">
+<p class="admonition-title">Attention</p>
+<p>Eye-catching message for important updates.</p>
+</div>
 </div>
 <hr style="border:2px dashed #999;margin:40px 0;">
 <div class="slide" id="slide-10" data-idx="10">
-<h1 data-bid="b251">🎯 Quality Assurance</h1>
-<h2 data-bid="b252">Test Coverage</h2>
-<table data-bid="b253">
-<thead data-bid="b254">
-<tr data-bid="b255">
-<th data-bid="b256">Test Category</th>
-<th data-bid="b257">Count</th>
-<th data-bid="b258">Coverage</th>
-</tr>
-</thead>
-<tbody data-bid="b259">
-<tr data-bid="b260">
-<td data-bid="b261">Unit Tests</td>
-<td data-bid="b262">51</td>
-<td data-bid="b263">Core functionality</td>
-</tr>
-<tr data-bid="b264">
-<td data-bid="b265">Integration Tests</td>
-<td data-bid="b266">15</td>
-<td data-bid="b267">End-to-end workflows</td>
-</tr>
-<tr data-bid="b268">
-<td data-bid="b269">Visual Tests</td>
-<td data-bid="b270">3</td>
-<td data-bid="b271">Appearance validation</td>
-</tr>
-<tr data-bid="b272">
-<td data-bid="b273">Boundary Tests</td>
-<td data-bid="b274">8</td>
-<td data-bid="b275">Edge case handling</td>
-</tr>
-</tbody>
-</table>
-<h2 data-bid="b276">Validation Features</h2>
-<p data-bid="b277" data-list-levels="0,0,0,0,0" data-list-type="ul"><span class="dbg-list" style="margin-left:0px">• <strong data-bid="b278">Content completeness</strong>: All markdown elements preserved</span><span class="dbg-list" style="margin-left:0px">• <strong data-bid="b280">No overlaps</strong>: Shapes positioned without collision</span><span class="dbg-list" style="margin-left:0px">• <strong data-bid="b282">Boundary compliance</strong>: Content within slide limits</span><span class="dbg-list" style="margin-left:0px">• <strong data-bid="b284">Format consistency</strong>: Styling applied correctly</span><span class="dbg-list" style="margin-left:0px">• <strong data-bid="b286">Theme adherence</strong>: Colors and fonts match specifications</span></p>
+<h1 data-bid="b198">🧩 Admonitions in Columns</h1>
+<div class="columns" data-bid="b199">
+<div class="column" data-bid="b200" data-column-width="default" style="flex:1 1 0;">
+<div class="admonition tip" data-bid="b201" data-box-type="admonition">
+<p class="admonition-title">Left Column</p>
+<p>Tips stay readable even in a narrow column.</p>
+</div>
+</div>
+<div class="column" data-bid="b202" data-column-width="default" style="flex:1 1 0;">
+<div class="admonition danger" data-bid="b203" data-box-type="admonition">
+<p class="admonition-title">Right Column</p>
+<p>Danger blocks render correctly alongside others.</p>
+</div>
+</div>
+</div>
 </div>
 <hr style="border:2px dashed #999;margin:40px 0;">
 <div class="slide" id="slide-11" data-idx="11">
-<h1 data-bid="b287">🌟 Recent Improvements</h1>
-<h2 data-bid="b288">Table Column Width Fix ✅</h2>
-<p data-bid="b289"><strong data-bid="b290">Problem</strong>: Columns distributed equally regardless of content
-<strong data-bid="b291">Solution</strong>: HTML auto-width calculation with proper PowerPoint integration</p>
-<p data-bid="b292"><strong data-bid="b293">Before</strong>: <code data-bid="b294">Age</code> column wrapping to <code data-bid="b295">Ag\ne</code> due to equal distribution
-<strong data-bid="b296">After</strong>: Smart width allocation based on content (60px, 47px, 51px)</p>
-<h2 data-bid="b297">Dark Theme Border Fix ✅</h2>
-<p data-bid="b298"><strong data-bid="b299">Problem</strong>: Black borders invisible on dark background
-<strong data-bid="b300">Solution</strong>: Theme-aware border colors with XML manipulation</p>
-<p data-bid="b301"><strong data-bid="b302">Dark Theme</strong>: Light gray borders (<code data-bid="b303">#e0e0e0</code>) for visibility
-<strong data-bid="b304">Default Theme</strong>: Black borders (<code data-bid="b305">#000</code>) for definition</p>
-</div>
-<hr style="border:2px dashed #999;margin:40px 0;">
-<div class="slide" id="slide-12" data-idx="12">
-<h1 data-bid="b306">📈 Performance Metrics</h1>
-<h2 data-bid="b307">Processing Speed</h2>
-<table data-bid="b308">
-<thead data-bid="b309">
-<tr data-bid="b310">
-<th data-bid="b311">Content Type</th>
-<th data-bid="b312">Processing Time</th>
-<th data-bid="b313">Slides Generated</th>
+<h1 data-bid="b204">🔧 Technical Architecture</h1>
+<h2 data-bid="b205">Core Components</h2>
+<table data-bid="b206">
+<thead data-bid="b207">
+<tr data-bid="b208">
+<th data-bid="b209">Component</th>
+<th data-bid="b210">Responsibility</th>
+<th data-bid="b211">Key Features</th>
 </tr>
 </thead>
-<tbody data-bid="b314">
-<tr data-bid="b315">
-<td data-bid="b316">Simple Text</td>
-<td data-bid="b317">~0.5 seconds</td>
-<td data-bid="b318">1-2 slides</td>
+<tbody data-bid="b212">
+<tr data-bid="b213">
+<td data-bid="b214"><strong data-bid="b215">MarkdownParser</strong></td>
+<td data-bid="b216">Parse markdown to HTML</td>
+<td data-bid="b217">Enhanced with <code data-bid="b218">markdown-it-py</code>, custom syntax support</td>
 </tr>
-<tr data-bid="b319">
-<td data-bid="b320">With Tables</td>
-<td data-bid="b321">~1.2 seconds</td>
-<td data-bid="b322">2-3 slides</td>
+<tr data-bid="b219">
+<td data-bid="b220"><strong data-bid="b221">LayoutEngine</strong></td>
+<td data-bid="b222">Measure and position elements</td>
+<td data-bid="b223">Browser-based measurement, accurate pagination</td>
 </tr>
-<tr data-bid="b323">
-<td data-bid="b324">Code Heavy</td>
-<td data-bid="b325">~0.8 seconds</td>
-<td data-bid="b326">2-4 slides</td>
+<tr data-bid="b224">
+<td data-bid="b225"><strong data-bid="b226">PPTXRenderer</strong></td>
+<td data-bid="b227">Generate PowerPoint files</td>
+<td data-bid="b228">Native table support, theme-aware styling</td>
 </tr>
-<tr data-bid="b327">
-<td data-bid="b328">Mixed Content</td>
-<td data-bid="b329">~1.5 seconds</td>
-<td data-bid="b330">3-5 slides</td>
+<tr data-bid="b229">
+<td data-bid="b230"><strong data-bid="b231">ThemeLoader</strong></td>
+<td data-bid="b232">Manage visual themes</td>
+<td data-bid="b233">CSS-based configuration, font size synchronization</td>
 </tr>
 </tbody>
 </table>
-<h2 data-bid="b331">Quality Metrics</h2>
-<p data-bid="b332" data-list-levels="0,0,0,0" data-list-type="ul"><span class="dbg-list" style="margin-left:0px">• ✅ <strong data-bid="b333">99.8% formatting accuracy</strong> across all content types</span><span class="dbg-list" style="margin-left:0px">• ✅ <strong data-bid="b335">Zero overlaps</strong> in generated presentations</span><span class="dbg-list" style="margin-left:0px">• ✅ <strong data-bid="b337">100% boundary compliance</strong> - no content overflow</span><span class="dbg-list" style="margin-left:0px">• ✅ <strong data-bid="b339">Perfect theme consistency</strong> across all elements</span></p>
+<h2 data-bid="b234">Processing Pipeline</h2>
+<p data-bid="b235">The system processes content through these stages:</p>
+<p data-bid="b236" data-list-levels="0,0,0,0,0" data-list-type="ol"><span class="dbg-list" style="margin-left:0px">1. <strong data-bid="b237">Markdown Input</strong> → Parse with markdown-it-py</span><span class="dbg-list" style="margin-left:0px">2. <strong data-bid="b239">HTML Generation</strong> → Add inline styling support</span><span class="dbg-list" style="margin-left:0px">3. <strong data-bid="b241">Browser Layout</strong> → Measure with Puppeteer engine</span><span class="dbg-list" style="margin-left:0px">4. <strong data-bid="b243">Block Positioning</strong> → Calculate precise coordinates</span><span class="dbg-list" style="margin-left:0px">5. <strong data-bid="b245">PowerPoint Output</strong> → Generate native PPTX format</span></p>
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;">
+<div class="slide" id="slide-12" data-idx="12">
+<h1 data-bid="b246">📏 Pagination &amp; Layout</h1>
+<h2 data-bid="b247">Intelligent Pagination</h2>
+<p data-bid="b248">The system uses <strong data-bid="b249">browser-based measurement</strong> for accurate pagination:</p>
+<p data-bid="b250" data-list-levels="0,0,0,0" data-list-type="ul"><span class="dbg-list" style="margin-left:0px">• ✅ <strong data-bid="b251">Boundary detection</strong>: Content exceeding slide limits automatically flows to next slide</span><span class="dbg-list" style="margin-left:0px">• ✅ <strong data-bid="b253">Relative positioning</strong>: Accounts for CSS margins and spacing</span><span class="dbg-list" style="margin-left:0px">• ✅ <strong data-bid="b255">Overflow prevention</strong>: No content extends beyond slide boundaries</span><span class="dbg-list" style="margin-left:0px">• ✅ <strong data-bid="b257">Smart breaks</strong>: Preserves logical content grouping where possible</span></p>
+<h2 data-bid="b258">Layout Quality</h2>
+<p data-bid="b259" data-list-levels="0,0,0,0" data-list-type="ul"><span class="dbg-list" style="margin-left:0px">• <strong data-bid="b260">Pixel-perfect positioning</strong> using browser layout engine</span><span class="dbg-list" style="margin-left:0px">• <strong data-bid="b262">Consistent spacing</strong> matching CSS specifications</span><span class="dbg-list" style="margin-left:0px">• <strong data-bid="b264">Professional typography</strong> with proper font rendering</span><span class="dbg-list" style="margin-left:0px">• <strong data-bid="b266">Responsive design</strong> adapting to different content types</span></p>
 </div>
 <hr style="border:2px dashed #999;margin:40px 0;">
 <div class="slide" id="slide-13" data-idx="13">
-<h1 data-bid="b340">🎉 Summary &amp; Next Steps</h1>
-<h2 data-bid="b341">What You've Experienced</h2>
-<p data-bid="b342" data-list-levels="0,0,0,0,0,0" data-list-type="ul"><span class="dbg-list" style="margin-left:0px">• ✅ <strong data-bid="b343">Complete inline styling</strong> - bold, italic, code, highlights</span><span class="dbg-list" style="margin-left:0px">• ✅ <strong data-bid="b345">Smart table rendering</strong> - HTML auto-width with theme-aware borders</span><span class="dbg-list" style="margin-left:0px">• ✅ <strong data-bid="b347">Professional code blocks</strong> - syntax highlighting and proper formatting</span><span class="dbg-list" style="margin-left:0px">• ✅ <strong data-bid="b349">Intelligent pagination</strong> - browser-based measurement and positioning</span><span class="dbg-list" style="margin-left:0px">• ✅ <strong data-bid="b351">Theme support</strong> - default and dark themes with full consistency</span><span class="dbg-list" style="margin-left:0px">• ✅ <strong data-bid="b353">Quality assurance</strong> - comprehensive testing and validation</span></p>
-<h2 data-bid="b354">Ready for Production</h2>
-<p data-bid="b355">This slide generator is <strong data-bid="b356">production-ready</strong> with:</p>
-<p data-bid="b357" data-list-levels="0,0,0,0,0" data-list-type="ul"><span class="dbg-list" style="margin-left:0px">• 🚀 <strong data-bid="b358">High performance</strong> browser-based rendering</span><span class="dbg-list" style="margin-left:0px">• 🎯 <strong data-bid="b360">Pixel-perfect accuracy</strong> in layout and positioning</span><span class="dbg-list" style="margin-left:0px">• 🎨 <strong data-bid="b362">Professional themes</strong> with consistent styling</span><span class="dbg-list" style="margin-left:0px">• 🔧 <strong data-bid="b364">Robust architecture</strong> with comprehensive error handling</span><span class="dbg-list" style="margin-left:0px">• ✅ <strong data-bid="b366">Extensive testing</strong> ensuring reliability and quality</span></p>
-<p data-bid="b367"><strong data-bid="b368">Thank you</strong> for exploring the <mark data-bid="b369">complete feature set</mark>!</p>
+<h1 data-bid="b267">🎯 Quality Assurance</h1>
+<h2 data-bid="b268">Test Coverage</h2>
+<table data-bid="b269">
+<thead data-bid="b270">
+<tr data-bid="b271">
+<th data-bid="b272">Test Category</th>
+<th data-bid="b273">Count</th>
+<th data-bid="b274">Coverage</th>
+</tr>
+</thead>
+<tbody data-bid="b275">
+<tr data-bid="b276">
+<td data-bid="b277">Unit Tests</td>
+<td data-bid="b278">51</td>
+<td data-bid="b279">Core functionality</td>
+</tr>
+<tr data-bid="b280">
+<td data-bid="b281">Integration Tests</td>
+<td data-bid="b282">15</td>
+<td data-bid="b283">End-to-end workflows</td>
+</tr>
+<tr data-bid="b284">
+<td data-bid="b285">Visual Tests</td>
+<td data-bid="b286">3</td>
+<td data-bid="b287">Appearance validation</td>
+</tr>
+<tr data-bid="b288">
+<td data-bid="b289">Boundary Tests</td>
+<td data-bid="b290">8</td>
+<td data-bid="b291">Edge case handling</td>
+</tr>
+</tbody>
+</table>
+<h2 data-bid="b292">Validation Features</h2>
+<p data-bid="b293" data-list-levels="0,0,0,0,0" data-list-type="ul"><span class="dbg-list" style="margin-left:0px">• <strong data-bid="b294">Content completeness</strong>: All markdown elements preserved</span><span class="dbg-list" style="margin-left:0px">• <strong data-bid="b296">No overlaps</strong>: Shapes positioned without collision</span><span class="dbg-list" style="margin-left:0px">• <strong data-bid="b298">Boundary compliance</strong>: Content within slide limits</span><span class="dbg-list" style="margin-left:0px">• <strong data-bid="b300">Format consistency</strong>: Styling applied correctly</span><span class="dbg-list" style="margin-left:0px">• <strong data-bid="b302">Theme adherence</strong>: Colors and fonts match specifications</span></p>
 </div>
 <hr style="border:2px dashed #999;margin:40px 0;">
 <div class="slide" id="slide-14" data-idx="14">
-<h1 data-bid="b370">🔗 Technical Details</h1>
-<h2 data-bid="b371">API Usage</h2>
-<p data-bid="b372">Basic usage example:</p>
-<pre data-bid="b373"><code class="language-python" data-bid="b374">from slide_generator.generator import SlideGenerator
+<h1 data-bid="b303">🌟 Recent Improvements</h1>
+<h2 data-bid="b304">Table Column Width Fix ✅</h2>
+<p data-bid="b305"><strong data-bid="b306">Problem</strong>: Columns distributed equally regardless of content
+<strong data-bid="b307">Solution</strong>: HTML auto-width calculation with proper PowerPoint integration</p>
+<p data-bid="b308"><strong data-bid="b309">Before</strong>: <code data-bid="b310">Age</code> column wrapping to <code data-bid="b311">Ag\ne</code> due to equal distribution
+<strong data-bid="b312">After</strong>: Smart width allocation based on content (60px, 47px, 51px)</p>
+<h2 data-bid="b313">Dark Theme Border Fix ✅</h2>
+<p data-bid="b314"><strong data-bid="b315">Problem</strong>: Black borders invisible on dark background
+<strong data-bid="b316">Solution</strong>: Theme-aware border colors with XML manipulation</p>
+<p data-bid="b317"><strong data-bid="b318">Dark Theme</strong>: Light gray borders (<code data-bid="b319">#e0e0e0</code>) for visibility
+<strong data-bid="b320">Default Theme</strong>: Black borders (<code data-bid="b321">#000</code>) for definition</p>
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;">
+<div class="slide" id="slide-15" data-idx="15">
+<h1 data-bid="b322">📈 Performance Metrics</h1>
+<h2 data-bid="b323">Processing Speed</h2>
+<table data-bid="b324">
+<thead data-bid="b325">
+<tr data-bid="b326">
+<th data-bid="b327">Content Type</th>
+<th data-bid="b328">Processing Time</th>
+<th data-bid="b329">Slides Generated</th>
+</tr>
+</thead>
+<tbody data-bid="b330">
+<tr data-bid="b331">
+<td data-bid="b332">Simple Text</td>
+<td data-bid="b333">~0.5 seconds</td>
+<td data-bid="b334">1-2 slides</td>
+</tr>
+<tr data-bid="b335">
+<td data-bid="b336">With Tables</td>
+<td data-bid="b337">~1.2 seconds</td>
+<td data-bid="b338">2-3 slides</td>
+</tr>
+<tr data-bid="b339">
+<td data-bid="b340">Code Heavy</td>
+<td data-bid="b341">~0.8 seconds</td>
+<td data-bid="b342">2-4 slides</td>
+</tr>
+<tr data-bid="b343">
+<td data-bid="b344">Mixed Content</td>
+<td data-bid="b345">~1.5 seconds</td>
+<td data-bid="b346">3-5 slides</td>
+</tr>
+</tbody>
+</table>
+<h2 data-bid="b347">Quality Metrics</h2>
+<p data-bid="b348" data-list-levels="0,0,0,0" data-list-type="ul"><span class="dbg-list" style="margin-left:0px">• ✅ <strong data-bid="b349">99.8% formatting accuracy</strong> across all content types</span><span class="dbg-list" style="margin-left:0px">• ✅ <strong data-bid="b351">Zero overlaps</strong> in generated presentations</span><span class="dbg-list" style="margin-left:0px">• ✅ <strong data-bid="b353">100% boundary compliance</strong> - no content overflow</span><span class="dbg-list" style="margin-left:0px">• ✅ <strong data-bid="b355">Perfect theme consistency</strong> across all elements</span></p>
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;">
+<div class="slide" id="slide-16" data-idx="16">
+<h1 data-bid="b356">🎉 Summary &amp; Next Steps</h1>
+<h2 data-bid="b357">What You've Experienced</h2>
+<p data-bid="b358" data-list-levels="0,0,0,0,0,0" data-list-type="ul"><span class="dbg-list" style="margin-left:0px">• ✅ <strong data-bid="b359">Complete inline styling</strong> - bold, italic, code, highlights</span><span class="dbg-list" style="margin-left:0px">• ✅ <strong data-bid="b361">Smart table rendering</strong> - HTML auto-width with theme-aware borders</span><span class="dbg-list" style="margin-left:0px">• ✅ <strong data-bid="b363">Professional code blocks</strong> - syntax highlighting and proper formatting</span><span class="dbg-list" style="margin-left:0px">• ✅ <strong data-bid="b365">Intelligent pagination</strong> - browser-based measurement and positioning</span><span class="dbg-list" style="margin-left:0px">• ✅ <strong data-bid="b367">Theme support</strong> - default and dark themes with full consistency</span><span class="dbg-list" style="margin-left:0px">• ✅ <strong data-bid="b369">Quality assurance</strong> - comprehensive testing and validation</span></p>
+<h2 data-bid="b370">Ready for Production</h2>
+<p data-bid="b371">This slide generator is <strong data-bid="b372">production-ready</strong> with:</p>
+<p data-bid="b373" data-list-levels="0,0,0,0,0" data-list-type="ul"><span class="dbg-list" style="margin-left:0px">• 🚀 <strong data-bid="b374">High performance</strong> browser-based rendering</span><span class="dbg-list" style="margin-left:0px">• 🎯 <strong data-bid="b376">Pixel-perfect accuracy</strong> in layout and positioning</span><span class="dbg-list" style="margin-left:0px">• 🎨 <strong data-bid="b378">Professional themes</strong> with consistent styling</span><span class="dbg-list" style="margin-left:0px">• 🔧 <strong data-bid="b380">Robust architecture</strong> with comprehensive error handling</span><span class="dbg-list" style="margin-left:0px">• ✅ <strong data-bid="b382">Extensive testing</strong> ensuring reliability and quality</span></p>
+<p data-bid="b383"><strong data-bid="b384">Thank you</strong> for exploring the <mark data-bid="b385">complete feature set</mark>!</p>
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;">
+<div class="slide" id="slide-17" data-idx="17">
+<h1 data-bid="b386">🔗 Technical Details</h1>
+<h2 data-bid="b387">API Usage</h2>
+<p data-bid="b388">Basic usage example:</p>
+<pre data-bid="b389"><code class="language-python" data-bid="b390">from slide_generator.generator import SlideGenerator
 
 # Basic usage
 generator = SlideGenerator()
@@ -544,190 +629,190 @@ generator.generate(markdown_content, "output.pptx")
 generator = SlideGenerator(theme="dark")
 generator.generate(markdown_content, "dark_presentation.pptx")
 </code></pre>
-<h2 data-bid="b375">Configuration Options</h2>
-<p data-bid="b376" data-list-levels="0,0,0,0" data-list-type="ul"><span class="dbg-list" style="margin-left:0px">• <strong data-bid="b377">Themes</strong>: <code data-bid="b378">"default"</code>, <code data-bid="b379">"dark"</code></span><span class="dbg-list" style="margin-left:0px">• <strong data-bid="b381">Debug mode</strong>: Detailed processing information</span><span class="dbg-list" style="margin-left:0px">• <strong data-bid="b383">Output formats</strong>: PowerPoint (.pptx) with full compatibility</span><span class="dbg-list" style="margin-left:0px">• <strong data-bid="b385">Custom styling</strong>: CSS-based theme configuration</span></p>
-<p data-bid="b386"><strong data-bid="b387">End of demonstration</strong> - <mark data-bid="b388">All features showcased</mark>! 🎊</p>
-</div>
-<hr style="border:2px dashed #999;margin:40px 0;">
-<div class="slide" id="slide-15" data-idx="15">
-<h1 data-bid="b389">📈 Figures Demo</h1>
-<p data-bid="b390">Bar chart (80% width):</p>
-<img alt="Bar Chart" data-bid="b391" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/assets/chart_bar.png" data-scale-type="x" data-scale-x="0.8" src="debug_assets/chart_bar.png"/>
-<p data-bid="b392">Pie chart (60% height):</p>
-</div>
-<hr style="border:2px dashed #999;margin:40px 0;">
-<div class="slide" id="slide-16" data-idx="16">
-<img alt="Pie Chart" data-bid="b393" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/assets/chart_pie.png" data-scale-type="y" data-scale-y="0.6" src="debug_assets/chart_pie.png"/>
-<h1 data-bid="b394">Two-column slide: table on left, text on right</h1>
-<div class="columns" data-bid="b395">
-<div class="column" data-bid="b396" data-column-width="default" style="flex:1 1 0;">
-<h3 data-bid="b397">📋 Project Status Table</h3>
-<table data-bid="b398">
-<thead data-bid="b399">
-<tr data-bid="b400">
-<th data-bid="b401">Task</th>
-<th data-bid="b402">Owner</th>
-<th data-bid="b403">Progress</th>
-</tr>
-</thead>
-<tbody data-bid="b404">
-<tr data-bid="b405">
-<td data-bid="b406">Authentication</td>
-<td data-bid="b407">Alice</td>
-<td data-bid="b408">100%</td>
-</tr>
-<tr data-bid="b409">
-<td data-bid="b410">Database</td>
-<td data-bid="b411">Bob</td>
-<td data-bid="b412">80%</td>
-</tr>
-<tr data-bid="b413">
-<td data-bid="b414">API Docs</td>
-<td data-bid="b415">Carol</td>
-<td data-bid="b416">100%</td>
-</tr>
-<tr data-bid="b417">
-<td data-bid="b418">Analytics</td>
-<td data-bid="b419">Dave</td>
-<td data-bid="b420">60%</td>
-</tr>
-</tbody>
-</table>
-</div>
-<div class="column" data-bid="b421" data-column-width="default" style="flex:1 1 0;">
-<h3 data-bid="b422">✍️ Notes</h3>
-<p data-bid="b423">All core features are either complete or in progress. Remaining items are performance tuning and UX polish.</p>
-</div>
-</div>
-</div>
-<hr style="border:2px dashed #999;margin:40px 0;">
-<div class="slide" id="slide-17" data-idx="17">
-<h1 data-bid="b424">📈 Figures Demo (Columns)</h1>
-<div class="columns" data-bid="b425">
-<div class="column" data-bid="b426" data-column-width="60%" style="flex:0 0 60%;">
-<img alt="Bar Chart" data-bid="b427" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/assets/chart_bar.png" data-in-column="true" src="debug_assets/chart_bar.png"/></div>
-<div class="column" data-bid="b428" data-column-width="default" style="flex:1 1 0;">
-<p data-bid="b429">The bar chart shows relative task completion percentages. Authentication and API docs are finished; analytics is lagging.</p>
-</div>
-</div>
+<h2 data-bid="b391">Configuration Options</h2>
+<p data-bid="b392" data-list-levels="0,0,0,0" data-list-type="ul"><span class="dbg-list" style="margin-left:0px">• <strong data-bid="b393">Themes</strong>: <code data-bid="b394">"default"</code>, <code data-bid="b395">"dark"</code></span><span class="dbg-list" style="margin-left:0px">• <strong data-bid="b397">Debug mode</strong>: Detailed processing information</span><span class="dbg-list" style="margin-left:0px">• <strong data-bid="b399">Output formats</strong>: PowerPoint (.pptx) with full compatibility</span><span class="dbg-list" style="margin-left:0px">• <strong data-bid="b401">Custom styling</strong>: CSS-based theme configuration</span></p>
+<p data-bid="b402"><strong data-bid="b403">End of demonstration</strong> - <mark data-bid="b404">All features showcased</mark>! 🎊</p>
 </div>
 <hr style="border:2px dashed #999;margin:40px 0;">
 <div class="slide" id="slide-18" data-idx="18">
-<h1 data-bid="b430">🖼️ Figure + Table Demo</h1>
-<div class="columns" data-bid="b431">
-<div class="column" data-bid="b432" data-column-width="default" style="flex:1 1 0;">
-<img alt="Pie Chart" data-bid="b433" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/assets/chart_pie.png" data-in-column="true" src="debug_assets/chart_pie.png"/></div>
-<div class="column" data-bid="b434" data-column-width="default" style="flex:1 1 0;">
-<table data-bid="b435">
-<thead data-bid="b436">
-<tr data-bid="b437">
-<th data-bid="b438">Segment</th>
-<th data-bid="b439">%</th>
-</tr>
-</thead>
-<tbody data-bid="b440">
-<tr data-bid="b441">
-<td data-bid="b442">Complete</td>
-<td data-bid="b443">55</td>
-</tr>
-<tr data-bid="b444">
-<td data-bid="b445">In-Progress</td>
-<td data-bid="b446">35</td>
-</tr>
-<tr data-bid="b447">
-<td data-bid="b448">Blocked</td>
-<td data-bid="b449">10</td>
-</tr>
-</tbody>
-</table>
-</div>
-</div>
+<h1 data-bid="b405">📈 Figures Demo</h1>
+<p data-bid="b406">Bar chart (80% width):</p>
+<img alt="Bar Chart" data-bid="b407" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/assets/chart_bar.png" data-scale-type="x" data-scale-x="0.8" src="debug_assets/chart_bar.png"/>
+<p data-bid="b408">Pie chart (60% height):</p>
 </div>
 <hr style="border:2px dashed #999;margin:40px 0;">
 <div class="slide" id="slide-19" data-idx="19">
-<h1 data-bid="b450">Two-column slide (60% / 40%)</h1>
-<div class="columns" data-bid="b451">
-<div class="column" data-bid="b452" data-column-width="60%" style="flex:0 0 60%;">
-<h3 data-bid="b453">📋 Project Status Table</h3>
-<table data-bid="b454">
-<thead data-bid="b455">
-<tr data-bid="b456">
-<th data-bid="b457">Task</th>
-<th data-bid="b458">Owner</th>
-<th data-bid="b459">Progress</th>
+<img alt="Pie Chart" data-bid="b409" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/assets/chart_pie.png" data-scale-type="y" data-scale-y="0.6" src="debug_assets/chart_pie.png"/>
+<h1 data-bid="b410">Two-column slide: table on left, text on right</h1>
+<div class="columns" data-bid="b411">
+<div class="column" data-bid="b412" data-column-width="default" style="flex:1 1 0;">
+<h3 data-bid="b413">📋 Project Status Table</h3>
+<table data-bid="b414">
+<thead data-bid="b415">
+<tr data-bid="b416">
+<th data-bid="b417">Task</th>
+<th data-bid="b418">Owner</th>
+<th data-bid="b419">Progress</th>
 </tr>
 </thead>
-<tbody data-bid="b460">
-<tr data-bid="b461">
-<td data-bid="b462">Authentication</td>
-<td data-bid="b463">Alice</td>
-<td data-bid="b464">100%</td>
+<tbody data-bid="b420">
+<tr data-bid="b421">
+<td data-bid="b422">Authentication</td>
+<td data-bid="b423">Alice</td>
+<td data-bid="b424">100%</td>
 </tr>
-<tr data-bid="b465">
-<td data-bid="b466">Database</td>
-<td data-bid="b467">Bob</td>
-<td data-bid="b468">80%</td>
+<tr data-bid="b425">
+<td data-bid="b426">Database</td>
+<td data-bid="b427">Bob</td>
+<td data-bid="b428">80%</td>
 </tr>
-<tr data-bid="b469">
-<td data-bid="b470">API Docs</td>
-<td data-bid="b471">Carol</td>
-<td data-bid="b472">100%</td>
+<tr data-bid="b429">
+<td data-bid="b430">API Docs</td>
+<td data-bid="b431">Carol</td>
+<td data-bid="b432">100%</td>
 </tr>
-<tr data-bid="b473">
-<td data-bid="b474">Analytics</td>
-<td data-bid="b475">Dave</td>
-<td data-bid="b476">60%</td>
+<tr data-bid="b433">
+<td data-bid="b434">Analytics</td>
+<td data-bid="b435">Dave</td>
+<td data-bid="b436">60%</td>
 </tr>
 </tbody>
 </table>
 </div>
-<div class="column" data-bid="b477" data-column-width="40%" style="flex:0 0 40%;">
-<h3 data-bid="b478">✍️ Notes</h3>
-<p data-bid="b479">All core features are either complete or in progress. Remaining items are performance tuning and UX polish.</p>
+<div class="column" data-bid="b437" data-column-width="default" style="flex:1 1 0;">
+<h3 data-bid="b438">✍️ Notes</h3>
+<p data-bid="b439">All core features are either complete or in progress. Remaining items are performance tuning and UX polish.</p>
 </div>
 </div>
 </div>
 <hr style="border:2px dashed #999;margin:40px 0;">
 <div class="slide" id="slide-20" data-idx="20">
-<h1 data-bid="b480">Two-column slide (Auto + default)</h1>
-<div class="columns" data-bid="b481">
-<div class="column" data-bid="b482" data-column-width="auto" style="flex:0 0 auto;">
-<h3 data-bid="b483">📋 Project Status Table</h3>
-<table data-bid="b484">
-<thead data-bid="b485">
-<tr data-bid="b486">
-<th data-bid="b487">Task</th>
-<th data-bid="b488">Owner</th>
-<th data-bid="b489">Progress</th>
+<h1 data-bid="b440">📈 Figures Demo (Columns)</h1>
+<div class="columns" data-bid="b441">
+<div class="column" data-bid="b442" data-column-width="60%" style="flex:0 0 60%;">
+<img alt="Bar Chart" data-bid="b443" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/assets/chart_bar.png" data-in-column="true" src="debug_assets/chart_bar.png"/></div>
+<div class="column" data-bid="b444" data-column-width="default" style="flex:1 1 0;">
+<p data-bid="b445">The bar chart shows relative task completion percentages. Authentication and API docs are finished; analytics is lagging.</p>
+</div>
+</div>
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;">
+<div class="slide" id="slide-21" data-idx="21">
+<h1 data-bid="b446">🖼️ Figure + Table Demo</h1>
+<div class="columns" data-bid="b447">
+<div class="column" data-bid="b448" data-column-width="default" style="flex:1 1 0;">
+<img alt="Pie Chart" data-bid="b449" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/assets/chart_pie.png" data-in-column="true" src="debug_assets/chart_pie.png"/></div>
+<div class="column" data-bid="b450" data-column-width="default" style="flex:1 1 0;">
+<table data-bid="b451">
+<thead data-bid="b452">
+<tr data-bid="b453">
+<th data-bid="b454">Segment</th>
+<th data-bid="b455">%</th>
 </tr>
 </thead>
-<tbody data-bid="b490">
-<tr data-bid="b491">
-<td data-bid="b492">Authentication</td>
-<td data-bid="b493">Alice</td>
-<td data-bid="b494">100%</td>
+<tbody data-bid="b456">
+<tr data-bid="b457">
+<td data-bid="b458">Complete</td>
+<td data-bid="b459">55</td>
 </tr>
-<tr data-bid="b495">
-<td data-bid="b496">Database</td>
-<td data-bid="b497">Bob</td>
-<td data-bid="b498">80%</td>
+<tr data-bid="b460">
+<td data-bid="b461">In-Progress</td>
+<td data-bid="b462">35</td>
 </tr>
-<tr data-bid="b499">
-<td data-bid="b500">API Docs</td>
-<td data-bid="b501">Carol</td>
-<td data-bid="b502">100%</td>
-</tr>
-<tr data-bid="b503">
-<td data-bid="b504">Analytics</td>
-<td data-bid="b505">Dave</td>
-<td data-bid="b506">60%</td>
+<tr data-bid="b463">
+<td data-bid="b464">Blocked</td>
+<td data-bid="b465">10</td>
 </tr>
 </tbody>
 </table>
 </div>
-<div class="column" data-bid="b507" data-column-width="default" style="flex:1 1 0;">
-<h3 data-bid="b508">✍️ Notes</h3>
-<p data-bid="b509">All core features are either complete or in progress. Remaining items are performance tuning and UX polish.</p>
+</div>
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;">
+<div class="slide" id="slide-22" data-idx="22">
+<h1 data-bid="b466">Two-column slide (60% / 40%)</h1>
+<div class="columns" data-bid="b467">
+<div class="column" data-bid="b468" data-column-width="60%" style="flex:0 0 60%;">
+<h3 data-bid="b469">📋 Project Status Table</h3>
+<table data-bid="b470">
+<thead data-bid="b471">
+<tr data-bid="b472">
+<th data-bid="b473">Task</th>
+<th data-bid="b474">Owner</th>
+<th data-bid="b475">Progress</th>
+</tr>
+</thead>
+<tbody data-bid="b476">
+<tr data-bid="b477">
+<td data-bid="b478">Authentication</td>
+<td data-bid="b479">Alice</td>
+<td data-bid="b480">100%</td>
+</tr>
+<tr data-bid="b481">
+<td data-bid="b482">Database</td>
+<td data-bid="b483">Bob</td>
+<td data-bid="b484">80%</td>
+</tr>
+<tr data-bid="b485">
+<td data-bid="b486">API Docs</td>
+<td data-bid="b487">Carol</td>
+<td data-bid="b488">100%</td>
+</tr>
+<tr data-bid="b489">
+<td data-bid="b490">Analytics</td>
+<td data-bid="b491">Dave</td>
+<td data-bid="b492">60%</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="column" data-bid="b493" data-column-width="40%" style="flex:0 0 40%;">
+<h3 data-bid="b494">✍️ Notes</h3>
+<p data-bid="b495">All core features are either complete or in progress. Remaining items are performance tuning and UX polish.</p>
+</div>
+</div>
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;">
+<div class="slide" id="slide-23" data-idx="23">
+<h1 data-bid="b496">Two-column slide (Auto + default)</h1>
+<div class="columns" data-bid="b497">
+<div class="column" data-bid="b498" data-column-width="auto" style="flex:0 0 auto;">
+<h3 data-bid="b499">📋 Project Status Table</h3>
+<table data-bid="b500">
+<thead data-bid="b501">
+<tr data-bid="b502">
+<th data-bid="b503">Task</th>
+<th data-bid="b504">Owner</th>
+<th data-bid="b505">Progress</th>
+</tr>
+</thead>
+<tbody data-bid="b506">
+<tr data-bid="b507">
+<td data-bid="b508">Authentication</td>
+<td data-bid="b509">Alice</td>
+<td data-bid="b510">100%</td>
+</tr>
+<tr data-bid="b511">
+<td data-bid="b512">Database</td>
+<td data-bid="b513">Bob</td>
+<td data-bid="b514">80%</td>
+</tr>
+<tr data-bid="b515">
+<td data-bid="b516">API Docs</td>
+<td data-bid="b517">Carol</td>
+<td data-bid="b518">100%</td>
+</tr>
+<tr data-bid="b519">
+<td data-bid="b520">Analytics</td>
+<td data-bid="b521">Dave</td>
+<td data-bid="b522">60%</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="column" data-bid="b523" data-column-width="default" style="flex:1 1 0;">
+<h3 data-bid="b524">✍️ Notes</h3>
+<p data-bid="b525">All core features are either complete or in progress. Remaining items are performance tuning and UX polish.</p>
 </div>
 </div>
 </div>

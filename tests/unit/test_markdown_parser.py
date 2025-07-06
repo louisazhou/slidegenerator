@@ -1,7 +1,7 @@
 """Test markdown parser functionality."""
 
 import pytest
-from slide_generator.markdown_parser import MarkdownParser, parse_markdown, parse_markdown_slides
+from slide_generator.markdown_parser import MarkdownParser
 
 
 def test_basic_markdown_parsing():
@@ -110,54 +110,6 @@ def test_empty_content_handling():
     # Empty slides with page breaks
     html_slides = parser.parse_with_page_breaks("---\n\n---")
     assert len(html_slides) == 0
-
-
-def test_extension_management():
-    """Test extension adding and listing."""
-    parser = MarkdownParser(extensions=['table'])
-    
-    # Should start with table
-    extensions = parser.get_extensions()
-    assert 'table' in extensions
-    
-    # Add new extension (note: markdown-it-py has built-in extensions)
-    parser.add_extension('footnotes')  # This is a no-op in markdown-it-py
-    extensions = parser.get_extensions()
-    # Should still have the original extensions since add_extension is a compatibility stub
-    assert 'table' in extensions
-    
-    # Don't add duplicates
-    parser.add_extension('table')
-    extensions = parser.get_extensions()
-    assert extensions.count('table') == 1
-
-
-def test_convenience_functions():
-    """Test convenience functions for simple usage."""
-    markdown_text = "# Test\n\nContent"
-    
-    # Simple parse
-    html = parse_markdown(markdown_text)
-    assert "<h1>Test</h1>" in html
-    assert "<p>Content</p>" in html
-    
-    # Parse slides
-    slides = parse_markdown_slides(markdown_text)
-    assert len(slides) == 1
-    assert "<h1>Test</h1>" in slides[0]
-
-
-def test_custom_extensions():
-    """Test parser with custom extensions."""
-    # Test with minimal extensions
-    parser = MarkdownParser(extensions=['markdown.extensions.extra'])
-    
-    markdown_text = "# Test\n\nContent"
-    html = parser.parse(markdown_text)
-    
-    assert "<h1>Test</h1>" in html
-    assert "<p>Content</p>" in html
-
 
 def test_parser_reset():
     """Test that parser resets properly between uses."""

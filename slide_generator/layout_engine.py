@@ -722,8 +722,17 @@ class LayoutEngine:
         soup = BeautifulSoup(processed_html, 'html.parser')
         bid_counter = 0
         for el in soup.select('.slide *'):
-            # Skip page-break markers – they are separate divs we already handle
+            # Skip page-break markers or admonition internal children (only top-level)
             if el.has_attr('data-bid'):
+                continue
+            skip = False
+            for parent in el.parents:
+                if parent.has_attr('class') and 'admonition' in parent.get('class', []):
+                    # If parent is admonition and it's not the same element, skip
+                    if parent != el:
+                        skip = True
+                        break
+            if skip:
                 continue
             el['data-bid'] = f'b{bid_counter}'
             bid_counter += 1

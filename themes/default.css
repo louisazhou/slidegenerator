@@ -209,3 +209,34 @@ mark {
 .white { color: rgb(255,255,255); }
 .yellow { color: rgb(255,255,0); }
 .dodgerblue { color: rgb(30,144,255); } 
+
+/* Admonition blocks */
+.admonition { padding: 8px 12px; margin: 10px 0; border-left: 4px solid #2196F3; background-color: #E8F0FF; }
+.admonition-title { font-weight: bold; margin-top: 0; margin-bottom: 4px; font-size: 10px; }
+.admonition.note { border-color:#2196F3; background:#E8F0FF; }
+.admonition.summary { border-color:#2196F3; background:#E8F0FF; }
+.admonition.info { border-color:#039BE5; background:#E0F7FA; }
+.admonition.tip { border-color:#388E3C; background:#E8F5E9; }
+.admonition.warning { border-color:#FB8C00; background:#FFF9C4; }
+.admonition.caution { border-color:#FB8C00; background:#FFF9C4; }
+.admonition.danger { border-color:#E53935; background:#FFEBEE; }
+.admonition.error { border-color:#D32F2F; background:#FFEBEE; }
+.admonition.failure { border-color:#D32F2F; background:#FFEBEE; }
+.admonition.attention { border-color:#FFA000; background:#FFF9DB; } 
+
+/* ------------------------------------------------------------------
+   Minimal icon support so browser & PPTX measure same height.
+   Keep emoji inline to avoid external assets; must sync with ICONS in
+   pptx_renderer.py.  Only prepend icon to title; spacing via trailing space. 
+-------------------------------------------------------------------*/
+.admonition-title::before { margin-right:4px; }
+.admonition.note > .admonition-title::before,
+.admonition.summary > .admonition-title::before { content:"📝"; }
+.admonition.info > .admonition-title::before { content:"ℹ️"; }
+.admonition.tip > .admonition-title::before { content:"💡"; }
+.admonition.warning > .admonition-title::before,
+.admonition.caution > .admonition-title::before { content:"⚠️"; }
+.admonition.danger > .admonition-title::before { content:"🚫"; }
+.admonition.error > .admonition-title::before,
+.admonition.failure > .admonition-title::before { content:"❌"; }
+.admonition.attention > .admonition-title::before { content:"👀"; } 

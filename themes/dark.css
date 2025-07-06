@@ -211,3 +211,30 @@ mark {
 .white { color: rgb(255,255,255); }
 .yellow { color: rgb(255,255,0); }
 .dodgerblue { color: rgb(30,144,255); } 
+
+/* Admonition blocks */
+.admonition { padding: 8px 12px; margin: 10px 0; border-left: 4px solid #2196F3; background-color: #424242; color:#e0e0e0; }
+.admonition-title { font-weight:bold;margin-top:0;margin-bottom:4px;font-size:10px; }
+
+.admonition.note,.admonition.summary { border-color:#42A5F5; background:#37474F; }
+.admonition.info { border-color:#29B6F6; background:#35525C; }
+.admonition.tip { border-color:#66BB6A; background:#2E3E2E; }
+.admonition.warning,.admonition.caution { border-color:#FFA726; background:#4A3D1B; }
+.admonition.danger,.admonition.error,.admonition.failure { border-color:#EF5350; background:#4C2626; }
+.admonition.attention { border-color:#FFB300; background:#4A3F14; } 
+
+/* ------------------------------------------------------------------
+   Minimal icon support (same mapping as default theme) so that browser
+   and PPTX have consistent sizing.
+-------------------------------------------------------------------*/
+.admonition-title::before { margin-right:4px; }
+.admonition.note > .admonition-title::before,
+.admonition.summary > .admonition-title::before { content:"📝"; }
+.admonition.info > .admonition-title::before { content:"ℹ️"; }
+.admonition.tip > .admonition-title::before { content:"💡"; }
+.admonition.warning > .admonition-title::before,
+.admonition.caution > .admonition-title::before { content:"⚠️"; }
+.admonition.danger > .admonition-title::before { content:"🚫"; }
+.admonition.error > .admonition-title::before,
+.admonition.failure > .admonition-title::before { content:"❌"; }
+.admonition.attention > .admonition-title::before { content:"👀"; } 

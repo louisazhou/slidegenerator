@@ -7,6 +7,7 @@ from pptx import Presentation
 from pptx.util import Inches, Pt
 from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN, MSO_AUTO_SIZE
+from pptx.enum.shapes import MSO_SHAPE
 from .models import Block
 from .theme_loader import get_css
 from typing import List, Dict, Optional
@@ -129,7 +130,7 @@ class PPTXRenderer:
         config['colors'] = self._extract_colors_from_css(css_content)
         
         # -----------------------------------------------------------------
-        # Inline colour classes (e.g. .red { color: #ff0000 })
+        # Inline colour classes (e.g. .red { color: #RRGGBB })
         # -----------------------------------------------------------------
         class_colors = {}
         class_color_pattern = r'\.([a-zA-Z0-9_-]+)\s*\{[^}]*?color:\s*([^;}{]+)'
@@ -153,7 +154,46 @@ class PPTXRenderer:
                 class_colors[cls] = rgb
 
         config['class_colors'] = class_colors
+
+        # -------------------------------------------------------------
+        # Admonition colour extraction (border & background per type)
+        # -------------------------------------------------------------
+        config['admonition_colors'] = self._extract_admonition_colors(css_content)
         return config
+
+    def _extract_admonition_colors(self, css_content: str):
+        """Parse CSS for .admonition.<type> colour rules, including combined selectors."""
+        import re
+        colours = {}
+        
+        # Pattern to match both single and combined selectors
+        # Matches: .admonition.type { ... } or .admonition.type1,.admonition.type2 { ... }
+        pattern = re.compile(r'\.admonition\.([^,\s{]+)(?:\s*,\s*\.admonition\.([^,\s{]+))*\s*\{([^}]+)\}', re.DOTALL)
+        
+        for match in pattern.finditer(css_content):
+            # Get the CSS rule body
+            rule_body = match.group(3) if len(match.groups()) >= 3 else match.group(2)
+            
+            # Extract all admonition types from the selector
+            # This handles both single (.admonition.note) and combined (.admonition.note,.admonition.summary) selectors
+            selector_part = match.group(0).split('{')[0]  # Get everything before the {
+            type_matches = re.findall(r'\.admonition\.(\w+)', selector_part)
+            
+            # Parse colors from the rule body
+            bg_match = re.search(r'background(?:-color)?:\s*([^;]+);', rule_body)
+            bar_match = re.search(r'border-color:\s*([^;]+);', rule_body)
+            
+            if bg_match or bar_match:
+                # Apply colors to all types found in this selector
+                for atype in type_matches:
+                    if atype not in colours:
+                        colours[atype] = {}
+                    if bg_match:
+                        colours[atype]['bg'] = bg_match.group(1).strip()
+                    if bar_match:
+                        colours[atype]['bar'] = bar_match.group(1).strip()
+        
+        return colours
     
     def _extract_colors_from_css(self, css_content: str) -> Dict:
         """Extract all colors from CSS theme file."""
@@ -737,6 +777,11 @@ class PPTXRenderer:
         else:
             width = Inches(block.width * x_scale)
         
+        # Handle admonition boxes (callout blocks) early
+        if block.tag == 'div' and block.className and 'admonition' in block.className:
+            self._add_admonition_box(slide, block, x_scale, y_scale)
+            return  # Avoid default text processing
+
         # Skip layout-only divs (both columns wrapper and individual column divs)
         if block.tag == 'div' and block.className and (
                 'columns' in block.className or 'column' in block.className):
@@ -933,6 +978,127 @@ class PPTXRenderer:
                         already = False
                     if not already:
                         run.font.color.rgb = default_rgb
+
+    # ------------------------------------------------------------------
+    # Admonition / Call-out box support
+    # ------------------------------------------------------------------
+    def _add_admonition_box(self, slide, block: Block, x_scale: float, y_scale: float):
+        """Draw a coloured call-out box based on admonition type."""
+        from pptx.util import Inches, Pt
+        from pptx.dml.color import RGBColor
+
+        # Map admonition types to colours & icons
+        ICONS = {
+            "note": "📌", "summary": "📝", "info": "ℹ️", "tip": "💡",
+            "warning": "⚠️", "caution": "⚠️", "danger": "🚫", "error": "❌",
+            "failure": "❌", "attention": "👀"
+        }
+
+        # Determine type from class list
+        type_ = "note"
+        if block.className:
+            for t in ICONS.keys():
+                if t in block.className:
+                    type_ = t
+                    break
+
+        # Resolve colours from theme CSS (parsed during theme_config)
+        theme_admon = self.theme_config.get('admonition_colors', {})
+        color_hex_bg = theme_admon.get(type_, {}).get('bg', '#E8F0FF')
+        color_hex_bar = theme_admon.get(type_, {}).get('bar', '#2196F3')
+
+        def to_rgb(hexc):
+            r,g,b = self._hex_to_rgb(hexc)
+            return RGBColor(r,g,b)
+
+        color_bg_rgb  = to_rgb(color_hex_bg)
+        color_bar_rgb = to_rgb(color_hex_bar)
+        icon_char = ICONS.get(type_, '💬')
+
+        # Geometry (reserve left bar width)
+        BAR_W_IN   = Inches(0.15)  # ~0.15in ≈ 14px
+        left = Inches(block.x * x_scale)
+        top = Inches(block.y * y_scale)
+        width = Inches(block.width * x_scale)
+        
+        # Reduce height to make boxes more compact - use 70% of measured height
+        # This removes excessive padding that comes from HTML measurement
+        height = Inches(block.height * y_scale * 0.7)
+
+        # Ensure minimum dimensions so text fits
+        if width < Inches(0.5):
+            width = Inches(0.5)
+        if height < Inches(0.3):
+            height = Inches(0.3)
+
+        # Draw left bar
+        bar_shape = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, left, top, BAR_W_IN, height)
+        bar_shape.fill.solid()
+        bar_shape.fill.fore_color.rgb = color_bar_rgb
+        bar_shape.line.fill.background()  # no border
+
+        # Main box (slightly inset due to bar)
+        box_left = left + BAR_W_IN
+        box_shape = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, box_left, top, width - BAR_W_IN, height)
+        box_shape.fill.solid()
+        box_shape.fill.fore_color.rgb = color_bg_rgb
+        box_shape.line.fill.background()
+        box_shape.shadow.inherit = False
+
+        # Combine title & body text
+        text_frame = box_shape.text_frame
+        text_frame.word_wrap = True
+        text_frame.clear()
+        
+        # Reduce text frame margins for more compact layout
+        text_frame.margin_left = Inches(0.05)   # Small left margin
+        text_frame.margin_right = Inches(0.05)  # Small right margin  
+        text_frame.margin_top = Inches(0.02)    # Minimal top margin
+        text_frame.margin_bottom = Inches(0.02) # Minimal bottom margin
+
+        # Split block.content into title + text if possible
+        from bs4 import BeautifulSoup
+
+        raw_html = block.content or ""
+        soup = BeautifulSoup(raw_html, "html.parser")
+
+        # Title: look for <p class="admonition-title"> else fallback to first line
+        title_el = soup.find("p", class_="admonition-title")
+        if title_el:
+            title_text = title_el.get_text(strip=True)
+            title_el.extract()  # remove from soup so body below is clean
+        else:
+            title_text = type_.capitalize()
+
+        # Body: text of remaining <p> elements or entire soup text if none
+        body_paras = [p.get_text(" ", strip=True) for p in soup.find_all("p")]
+        if body_paras:
+            body_text = "\n".join(body_paras)
+        else:
+            # Fallback: plain text split by lines (handles pre-sanitised text)
+            plain_lines = [ln.strip() for ln in raw_html.strip().split("\n") if ln.strip()]
+            body_text = "\n".join(plain_lines[1:]) if len(plain_lines) > 1 else ""
+
+        # Title paragraph
+        base_pt = self.theme_config['font_sizes']['p']
+        p_title = text_frame.paragraphs[0]
+        p_title.text = f"{icon_char} {title_text}"
+        p_title.font.bold = True
+        p_title.font.size = Pt(base_pt)
+        p_title.font.color.rgb = color_bar_rgb
+        p_title.alignment = PP_ALIGN.LEFT
+
+        # Body paragraph (if any)
+        if body_text:
+            p_body = text_frame.add_paragraph()
+            p_body.text = body_text
+            p_body.font.size = Pt(base_pt)
+            
+            # Use theme text color instead of hardcoded gray
+            theme_text_color = self.theme_config['colors']['text']
+            text_rgb = self._hex_to_rgb(theme_text_color)
+            p_body.font.color.rgb = RGBColor(*text_rgb)
+            p_body.alignment = PP_ALIGN.LEFT
 
     def _add_table_to_slide(self, slide, block: Block, left, top, width, height):
         """Add a PowerPoint table to the slide from HTML table content."""

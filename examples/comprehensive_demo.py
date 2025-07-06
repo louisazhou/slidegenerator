@@ -227,6 +227,58 @@ ORDER BY avg_rating DESC;
 
 ---
 
+# ⚠️ Admonition Demo
+
+Below are examples of every admonition style currently supported by the slide generator:
+
+!!! note "Note"
+    This is a friendly note.
+
+!!! info "Information"
+    Additional information for the reader.
+
+!!! tip "Tip"
+    Quick pro-tip to speed up your workflow.
+
+!!! warning "Watch Out"
+    Something risky here. Proceed with caution when performing this step.
+
+!!! caution "Caution"
+    Be careful — this operation cannot be undone.
+
+!!! danger "Danger"
+    Serious danger ahead. Backup your data first!
+
+!!! error "Error"
+    The system encountered a fatal error.
+
+!!! attention "Attention"
+    Eye-catching message for important updates.
+
+---
+
+# 🧩 Admonitions in Columns
+
+:::columns
+
+:::column
+
+!!! tip "Left Column"
+    Tips stay readable even in a narrow column.
+
+:::
+
+:::column
+
+!!! danger "Right Column"
+    Danger blocks render correctly alongside others.
+
+:::
+
+:::
+
+---
+
 # 🔧 Technical Architecture
 
 ## Core Components
