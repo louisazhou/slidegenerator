@@ -435,6 +435,54 @@ generator.generate(markdown_content, "dark_presentation.pptx")
 
 ---
 
+# 🧮 Math Equations Support
+
+The slide generator now supports LaTeX math equations using KaTeX rendering.
+
+## Inline Math
+
+You can include inline math like $E=mc^2$ or $\\alpha + \\beta = \\gamma$ directly in your text.
+
+The quadratic formula is $x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}$.
+
+## Block Math
+
+For display math, use double dollar signs:
+
+$$
+\\int_a^b f'(x) dx = f(b) - f(a)
+$$
+
+Euler's famous identity:
+
+$$
+e^{i\\pi} + 1 = 0
+$$
+
+## Complex Equations
+
+More complex equations like matrices are also supported:
+
+$$
+\\begin{pmatrix}
+a & b \\\\
+c & d
+\\end{pmatrix}
+\\begin{pmatrix}
+x \\\\
+y
+\\end{pmatrix}
+=
+\\begin{pmatrix}
+ax + by \\\\
+cx + dy
+\\end{pmatrix}
+$$
+
+Math equations are automatically cached for performance and work in both themes!
+
+---
+
 # 📈 Figures Demo
 
 Bar chart (80% width):

@@ -1,6 +1,7 @@
 """Layout engine for measuring HTML elements and pagination."""
 import tempfile
 import re
+import logging
 from typing import List, Optional, Callable
 from pathlib import Path
 from PIL import Image
@@ -10,6 +11,8 @@ from bs4 import BeautifulSoup
 from .models import Block
 from .markdown_parser import MarkdownParser
 from .theme_loader import get_css
+
+logger = logging.getLogger(__name__)
 
 
 class CSSVariableReader:
@@ -107,7 +110,7 @@ class ImageScaler:
                 aspect_ratio = original_width / original_height
         except Exception as e:
             if self.debug:
-                print(f"⚠️ Could not read image dimensions for {image_path}: {e}")
+                logger.warning(f"Could not read image dimensions for {image_path}: {e}")
             return None, None
         
         # Determine base dimensions
@@ -135,7 +138,7 @@ class ImageScaler:
                 target_width = target_height * aspect_ratio
                 if self.debug:
                     context = "column" if in_column else "full-width"
-                    print(f"📏 Image {image_path} height-constrained ({context}): {target_width:.0f}x{target_height:.0f}")
+                    logger.info(f"Image {image_path} height-constrained ({context}): {target_width:.0f}x{target_height:.0f}")
         
         elif scale_y:
             scale_factor = float(scale_y)
@@ -148,7 +151,7 @@ class ImageScaler:
                 target_height = target_width / aspect_ratio
                 if self.debug:
                     context = "column" if in_column else "full-width"
-                    print(f"📏 Image {image_path} width-constrained ({context}): {target_width:.0f}x{target_height:.0f}")
+                    logger.info(f"Image {image_path} width-constrained ({context}): {target_width:.0f}x{target_height:.0f}")
         else:
             return None, None
         
@@ -314,7 +317,7 @@ def _should_break_page(current_page: List[Block], new_block: Block, max_height: 
                     return False  # Explicit allow overrides other rules
         except Exception as e:
             # Log rule evaluation errors but don't break pagination
-            print(f"Warning: Pagination rule '{rule.name}' failed: {e}")
+            logger.warning(f"Pagination rule '{rule.name}' failed: {e}")
             continue
     
     return None  # No rule matched
@@ -473,6 +476,50 @@ class LayoutEngine:
         
         return full_html
     
+    def _process_math_equations(self, html_content: str, temp_dir: Optional[str]) -> str:
+        """
+        Process math equations in HTML content and convert them to images.
+        
+        Args:
+            html_content: HTML content that may contain math elements
+            temp_dir: Temporary directory for storing SVG files
+            
+        Returns:
+            HTML content with math equations replaced by img tags
+        """
+        # Check if there are any math elements in the HTML
+        if 'class="math' not in html_content:
+            return html_content
+        
+        if temp_dir is None:
+            import tempfile
+            temp_dir = tempfile.mkdtemp()
+        
+        try:
+            # Import math renderer
+            from .math_renderer import get_math_renderer
+            
+            # Get math renderer instance
+            math_renderer = get_math_renderer(debug=self.debug)
+            
+            # Process math elements - use images mode for PowerPoint compatibility
+            # This ensures math is converted to PNG images that work in PowerPoint
+            processed_html = math_renderer.render_math_html(html_content, temp_dir, mode="images")
+            
+            if self.debug:
+                logger.info(f"Processed math equations in HTML")
+            
+            return processed_html
+            
+        except ImportError:
+            if self.debug:
+                logger.warning("Math renderer not available, skipping math processing")
+            return html_content
+        except Exception as e:
+            if self.debug:
+                logger.warning(f"Error processing math equations: {e}")
+            return html_content
+    
     def measure_and_paginate(self, markdown_text: str, page_height: int = 540, temp_dir: Optional[str] = None) -> List[List[Block]]:
         """
         Convert markdown to HTML, measure layout, and return paginated Block objects.
@@ -488,19 +535,41 @@ class LayoutEngine:
         # Handle empty or whitespace-only content
         if not markdown_text or not markdown_text.strip():
             return []
-        
+
         # Convert markdown to HTML
-        html_content = self.convert_markdown_to_html(markdown_text)
+        html_raw = self.convert_markdown_to_html(markdown_text)
+
+        # Create two versions:
+        # 1. HTML version with beautiful KaTeX for browser preview
+        # 2. PowerPoint version with PNG images for display math, text for inline math
+        try:
+            from .math_renderer import get_math_renderer
+            math_renderer = get_math_renderer(debug=self.debug)
+            
+            # For HTML debug output - beautiful KaTeX rendering
+            preview_html = math_renderer.render_to_katex_html(html_raw)
+            
+            # For PowerPoint processing - display math as images, inline as text
+            measurement_html = math_renderer.render_to_images(html_raw)
+            
+        except Exception as e:
+            if self.debug:
+                logger.warning(f"Math renderer failed: {e}")
+            preview_html = html_raw
+            measurement_html = html_raw
+
+        # Use measurement_html for layout processing
+        html_content = measurement_html
         
         # If no HTML content was generated, return empty list
         if not html_content:
             return []
-        
+
         # Create a temporary directory for debug files if not provided
         if temp_dir is None:
             temp_dir = tempfile.mkdtemp()
             if self.debug:
-                print(f"Debug files will be saved to: {temp_dir}")
+                logger.info(f"Debug files will be saved to: {temp_dir}")
         
         # Store temp_dir for image processing
         self._current_temp_dir = temp_dir
@@ -509,31 +578,21 @@ class LayoutEngine:
         from .layout_parser import parse_html_with_structured_layout
         
         if self.debug:
-            print("🏗️  Using structured pptx-box parser")
-        
-        import asyncio
-        loop = asyncio.get_event_loop()
-        blocks = loop.run_until_complete(
-            parse_html_with_structured_layout(
-                html_content, 
-                theme=self.theme, 
-                temp_dir=temp_dir, 
-                debug=self.debug
-            )
-        )
-        
-        if self.debug:
-            print(f"🧱 Structured parser created {len(blocks)} Block objects")
+            logger.info("Using structured pptx-box parser")
         
         # Set up _original_soup for debug HTML generation and add bid attributes
         # Use the same BID assignment logic as legacy preprocessing
         processed_html_for_bids = self._preprocess_html_for_measurement(html_content)
         from bs4 import BeautifulSoup
-        self._original_soup = BeautifulSoup(processed_html_for_bids, 'html.parser')
         
-        # Re-run structured parser with properly preprocessed HTML
+        # Use structured parser with properly preprocessed HTML that has BIDs
         import asyncio
-        loop = asyncio.get_event_loop()
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        
         blocks = loop.run_until_complete(
             parse_html_with_structured_layout(
                 processed_html_for_bids, 
@@ -543,9 +602,15 @@ class LayoutEngine:
             )
         )
         
+        # Build _original_soup from the MEASUREMENT version to ensure BID consistency
+        # IMPORTANT: Use the SAME HTML structure that was used for block creation
+        self._original_soup = BeautifulSoup(processed_html_for_bids, 'html.parser')
+        
+        # The BIDs are already assigned in processed_html_for_bids, so we don't need to add them again
+
         # Apply intelligent image scaling based on column context 
         blocks = self._apply_intelligent_image_scaling_to_blocks(blocks, temp_dir)
-        
+
         # Merge consecutive list items into text blocks
         blocks = self._merge_consecutive_lists(blocks)
         
@@ -560,13 +625,14 @@ class LayoutEngine:
         
         # Paginate the blocks using usable height
         pages = paginate(blocks, usable_height_px, padding_px)
-        
+
         # Generate paginated debug HTML to show actual slide structure
         if self.debug:
-            # Debug HTML is simply the original HTML content after preprocessing
-            debug_html = html_content
+            # Use the already-rendered preview HTML (beautiful KaTeX)
+            debug_html = preview_html
+
             paginated_html = self._generate_paginated_debug_html(pages, debug_html, temp_dir)
-            
+                
             # Save to output directory for easy viewing
             current_working_dir = Path.cwd()
             output_dir = current_working_dir / "output"
@@ -575,15 +641,15 @@ class LayoutEngine:
             with open(output_dir / f"paginated_slides_{self.theme}.html", "w", encoding='utf-8') as f:
                 f.write(paginated_html)
                 
-            print(f"📄 Generated paginated HTML: output/paginated_slides_{self.theme}.html")
-            print(f"Layout engine created {len(pages)} pages:")
+            logger.info(f"📄 Generated paginated HTML: output/paginated_slides_{self.theme}.html")
+            logger.info(f"Layout engine created {len(pages)} pages:")
             for i, page in enumerate(pages):
-                print(f"  Page {i+1}: {len(page)} blocks (height limit: {usable_height_px}px)")
+                logger.info(f"  Page {i+1}: {len(page)} blocks (height limit: {usable_height_px}px)")
                 for j, block in enumerate(page):
                     oversized_flag = " [OVERSIZED]" if hasattr(block, 'oversized') and block.oversized else ""
-                    print(f"    Block {j+1}: {block.tag} ({block.height}px) - '{block.content[:30]}...'{oversized_flag}")
-        
-        return pages 
+                    logger.info(f"    Block {j+1}: {block.tag} ({block.height}px) - '{block.content[:30]}...'{oversized_flag}")
+
+        return pages
 
     def _preprocess_html_for_measurement(self, html_content):
         """
@@ -635,7 +701,7 @@ class LayoutEngine:
         
         if self.debug:
             initial_list_count = len(re.findall(r'<(ul|ol)[^>]*>', processed_html, flags=re.IGNORECASE))
-            print(f"🔄 Processing {initial_list_count} lists in HTML document...")
+            logger.info(f"🔄 Processing {initial_list_count} lists in HTML document...")
         
         while iteration < max_iterations:
             # Find all list starts
@@ -909,14 +975,14 @@ class LayoutEngine:
                     updated_html = updated_html.replace(old_src, new_src)
                     
                     if self.debug:
-                        print(f"📸 Copied image: {filename} -> {temp_image_path}")
+                        logger.info(f"📸 Copied image: {filename} -> {temp_image_path}")
                         
                 except Exception as e:
                     if self.debug:
-                        print(f"⚠️ Failed to copy image {file_path}: {e}")
+                        logger.warning(f"⚠️ Failed to copy image {file_path}: {e}")
             else:
                 if self.debug:
-                    print(f"⚠️ Image file not found: {file_path}")
+                    logger.warning(f"⚠️ Image file not found: {file_path}")
         
         return updated_html
 
@@ -932,7 +998,7 @@ class LayoutEngine:
         6. Provide final dimensions to PPTX
         """
         if self.debug:
-            print(f"🔍 Applying intelligent image scaling to {len(blocks)} blocks...")
+            logger.info(f"🔍 Applying intelligent image scaling to {len(blocks)} blocks...")
         
         # Track pagination context for accurate height constraints
         usable_height = self.css_reader.get_px_value('slide-height') - 2 * self.css_reader.get_px_value('slide-padding')
@@ -987,19 +1053,19 @@ class LayoutEngine:
                                     if self.debug:
                                         original_scale = float(scale_x) if scale_x else float(scale_y)
                                         new_scale = final_width / (self.image_scaler.content_width * (1 if not in_column else 0.5))
-                                        print(f"📐 Height-constrained scaling for {block.src}:")
-                                        print(f"   Original request: {original_scale*100}% -> {initial_width:.0f}x{initial_height:.0f}")
-                                        print(f"   Max reasonable height: {max_reasonable_height:.0f}px")
-                                        print(f"   Adjusted to: {new_scale*100:.1f}% -> {final_width:.0f}x{final_height:.0f}")
+                                        logger.info(f"📐 Height-constrained scaling for {block.src}:")
+                                        logger.info(f"   Original request: {original_scale*100}% -> {initial_width:.0f}x{initial_height:.0f}")
+                                        logger.info(f"   Max reasonable height: {max_reasonable_height:.0f}px")
+                                        logger.info(f"   Adjusted to: {new_scale*100:.1f}% -> {final_width:.0f}x{final_height:.0f}")
                             except Exception as e:
                                 if self.debug:
-                                    print(f"⚠️ Could not load image {block.src} for aspect ratio: {e}")
+                                    logger.warning(f"⚠️ Could not load image {block.src} for aspect ratio: {e}")
                                 # Fallback: use requested size but warn about potential overflow
                                 final_width = initial_width
                                 final_height = initial_height
                         elif self.debug:
                             # Image fits reasonably within slide bounds
-                            print(f"📐 Keeping original scale for {block.src}: {final_width:.0f}x{final_height:.0f} (within {max_reasonable_height:.0f}px limit)")
+                            logger.info(f"📐 Keeping original scale for {block.src}: {final_width:.0f}x{final_height:.0f} (within {max_reasonable_height:.0f}px limit)")
                         
                         # STEP 6: Update block dimensions with final calculated values
                         old_dims = f"{block.width}x{block.height}"
@@ -1009,11 +1075,11 @@ class LayoutEngine:
                         context = "column" if in_column else "full-width"
                         constraint_type = "height-constrained" if initial_height > max_reasonable_height else "original-scale"
                         if self.debug:
-                            print(f"📐 Scaled block {block.src}: {old_dims} -> {final_width:.0f}x{final_height:.0f} ({context}, {constraint_type})")
+                            logger.info(f"📐 Scaled block {block.src}: {old_dims} -> {final_width:.0f}x{final_height:.0f} ({context}, {constraint_type})")
                     elif self.debug:
-                        print(f"⚠️ Failed to calculate dimensions for {block.src}")
+                        logger.warning(f"⚠️ Failed to calculate dimensions for {block.src}")
                 elif self.debug and block.is_image():
-                    print(f"📍 Image block {block.src} has no scaling data")
+                    logger.warning(f"📍 Image block {block.src} has no scaling data")
         
         return blocks
 
@@ -1144,10 +1210,10 @@ class LayoutEngine:
                             shutil.copy2(source_file, dest_path)
                             copied_images[filename] = str(dest_path)
                             if self.debug:
-                                print(f"📁 Copied image for debug HTML: {filename}")
+                                logger.info(f"📁 Copied image for debug HTML: {filename}")
                         except Exception as e:
                             if self.debug:
-                                print(f"⚠️ Failed to copy image {filename}: {e}")
+                                logger.warning(f"⚠️ Failed to copy image {filename}: {e}")
 
             # Update img src to point to debug_assets folder
             def fix_img_src(match):
@@ -1173,31 +1239,49 @@ class LayoutEngine:
     
     def _slice_dom_for_page(self, bids):
         """Copy the minimal DOM subtrees that contain all bids, preserving wrappers
-        like .columns/.column so the debug HTML matches the measured layout."""
+        like .columns/.column so the debug HTML matches the measured layout.
+        """
         if not hasattr(self, '_original_soup') or self._original_soup is None:
             return ''
 
+        # Find all elements that match the BIDs for this page
         src = self._original_soup
-        copied_roots = []        # original nodes that will be deep-copied once
-        copied_root_ids = set()  # use id() to avoid duplicates
+        copied_roots = []
+        copied_root_ids = set()
 
+        # For each BID, find the corresponding element in the original soup
         for bid in bids:
             if not bid:
                 continue
+                
+            # Find the element with this BID
             node = src.select_one(f'[data-bid="{bid}"]')
+            
             if not node:
+                # If BID doesn't match, this is likely due to math processing differences
+                # Skip this BID but log it for debugging
+                if self.debug:
+                    logger.warning(f"Could not find element with BID {bid} in original soup")
                 continue
 
-            # climb until parent is the slide container (has class "slide")
+            # Find the top-level container for this element
+            # Climb up until we find a direct child of the slide container
             anc = node
-            while anc.parent and not (anc.parent.has_attr('class') and 'slide' in anc.parent['class']):
+            while anc.parent and not (anc.parent.has_attr('class') and 'slide' in anc.parent.get('class', [])):
                 anc = anc.parent
 
-            # anc is now direct child of slide (or node itself if already)
+            # anc is now a direct child of the slide container
+            # Make sure we don't duplicate root elements
             if id(anc) not in copied_root_ids:
                 copied_roots.append(anc)
                 copied_root_ids.add(id(anc))
 
-        # Deep-copy each root to avoid mutating original soup
-        html_parts = [str(root) for root in copied_roots]
+        # Convert each root to string and return
+        html_parts = []
+        for root in copied_roots:
+            # Make a deep copy to avoid modifying the original
+            from bs4 import BeautifulSoup
+            root_copy = BeautifulSoup(str(root), 'html.parser')
+            html_parts.append(str(root_copy))
+
         return '\n'.join(html_parts)

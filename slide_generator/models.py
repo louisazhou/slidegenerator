@@ -2,7 +2,7 @@
 Data models for the slide generator.
 """
 from dataclasses import dataclass
-from typing import Dict, Optional, Union
+from typing import Dict, Optional
 
 
 @dataclass

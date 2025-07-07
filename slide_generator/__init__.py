@@ -32,10 +32,12 @@ from .generator import SlideGenerator  # noqa: E402  (import after logger)
 from .layout_engine import LayoutEngine  # noqa: E402
 from .pptx_renderer import PPTXRenderer  # noqa: E402
 from .models import Block  # noqa: E402
+from .notebook import SlideNotebook  # noqa: E402
 
 __all__ = [
     "SlideGenerator",
     "LayoutEngine",
     "PPTXRenderer",
     "Block",
+    "SlideNotebook",
 ] 

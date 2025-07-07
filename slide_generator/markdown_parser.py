@@ -3,7 +3,6 @@ Enhanced markdown parser with support for multiple page break formats.
 """
 from typing import List, Optional
 from markdown_it import MarkdownIt
-from pathlib import Path
 import os
 
 
@@ -76,7 +75,11 @@ class MarkdownParser:
                 # .use(container_plugin, 'columns')   # see note above
                 # .use(container_plugin, 'column')    # see note above
                 .use(container_plugin, 'note')         # admonition / call-out boxes
-                .use(dollarmath_plugin)                # inline & block math
+                .use(dollarmath_plugin,
+                     allow_space=False,                # Don't allow spaces after/before $
+                     allow_digits=False,               # Don't allow digits before/after $
+                     double_inline=False               # Don't allow $$ in inline context
+                )                                     # inline & block math
                 .use(front_matter_plugin)              # YAML front-matter parsing
                 # .use(tasklists_plugin)              # see note above
                 # .use(deflist_plugin)                # see note above

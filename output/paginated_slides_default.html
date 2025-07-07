@@ -16,7 +16,7 @@
     --slide-padding: 19px;       /* Configurable slide padding in pixels */
     --slide-font-family: 'Arial'; /* Font family that matches PowerPoint exactly */
     --column-gap: 10px;          /* Gap between columns */
-    --column-padding: 3px;       /* Padding inside each column */
+    --column-padding: 5px;       /* Padding inside each column */
     
     /* Table styling deltas */
     --table-font-delta: -2pt;    /* Table font size = body - 2pt */
@@ -246,7 +246,58 @@ mark {
 .admonition.danger > .admonition-title::before { content:"🚫"; }
 .admonition.error > .admonition-title::before,
 .admonition.failure > .admonition-title::before { content:"❌"; }
-.admonition.attention > .admonition-title::before { content:"👀"; } 
+.admonition.attention > .admonition-title::before { content:"👀"; }
+
+/* Math equation styling */
+.math-image {
+    max-width: 100%;
+    height: auto;
+}
+
+.math-image.inline {
+    display: inline;
+    vertical-align: baseline;
+}
+
+.math-image.display {
+    display: block;
+    margin: 0.5em auto;
+}
+
+/* KaTeX HTML math styling */
+.math-html {
+    max-width: 100%;
+}
+
+.math-html.inline {
+    display: inline;
+}
+
+.math-html.display {
+    display: block;
+    text-align: center;
+    margin: 0.5em auto;
+}
+
+/* Hide MathML (accessibility) and show only visual HTML rendering */
+.katex-mathml {
+    display: none !important;
+}
+
+.katex-html {
+    display: inline !important;
+}
+
+/* Fix KaTeX SVG sizing issues */
+.katex svg {
+    max-width: 100% !important;
+    height: auto !important;
+}
+
+.katex .hide-tail {
+    max-width: 100% !important;
+    overflow: hidden !important;
+} 
 /* list bullet helper for debug view will be injected later */
 .slide{margin-bottom:40px;border:3px solid red;position:relative;}
 .slide:before{position:absolute;top:-26px;left:0;background:red;color:#fff;padding:4px 8px;font-weight:bold;content:attr(data-idx);}
@@ -637,184 +688,225 @@ generator.generate(markdown_content, "dark_presentation.pptx")
 </div>
 <hr style="border:2px dashed #999;margin:40px 0;">
 <div class="slide" id="slide-18" data-idx="18">
-<h1 data-bid="b405">📈 Figures Demo</h1>
-<p data-bid="b406">Bar chart (80% width):</p>
-<img alt="Bar Chart" data-bid="b407" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/assets/chart_bar.png" data-scale-type="x" data-scale-x="0.8" src="debug_assets/chart_bar.png"/>
-<p data-bid="b408">Pie chart (60% height):</p>
+<h1 data-bid="b405">🧮 Math Equations Support</h1>
+<p data-bid="b406">The slide generator now supports LaTeX math equations using KaTeX rendering.</p>
+<h2 data-bid="b407">Inline Math</h2>
+<p data-bid="b408">You can include inline math like $E=mc^2$ or $\alpha + \beta = \gamma$ directly in your text.</p>
+<p data-bid="b409">The quadratic formula is $x = \frac{-b \pm \sqrt{b^2-4ac}}{2a}$.</p>
+<h2 data-bid="b410">Block Math</h2>
+<p data-bid="b411">For display math, use double dollar signs:</p>
+<img alt="\int_a^b f'(x) dx = f(b) - f(a)" class="math-image display" data-bid="b412" data-height="21" data-latex="\int_a^b f'(x) dx = f(b) - f(a)" data-width="186" src="output/math_cache/bf431a6869429a2cfc02d2a0ba380a9c.png"/>
+<p data-bid="b413">Euler's famous identity:</p>
+<img alt="e^{i\pi} + 1 = 0" class="math-image display" data-bid="b414" data-height="21" data-latex="e^{i\pi} + 1 = 0" data-width="86" src="output/math_cache/ac5d9a8809d6c67262a18b15b0c77c5c.png"/>
+<h2 data-bid="b415">Complex Equations</h2>
+<p data-bid="b416">More complex equations like matrices are also supported:</p>
+<img alt="\begin{pmatrix}
+a &amp; b \\
+c &amp; d
+\end{pmatrix}
+\begin{pmatrix}
+x \\
+y
+\end{pmatrix}
+=
+\begin{pmatrix}
+ax + by \\
+cx + dy
+\end{pmatrix}" class="math-image display" data-bid="b417" data-height="21" data-latex="\begin{pmatrix}
+a &amp; b \\
+c &amp; d
+\end{pmatrix}
+\begin{pmatrix}
+x \\
+y
+\end{pmatrix}
+=
+\begin{pmatrix}
+ax + by \\
+cx + dy
+\end{pmatrix}" data-width="234" src="output/math_cache/47954c072bb41073c18ae093bd56ece1.png"/>
+<p data-bid="b418">Math equations are automatically cached for performance and work in both themes!</p>
 </div>
 <hr style="border:2px dashed #999;margin:40px 0;">
 <div class="slide" id="slide-19" data-idx="19">
-<img alt="Pie Chart" data-bid="b409" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/assets/chart_pie.png" data-scale-type="y" data-scale-y="0.6" src="debug_assets/chart_pie.png"/>
-<h1 data-bid="b410">Two-column slide: table on left, text on right</h1>
-<div class="columns" data-bid="b411">
-<div class="column" data-bid="b412" data-column-width="default" style="flex:1 1 0;">
-<h3 data-bid="b413">📋 Project Status Table</h3>
-<table data-bid="b414">
-<thead data-bid="b415">
-<tr data-bid="b416">
-<th data-bid="b417">Task</th>
-<th data-bid="b418">Owner</th>
-<th data-bid="b419">Progress</th>
+<h1 data-bid="b419">📈 Figures Demo</h1>
+<p data-bid="b420">Bar chart (80% width):</p>
+<img alt="Bar Chart" data-bid="b421" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/assets/chart_bar.png" data-scale-type="x" data-scale-x="0.8" src="debug_assets/chart_bar.png"/>
+<p data-bid="b422">Pie chart (60% height):</p>
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;">
+<div class="slide" id="slide-20" data-idx="20">
+<img alt="Pie Chart" data-bid="b423" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/assets/chart_pie.png" data-scale-type="y" data-scale-y="0.6" src="debug_assets/chart_pie.png"/>
+<h1 data-bid="b424">Two-column slide: table on left, text on right</h1>
+<div class="columns" data-bid="b425">
+<div class="column" data-bid="b426" data-column-width="default" style="flex:1 1 0;">
+<h3 data-bid="b427">📋 Project Status Table</h3>
+<table data-bid="b428">
+<thead data-bid="b429">
+<tr data-bid="b430">
+<th data-bid="b431">Task</th>
+<th data-bid="b432">Owner</th>
+<th data-bid="b433">Progress</th>
 </tr>
 </thead>
-<tbody data-bid="b420">
-<tr data-bid="b421">
-<td data-bid="b422">Authentication</td>
-<td data-bid="b423">Alice</td>
-<td data-bid="b424">100%</td>
+<tbody data-bid="b434">
+<tr data-bid="b435">
+<td data-bid="b436">Authentication</td>
+<td data-bid="b437">Alice</td>
+<td data-bid="b438">100%</td>
 </tr>
-<tr data-bid="b425">
-<td data-bid="b426">Database</td>
-<td data-bid="b427">Bob</td>
-<td data-bid="b428">80%</td>
+<tr data-bid="b439">
+<td data-bid="b440">Database</td>
+<td data-bid="b441">Bob</td>
+<td data-bid="b442">80%</td>
 </tr>
-<tr data-bid="b429">
-<td data-bid="b430">API Docs</td>
-<td data-bid="b431">Carol</td>
-<td data-bid="b432">100%</td>
+<tr data-bid="b443">
+<td data-bid="b444">API Docs</td>
+<td data-bid="b445">Carol</td>
+<td data-bid="b446">100%</td>
 </tr>
-<tr data-bid="b433">
-<td data-bid="b434">Analytics</td>
-<td data-bid="b435">Dave</td>
-<td data-bid="b436">60%</td>
+<tr data-bid="b447">
+<td data-bid="b448">Analytics</td>
+<td data-bid="b449">Dave</td>
+<td data-bid="b450">60%</td>
 </tr>
 </tbody>
 </table>
 </div>
-<div class="column" data-bid="b437" data-column-width="default" style="flex:1 1 0;">
-<h3 data-bid="b438">✍️ Notes</h3>
-<p data-bid="b439">All core features are either complete or in progress. Remaining items are performance tuning and UX polish.</p>
-</div>
-</div>
-</div>
-<hr style="border:2px dashed #999;margin:40px 0;">
-<div class="slide" id="slide-20" data-idx="20">
-<h1 data-bid="b440">📈 Figures Demo (Columns)</h1>
-<div class="columns" data-bid="b441">
-<div class="column" data-bid="b442" data-column-width="60%" style="flex:0 0 60%;">
-<img alt="Bar Chart" data-bid="b443" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/assets/chart_bar.png" data-in-column="true" src="debug_assets/chart_bar.png"/></div>
-<div class="column" data-bid="b444" data-column-width="default" style="flex:1 1 0;">
-<p data-bid="b445">The bar chart shows relative task completion percentages. Authentication and API docs are finished; analytics is lagging.</p>
+<div class="column" data-bid="b451" data-column-width="default" style="flex:1 1 0;">
+<h3 data-bid="b452">✍️ Notes</h3>
+<p data-bid="b453">All core features are either complete or in progress. Remaining items are performance tuning and UX polish.</p>
 </div>
 </div>
 </div>
 <hr style="border:2px dashed #999;margin:40px 0;">
 <div class="slide" id="slide-21" data-idx="21">
-<h1 data-bid="b446">🖼️ Figure + Table Demo</h1>
-<div class="columns" data-bid="b447">
-<div class="column" data-bid="b448" data-column-width="default" style="flex:1 1 0;">
-<img alt="Pie Chart" data-bid="b449" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/assets/chart_pie.png" data-in-column="true" src="debug_assets/chart_pie.png"/></div>
-<div class="column" data-bid="b450" data-column-width="default" style="flex:1 1 0;">
-<table data-bid="b451">
-<thead data-bid="b452">
-<tr data-bid="b453">
-<th data-bid="b454">Segment</th>
-<th data-bid="b455">%</th>
-</tr>
-</thead>
-<tbody data-bid="b456">
-<tr data-bid="b457">
-<td data-bid="b458">Complete</td>
-<td data-bid="b459">55</td>
-</tr>
-<tr data-bid="b460">
-<td data-bid="b461">In-Progress</td>
-<td data-bid="b462">35</td>
-</tr>
-<tr data-bid="b463">
-<td data-bid="b464">Blocked</td>
-<td data-bid="b465">10</td>
-</tr>
-</tbody>
-</table>
+<h1 data-bid="b454">📈 Figures Demo (Columns)</h1>
+<div class="columns" data-bid="b455">
+<div class="column" data-bid="b456" data-column-width="60%" style="flex:0 0 60%;">
+<img alt="Bar Chart" data-bid="b457" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/assets/chart_bar.png" data-in-column="true" src="debug_assets/chart_bar.png"/></div>
+<div class="column" data-bid="b458" data-column-width="default" style="flex:1 1 0;">
+<p data-bid="b459">The bar chart shows relative task completion percentages. Authentication and API docs are finished; analytics is lagging.</p>
 </div>
 </div>
 </div>
 <hr style="border:2px dashed #999;margin:40px 0;">
 <div class="slide" id="slide-22" data-idx="22">
-<h1 data-bid="b466">Two-column slide (60% / 40%)</h1>
-<div class="columns" data-bid="b467">
-<div class="column" data-bid="b468" data-column-width="60%" style="flex:0 0 60%;">
-<h3 data-bid="b469">📋 Project Status Table</h3>
-<table data-bid="b470">
-<thead data-bid="b471">
-<tr data-bid="b472">
-<th data-bid="b473">Task</th>
-<th data-bid="b474">Owner</th>
-<th data-bid="b475">Progress</th>
+<h1 data-bid="b460">🖼️ Figure + Table Demo</h1>
+<div class="columns" data-bid="b461">
+<div class="column" data-bid="b462" data-column-width="default" style="flex:1 1 0;">
+<img alt="Pie Chart" data-bid="b463" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/assets/chart_pie.png" data-in-column="true" src="debug_assets/chart_pie.png"/></div>
+<div class="column" data-bid="b464" data-column-width="default" style="flex:1 1 0;">
+<table data-bid="b465">
+<thead data-bid="b466">
+<tr data-bid="b467">
+<th data-bid="b468">Segment</th>
+<th data-bid="b469">%</th>
 </tr>
 </thead>
-<tbody data-bid="b476">
+<tbody data-bid="b470">
+<tr data-bid="b471">
+<td data-bid="b472">Complete</td>
+<td data-bid="b473">55</td>
+</tr>
+<tr data-bid="b474">
+<td data-bid="b475">In-Progress</td>
+<td data-bid="b476">35</td>
+</tr>
 <tr data-bid="b477">
-<td data-bid="b478">Authentication</td>
-<td data-bid="b479">Alice</td>
-<td data-bid="b480">100%</td>
-</tr>
-<tr data-bid="b481">
-<td data-bid="b482">Database</td>
-<td data-bid="b483">Bob</td>
-<td data-bid="b484">80%</td>
-</tr>
-<tr data-bid="b485">
-<td data-bid="b486">API Docs</td>
-<td data-bid="b487">Carol</td>
-<td data-bid="b488">100%</td>
-</tr>
-<tr data-bid="b489">
-<td data-bid="b490">Analytics</td>
-<td data-bid="b491">Dave</td>
-<td data-bid="b492">60%</td>
+<td data-bid="b478">Blocked</td>
+<td data-bid="b479">10</td>
 </tr>
 </tbody>
 </table>
-</div>
-<div class="column" data-bid="b493" data-column-width="40%" style="flex:0 0 40%;">
-<h3 data-bid="b494">✍️ Notes</h3>
-<p data-bid="b495">All core features are either complete or in progress. Remaining items are performance tuning and UX polish.</p>
 </div>
 </div>
 </div>
 <hr style="border:2px dashed #999;margin:40px 0;">
 <div class="slide" id="slide-23" data-idx="23">
-<h1 data-bid="b496">Two-column slide (Auto + default)</h1>
-<div class="columns" data-bid="b497">
-<div class="column" data-bid="b498" data-column-width="auto" style="flex:0 0 auto;">
-<h3 data-bid="b499">📋 Project Status Table</h3>
-<table data-bid="b500">
-<thead data-bid="b501">
-<tr data-bid="b502">
-<th data-bid="b503">Task</th>
-<th data-bid="b504">Owner</th>
-<th data-bid="b505">Progress</th>
+<h1 data-bid="b480">Two-column slide (60% / 40%)</h1>
+<div class="columns" data-bid="b481">
+<div class="column" data-bid="b482" data-column-width="60%" style="flex:0 0 60%;">
+<h3 data-bid="b483">📋 Project Status Table</h3>
+<table data-bid="b484">
+<thead data-bid="b485">
+<tr data-bid="b486">
+<th data-bid="b487">Task</th>
+<th data-bid="b488">Owner</th>
+<th data-bid="b489">Progress</th>
 </tr>
 </thead>
-<tbody data-bid="b506">
-<tr data-bid="b507">
-<td data-bid="b508">Authentication</td>
-<td data-bid="b509">Alice</td>
-<td data-bid="b510">100%</td>
+<tbody data-bid="b490">
+<tr data-bid="b491">
+<td data-bid="b492">Authentication</td>
+<td data-bid="b493">Alice</td>
+<td data-bid="b494">100%</td>
 </tr>
-<tr data-bid="b511">
-<td data-bid="b512">Database</td>
-<td data-bid="b513">Bob</td>
-<td data-bid="b514">80%</td>
+<tr data-bid="b495">
+<td data-bid="b496">Database</td>
+<td data-bid="b497">Bob</td>
+<td data-bid="b498">80%</td>
 </tr>
-<tr data-bid="b515">
-<td data-bid="b516">API Docs</td>
-<td data-bid="b517">Carol</td>
-<td data-bid="b518">100%</td>
+<tr data-bid="b499">
+<td data-bid="b500">API Docs</td>
+<td data-bid="b501">Carol</td>
+<td data-bid="b502">100%</td>
 </tr>
-<tr data-bid="b519">
-<td data-bid="b520">Analytics</td>
-<td data-bid="b521">Dave</td>
-<td data-bid="b522">60%</td>
+<tr data-bid="b503">
+<td data-bid="b504">Analytics</td>
+<td data-bid="b505">Dave</td>
+<td data-bid="b506">60%</td>
 </tr>
 </tbody>
 </table>
 </div>
-<div class="column" data-bid="b523" data-column-width="default" style="flex:1 1 0;">
-<h3 data-bid="b524">✍️ Notes</h3>
-<p data-bid="b525">All core features are either complete or in progress. Remaining items are performance tuning and UX polish.</p>
+<div class="column" data-bid="b507" data-column-width="40%" style="flex:0 0 40%;">
+<h3 data-bid="b508">✍️ Notes</h3>
+<p data-bid="b509">All core features are either complete or in progress. Remaining items are performance tuning and UX polish.</p>
+</div>
+</div>
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;">
+<div class="slide" id="slide-24" data-idx="24">
+<h1 data-bid="b510">Two-column slide (Auto + default)</h1>
+<div class="columns" data-bid="b511">
+<div class="column" data-bid="b512" data-column-width="auto" style="flex:0 0 auto;">
+<h3 data-bid="b513">📋 Project Status Table</h3>
+<table data-bid="b514">
+<thead data-bid="b515">
+<tr data-bid="b516">
+<th data-bid="b517">Task</th>
+<th data-bid="b518">Owner</th>
+<th data-bid="b519">Progress</th>
+</tr>
+</thead>
+<tbody data-bid="b520">
+<tr data-bid="b521">
+<td data-bid="b522">Authentication</td>
+<td data-bid="b523">Alice</td>
+<td data-bid="b524">100%</td>
+</tr>
+<tr data-bid="b525">
+<td data-bid="b526">Database</td>
+<td data-bid="b527">Bob</td>
+<td data-bid="b528">80%</td>
+</tr>
+<tr data-bid="b529">
+<td data-bid="b530">API Docs</td>
+<td data-bid="b531">Carol</td>
+<td data-bid="b532">100%</td>
+</tr>
+<tr data-bid="b533">
+<td data-bid="b534">Analytics</td>
+<td data-bid="b535">Dave</td>
+<td data-bid="b536">60%</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="column" data-bid="b537" data-column-width="default" style="flex:1 1 0;">
+<h3 data-bid="b538">✍️ Notes</h3>
+<p data-bid="b539">All core features are either complete or in progress. Remaining items are performance tuning and UX polish.</p>
 </div>
 </div>
 </div>

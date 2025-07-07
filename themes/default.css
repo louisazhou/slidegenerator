@@ -9,7 +9,7 @@
     --slide-padding: 19px;       /* Configurable slide padding in pixels */
     --slide-font-family: 'Arial'; /* Font family that matches PowerPoint exactly */
     --column-gap: 10px;          /* Gap between columns */
-    --column-padding: 3px;       /* Padding inside each column */
+    --column-padding: 5px;       /* Padding inside each column */
     
     /* Table styling deltas */
     --table-font-delta: -2pt;    /* Table font size = body - 2pt */
@@ -239,4 +239,55 @@ mark {
 .admonition.danger > .admonition-title::before { content:"🚫"; }
 .admonition.error > .admonition-title::before,
 .admonition.failure > .admonition-title::before { content:"❌"; }
-.admonition.attention > .admonition-title::before { content:"👀"; } 
+.admonition.attention > .admonition-title::before { content:"👀"; }
+
+/* Math equation styling */
+.math-image {
+    max-width: 100%;
+    height: auto;
+}
+
+.math-image.inline {
+    display: inline;
+    vertical-align: baseline;
+}
+
+.math-image.display {
+    display: block;
+    margin: 0.5em auto;
+}
+
+/* KaTeX HTML math styling */
+.math-html {
+    max-width: 100%;
+}
+
+.math-html.inline {
+    display: inline;
+}
+
+.math-html.display {
+    display: block;
+    text-align: center;
+    margin: 0.5em auto;
+}
+
+/* Hide MathML (accessibility) and show only visual HTML rendering */
+.katex-mathml {
+    display: none !important;
+}
+
+.katex-html {
+    display: inline !important;
+}
+
+/* Fix KaTeX SVG sizing issues */
+.katex svg {
+    max-width: 100% !important;
+    height: auto !important;
+}
+
+.katex .hide-tail {
+    max-width: 100% !important;
+    overflow: hidden !important;
+} 

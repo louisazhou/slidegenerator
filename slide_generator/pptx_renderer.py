@@ -1,23 +1,24 @@
 #!/usr/bin/env python3
 """
-PowerPoint renderer for converting layout blocks to PowerPoint slides.
+PowerPoint renderer that converts Block objects to PPTX slides.
 """
 
+
+import re
+import logging
+from typing import List, Optional, Dict
 from pptx import Presentation
 from pptx.util import Inches, Pt
 from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN, MSO_AUTO_SIZE
-from pptx.enum.shapes import MSO_SHAPE
+from pptx.enum.shapes import MSO_AUTO_SHAPE_TYPE
+from pptx.oxml.ns import qn, nsdecls
+from pptx.oxml import parse_xml
+
 from .models import Block
 from .theme_loader import get_css
-from typing import List, Dict, Optional
-import re
-from pptx.oxml import parse_xml
-from pptx.oxml.ns import nsdecls, qn
-import math
 
-# No hard-coded COLOR_MAP anymore.  Colors are parsed from theme CSS so users
-# can extend / override simply by adding `.mycolor { color: #RRGGBB; }`.
+logger = logging.getLogger(__name__)
 
 # Helper function to convert pixels to inches
 def px(pixels):
@@ -286,15 +287,14 @@ class PPTXRenderer:
         # Distribute content height evenly across rows
         target_row_height = px(content_height / rows)
         
-        # Debug output for precision matching
-        if hasattr(self, 'debug') and self.debug:
-            print(f"🎯 Precision table matching:")
-            print(f"  HTML table height: {html_table_height}px")
-            print(f"  CSS padding: {css_cell_padding}px, border: {css_border_width}px")
-            print(f"  Calculated row height: {content_height / rows:.1f}px")
-            print(f"  PowerPoint row height: {target_row_height}")
+        if self.debug:
+            logger.info(f"Precision table matching:")
+            logger.info(f"  HTML table height: {html_table_height}px")
+            logger.info(f"  CSS padding: {css_cell_padding}px, border: {css_border_width}px")
+            logger.info(f"  Calculated row height: {content_height / rows:.1f}px")
+            logger.info(f"  PowerPoint row height: {target_row_height}")
             if hasattr(block, 'table_column_widths'):
-                print(f"  Column widths: {block.table_column_widths}")
+                logger.info(f"  Column widths: {block.table_column_widths}")
         
         # Set row heights precisely
         for row in table.rows:
@@ -455,7 +455,7 @@ class PPTXRenderer:
         elif block.tag in ['ul', 'ol']:
             # FALLBACK: Handle ul/ol blocks that weren't converted by layout engine
             if self.debug:
-                print(f"⚠️ Processing unconverted {block.tag} block - converting to nested list format")
+                logger.warning(f"Processing unconverted {block.tag} block - converting to nested list format")
             
             # Extract list items from raw HTML, keep inline formatting tags
             raw_items = re.findall(r'<li[^>]*>(.*?)</li>', content, re.DOTALL | re.IGNORECASE)
@@ -499,7 +499,7 @@ class PPTXRenderer:
                 paragraph.line_spacing = float(css_line_height)
                 
             if self.debug:
-                print(f"📏 Applied CSS line-height: {css_line_height} -> {paragraph.line_spacing}")
+                logger.info(f"Applied CSS line-height: {css_line_height} -> {paragraph.line_spacing}")
     
     def _add_nested_list_paragraphs(self, first_paragraph, content, level_data, list_type):
         """Add additional paragraphs to handle nested lists within a text frame."""
@@ -512,7 +512,7 @@ class PPTXRenderer:
         if len(items) != len(levels):
             # Fallback: align to min length to avoid crashes but warn in debug mode
             if self.debug:
-                print(f"⚠️ Mismatch list items vs levels ({len(items)} vs {len(levels)}). Truncating to match.")
+                logger.warning(f"Mismatch list items vs levels ({len(items)} vs {len(levels)}). Truncating to match.")
             min_len = min(len(items), len(levels))
             items = items[:min_len]
             levels = levels[:min_len]
@@ -575,8 +575,8 @@ class PPTXRenderer:
         format_stack = []
         
         # Allow attributes inside tags (e.g., <strong data-bid="b12">)
-        # Extended to recognise <a> hyperlinks and <span class="color"> for inline colors
-        html_pattern = r'(</?(?:strong|em|code|mark|b|i|u|del|a|span)(?:\s+[^>]*?)?>)|([^<]+)'
+        # Extended to recognise <a> hyperlinks, <span class="color"> for inline colors, <img> for math, and <br> for line breaks
+        html_pattern = r'(</?(?:strong|em|code|mark|b|i|u|del|a|span)(?:\s+[^>]*?)?>|<img[^>]*>|<br[^>]*>)|([^<]+)'
         
         # Split content into tokens (tags and text)
         tokens = re.findall(html_pattern, html_content, re.IGNORECASE)
@@ -585,6 +585,11 @@ class PPTXRenderer:
             if tag:
                 # Normalise tag string for easier processing
                 tag_lower = tag.lower()
+                # Handle <br> tags (with optional attributes) as line breaks
+                if tag_lower.startswith('<br'):
+                    br_run = paragraph.add_run()
+                    br_run.text = '\n'
+                    continue
                 # Determine if this is a closing tag and extract the tag name without attributes
                 if tag_lower.startswith('</'):
                     close_match = re.match(r'</\s*([a-z0-9]+)', tag_lower)
@@ -737,7 +742,32 @@ class PPTXRenderer:
                     # Do not silently apply default size; leave as-is so missing size surfaces
         
         return  # Parsing complete – no additional defaults applied
+    
+    def _extract_and_handle_math(self, slide, block: Block, x_scale: float, y_scale: float):
+        """
+        Simple math processing for PowerPoint.
         
+        Math images are already embedded as <img> tags with math-image class.
+        Inline math is already converted to plain text like $E=mc^2$.
+        
+        Args:
+            slide: PowerPoint slide object
+            block: Block object containing the paragraph
+            x_scale: Horizontal scaling factor
+            y_scale: Vertical scaling factor
+        """
+        if not hasattr(block, 'content') or not block.content:
+            return
+            
+        # Math is already processed by the math renderer:
+        # - Display math: <img class="math-image display" src="path.png" data-latex="...">
+        # - Inline math: Plain text like $E=mc^2$
+        # 
+        # The layout engine handles math images as separate blocks,
+        # so this method doesn't need to do anything special.
+        # Just let the normal text processing handle inline math text.
+        pass
+    
     def _add_element_to_slide(self, slide, block: Block, adjusted_top_px: Optional[int] = None, extra_padding_px: int = 0):
         """Add a Block element to a slide."""
         # Convert browser coordinates to slide coordinates using CSS-defined dimensions
@@ -782,43 +812,84 @@ class PPTXRenderer:
             self._add_admonition_box(slide, block, x_scale, y_scale)
             return  # Avoid default text processing
 
+        # Handle math-only blocks (display math) early
+        if block.tag == 'div' and block.className and 'math-html' in block.className and 'display' in block.className:
+            if self.debug:
+                logger.info(f"Detected display math block: className='{block.className}'")
+            self._add_math_only_block(slide, block, x_scale, y_scale)
+            return  # Avoid default text processing
+
         # Skip layout-only divs (both columns wrapper and individual column divs)
         if block.tag == 'div' and block.className and (
                 'columns' in block.className or 'column' in block.className):
             return
+        
+        # Debug: Show all div blocks with className
+        if self.debug and block.tag == 'div' and block.className:
+            logger.info(f"DIV block: className='{block.className}', content preview: '{block.content[:50]}...'")
 
         # Handle images early (they may have empty textContent)
         if block.is_image():
             import os
             image_path = block.src
             
+            # Handle file:// URLs by extracting the actual path
+            if image_path and image_path.startswith('file://'):
+                image_path = image_path.replace('file://', '')
+            
+            # Check if this is a math image (SVG from KaTeX)
+            is_math_image = (
+                block.className and 'math-image' in block.className
+            ) or (
+                image_path and image_path.endswith('.svg') and 'math_cache' in image_path
+            )
+            
             # Debug image path resolution
             if self.debug:
-                print(f"🖼️ Attempting to add image: {image_path}")
-                print(f"   - Path exists: {os.path.exists(image_path) if image_path else False}")
-                print(f"   - Block dimensions: {block.width}x{block.height}px")
+                if is_math_image:
+                    logger.info(f"Attempting to add math image: {image_path}")
+                else:
+                    logger.info(f"Attempting to add image: {image_path}")
+                logger.info(f"   - Path exists: {os.path.exists(image_path) if image_path else False}")
+                logger.info(f"   - Block dimensions: {block.width}x{block.height}px")
                 
             try:
                 if image_path and os.path.exists(image_path):
-                    slide.shapes.add_picture(image_path, Inches(block.x * x_scale), top, width=width, height=height)
+                    if is_math_image:
+                        # Skip inline math images (treated as LaTeX text elsewhere)
+                        if 'inline' in (block.className or ''):
+                            # Do nothing – inline math handled as text inside paragraph
+                            if self.debug:
+                                logger.info("Skipped inline math image (rendered as text)")
+                        else:
+                            # Handle display math images with special positioning
+                            self._add_math_image_to_slide(slide, block, x_scale, y_scale, image_path)
+                    else:
+                        # Regular image handling
+                        slide.shapes.add_picture(image_path, Inches(block.x * x_scale), top, width=width, height=height)
+                    
                     if self.debug:
-                        print(f"✅ Successfully added image to slide")
+                        logger.info(f"Successfully added {'math ' if is_math_image else ''}image to slide")
                     return  # Successfully added image, exit early
                 else:
                     if self.debug:
-                        print(f"⚠️ Image file not accessible: {image_path}")
+                        logger.warning(f"Image file not accessible: {image_path}")
                     raise FileNotFoundError(f"Image file not found: {image_path}")
             except Exception as e:
                 # fallback placeholder with more details
                 if self.debug:
-                    print(f"❌ Failed to add image: {e}")
+                    logger.error(f"Failed to add image: {e}")
                 placeholder = slide.shapes.add_textbox(Inches(block.x * x_scale), top, width, height)
-                placeholder.text_frame.text = f"[Missing image: {os.path.basename(image_path) if image_path else 'No src'}]"
+                placeholder.text_frame.text = f"[Missing {'math ' if is_math_image else ''}image: {os.path.basename(image_path) if image_path else 'No src'}]"
             return
         
         # Skip elements that have no textual content
         if not block.content.strip():
             return
+        
+        # Handle both inline and block math (both HTML and image formats) before processing text content
+        if any(s in block.content for s in ['math-html', 'math-image', 'data-latex']):
+            self._extract_and_handle_math(slide, block, x_scale, y_scale)
         
         # Ensure minimum dimensions for text boxes
         if width < Inches(0.5):
@@ -876,7 +947,7 @@ class PPTXRenderer:
         elif block.tag in ['ul', 'ol']:
             # FALLBACK: Handle ul/ol blocks that weren't converted by layout engine
             if self.debug:
-                print(f"⚠️ Processing unconverted {block.tag} block - converting to nested list format")
+                logger.warning(f"Processing unconverted {block.tag} block - converting to nested list format")
             
             # Extract list items from raw HTML, keep inline formatting tags
             raw_items = re.findall(r'<li[^>]*>(.*?)</li>', content, re.DOTALL | re.IGNORECASE)
@@ -1032,14 +1103,14 @@ class PPTXRenderer:
             height = Inches(0.3)
 
         # Draw left bar
-        bar_shape = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, left, top, BAR_W_IN, height)
+        bar_shape = slide.shapes.add_shape(MSO_AUTO_SHAPE_TYPE.RECTANGLE, left, top, BAR_W_IN, height)
         bar_shape.fill.solid()
         bar_shape.fill.fore_color.rgb = color_bar_rgb
         bar_shape.line.fill.background()  # no border
 
         # Main box (slightly inset due to bar)
         box_left = left + BAR_W_IN
-        box_shape = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, box_left, top, width - BAR_W_IN, height)
+        box_shape = slide.shapes.add_shape(MSO_AUTO_SHAPE_TYPE.RECTANGLE, box_left, top, width - BAR_W_IN, height)
         box_shape.fill.solid()
         box_shape.fill.fore_color.rgb = color_bg_rgb
         box_shape.line.fill.background()
@@ -1099,6 +1170,166 @@ class PPTXRenderer:
             text_rgb = self._hex_to_rgb(theme_text_color)
             p_body.font.color.rgb = RGBColor(*text_rgb)
             p_body.alignment = PP_ALIGN.LEFT
+
+
+
+
+
+    def _add_math_image_to_slide(self, slide, block: Block, x_scale: float, y_scale: float, image_path: str):
+        """
+        Add a math image (SVG) to the slide with proper positioning and scaling.
+        
+        Args:
+            slide: PowerPoint slide object
+            block: Block object containing math image information
+            x_scale: Horizontal scaling factor
+            y_scale: Vertical scaling factor
+            image_path: Path to the SVG math image
+        """
+        from pptx.util import Inches
+        import os
+        import re
+        
+        # Calculate position and size
+        left = Inches(block.x * x_scale)
+        top = Inches(block.y * y_scale)
+        
+        # Use the math metadata if available for more accurate sizing
+        if hasattr(block, 'content') and 'data-math-width' in block.content:
+            import re
+            width_match = re.search(r'data-math-width="([^"]+)"', block.content)
+            height_match = re.search(r'data-math-height="([^"]+)"', block.content)
+            baseline_match = re.search(r'data-math-baseline="([^"]+)"', block.content)
+            
+            if width_match and height_match:
+                # Use the actual math dimensions
+                math_width_px = float(width_match.group(1))
+                math_height_px = float(height_match.group(1))
+                baseline_px = float(baseline_match.group(1)) if baseline_match else 0
+                
+                width = Inches(math_width_px * x_scale)
+                height = Inches(math_height_px * y_scale)
+                
+                # Adjust vertical position for baseline alignment if it's inline math
+                if block.className and 'inline' in block.className:
+                    # Adjust top position to align baseline properly
+                    baseline_offset = Inches(baseline_px * y_scale)
+                    top = top - baseline_offset
+            else:
+                # Fallback to block dimensions
+                width = Inches(block.width * x_scale)
+                height = Inches(block.height * y_scale)
+        else:
+            # Fallback to block dimensions
+            width = Inches(block.width * x_scale)
+            height = Inches(block.height * y_scale)
+        
+        # Ensure minimum dimensions
+        min_size = Inches(0.1)
+        if width < min_size:
+            width = min_size
+        if height < min_size:
+            height = min_size
+        
+        try:
+            # Math images are now PNG files with transparent background, no conversion needed
+            if self.debug:
+                logger.info(f"Adding math PNG image: {os.path.basename(image_path)}")
+            
+            # Add the math image to the slide
+            slide.shapes.add_picture(image_path, left, top, width=width, height=height)
+            
+            # Set alt text for accessibility if available
+            if hasattr(block, 'content') and 'data-latex' in block.content:
+                latex_match = re.search(r'data-latex="([^"]+)"', block.content)
+                if latex_match:
+                    latex_text = latex_match.group(1)
+                    # Note: Setting alt text on images in python-pptx requires accessing the shape
+                    # after it's added, but this is optional for now
+                    pass
+            
+        except Exception as e:
+            if self.debug:
+                logger.warning(f"Failed to add math image: {e}")
+            
+            # Skip math equation if we can't convert it to PNG
+            # This ensures Google Slides compatibility by only using actual images
+            return
+        
+        if self.debug:
+            logger.info("Successfully added math image to slide")
+    
+    def _add_math_only_block(self, slide, block: Block, x_scale: float, y_scale: float):
+        """
+        Handle blocks that contain only display math images.
+        
+        Args:
+            slide: PowerPoint slide object
+            block: Block object containing math image
+            x_scale: Horizontal scaling factor
+            y_scale: Vertical scaling factor
+        """
+        if not hasattr(block, 'content') or not block.content:
+            return
+        
+        import re
+        import os
+        
+        # Extract image path and LaTeX from the img tag
+        src_match = re.search(r'src="([^"]*)"', block.content)
+        latex_match = re.search(r'data-latex="([^"]*)"', block.content)
+        
+        if not src_match:
+            if self.debug:
+                logger.warning(f"No image source found in math block: {block.content[:100]}...")
+            return
+            
+        image_path = src_match.group(1)
+        latex = latex_match.group(1) if latex_match else "math equation"
+        
+        if self.debug:
+            logger.info(f"Processing display math image: {latex}")
+        
+        try:
+            if os.path.exists(image_path):
+                # Get image dimensions from data attributes
+                width_match = re.search(r'data-width="([^"]*)"', block.content)
+                height_match = re.search(r'data-height="([^"]*)"', block.content)
+                
+                if width_match and height_match:
+                    math_width_px = float(width_match.group(1))
+                    math_height_px = float(height_match.group(1))
+                else:
+                    # Fallback to block dimensions
+                    math_width_px = block.width
+                    math_height_px = block.height
+                
+                # Convert to inches for PowerPoint
+                math_width_in = math_width_px / 96.0
+                math_height_in = math_height_px / 96.0
+                
+                # Center the math horizontally within the block
+                block_width_in = block.width * x_scale
+                left_offset = max(0, (block_width_in - math_width_in) / 2)
+                
+                left = Inches(block.x * x_scale + left_offset)
+                top = Inches(block.y * y_scale)
+                width = Inches(math_width_in)
+                height = Inches(math_height_in)
+                
+                # Add the math image to the slide
+                slide.shapes.add_picture(image_path, left, top, width=width, height=height)
+                
+                if self.debug:
+                    logger.info(f"Added display math image: {latex}")
+                    
+            else:
+                if self.debug:
+                    logger.warning(f"Math image not found: {image_path}")
+                
+        except Exception as e:
+            if self.debug:
+                logger.warning(f"Failed to add math image: {e}")
 
     def _add_table_to_slide(self, slide, block: Block, left, top, width, height):
         """Add a PowerPoint table to the slide from HTML table content."""
@@ -1188,8 +1419,8 @@ class PPTXRenderer:
                     # See: https://github.com/scanny/python-pptx/issues/71
                     # However, basic border styling and table layout work correctly
                     if self.debug and row_idx == 0 and col_idx == 0:
-                        print(f"✅ TABLE STYLING: Applied theme '{self.theme}' styling successfully")
-                        print(f"📏 Border color: {border_color} (PowerPoint defaults used)")
+                        logger.info(f"TABLE STYLING: Applied theme '{self.theme}' styling successfully")
+                        logger.info(f"Border color: {border_color} (PowerPoint defaults used)")
         
         # COMPLETELY disable PowerPoint's automatic table styling
         table.first_row = False
@@ -1202,7 +1433,7 @@ class PPTXRenderer:
         # Do NOT apply any built-in PowerPoint table style – we want raw grid only
         # Built-in styles override our column widths and look inconsistent with the CSS theme
         if self.debug:
-            print("🎨 Skipped built-in PowerPoint table styles – using raw XML borders only")
+            logger.info("Skipped built-in PowerPoint table styles – using raw XML borders only")
         
         # Use configurable safety padding from CSS theme for table width compensation
         width_safety = self.theme_config['table_deltas']['width_safety']  # from CSS: --table-width-safety
@@ -1232,10 +1463,10 @@ class PPTXRenderer:
                     border_rgb = self._hex_to_rgb(border_color)
                     cell.border_color = RGBColor(*border_rgb)
                     if self.debug and row_idx == 0 and col_idx == 0:
-                        print(f"🔧 Applied border_color API: {border_color} -> RGB{border_rgb}")
+                        logger.info(f"🔧 Applied border_color API: {border_color} -> RGB{border_rgb}")
                 except Exception as e:
                     if self.debug and row_idx == 0 and col_idx == 0:
-                        print(f"⚠️ border_color API failed: {e}")
+                        logger.error(f"⚠️ border_color API failed: {e}")
                     pass
                 
                 # Apply text color and table-specific font sizing
@@ -1259,8 +1490,8 @@ class PPTXRenderer:
                 # See: https://github.com/scanny/python-pptx/issues/71
                 # However, basic border styling and table layout work correctly
                 if self.debug and row_idx == 0 and col_idx == 0:
-                    print(f"✅ TABLE STYLING: Applied theme '{self.theme}' styling successfully")
-                    print(f"📏 Border color: {border_color} (PowerPoint defaults used)")
+                    logger.info(f"TABLE STYLING: Applied theme '{self.theme}' styling successfully")
+                    logger.info(f"Border color: {border_color} (PowerPoint defaults used)")
         
         # ------------------------------------------------------------------
         # FINAL GUARANTEED BORDER PASS USING RAW XML
@@ -1272,10 +1503,10 @@ class PPTXRenderer:
             # Using standard border application (color only)
             self._apply_table_borders(table, border_hex_final)
             if self.debug:
-                print(f"🔒 Applied raw XML borders with color #{border_hex_final} (thickness: PowerPoint default)")
+                logger.info(f"🔒 Applied raw XML borders with color #{border_hex_final} (thickness: PowerPoint default)")
         except Exception as e:
             if self.debug:
-                print(f"⚠️  Raw XML border application failed: {e}")
+                logger.error(f"⚠️  Raw XML border application failed: {e}")
             pass
         
         # ------------------------------------------------------------------
@@ -1308,10 +1539,10 @@ class PPTXRenderer:
                 tblPr.append(parse_xml(grid_xml))
 
                 if self.debug:
-                    print(f"🔲 Injected tblBorders grid: 1pt #{hex_col} (thickness: PowerPoint default)")
+                    logger.info(f"🔲 Injected tblBorders grid: 1pt #{hex_col} (thickness: PowerPoint default)")
             except Exception as e:
                 if self.debug:
-                    print(f"⚠️  tblBorders injection failed: {e}")
+                    logger.error(f"⚠️  tblBorders injection failed: {e}")
                 pass
         
         # Helper ends here (no recursive calls)
@@ -1411,5 +1642,5 @@ class PPTXRenderer:
                         ln.append(parse_xml('<a:tailEnd type="none" w="med" len="med"/>'))
         
         if self.debug:
-            print(f"🔲 Applied enhanced table borders: w=12700 EMUs, color=#{color_hex}")
-            print(f"   Added headEnd/tailEnd for reliable line width application") 
+            logger.info(f"🔲 Applied enhanced table borders: w=12700 EMUs, color=#{color_hex}")
+            logger.info(f"   Added headEnd/tailEnd for reliable line width application") 

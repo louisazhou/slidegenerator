@@ -1,18 +1,18 @@
+#!/usr/bin/env python3
 """
-Layout parser implementing the pptx-box approach for structured HTML parsing.
-
-This module uses Puppeteer to wrap HTML elements in structured containers with
-layout data attributes, then uses BeautifulSoup to parse this information without
-relying on regex patterns.
+Layout parser for converting HTML to Block objects with precise measurements.
 """
 
-import os
 import json
-from typing import List, Dict, Any, Optional
+import logging
+import os
+from typing import List, Optional, Dict, Any
 from bs4 import BeautifulSoup
 
 from .models import Block
 from .theme_loader import get_css
+
+logger = logging.getLogger(__name__)
 
 
 class StructuredLayoutParser:
@@ -194,6 +194,7 @@ class StructuredLayoutParser:
                         scaleY: el.getAttribute('data-scale-y'),
                         scaleType: el.getAttribute('data-scale-type'),
                         inColumn: el.getAttribute('data-in-column'),
+                        html: el.outerHTML,  // Preserve full HTML with all attributes
                         originalTag: tagName  // Preserve original tag
                     };
                 }
@@ -309,6 +310,39 @@ class StructuredLayoutParser:
                 }
                 
                 // For text elements, preserve formatting AND original tag
+                // Special handling for paragraphs with inline math images
+                if (tagName === 'p' && el.querySelector('img.math-image.inline')) {
+                    // This paragraph contains inline math images
+                    // We need to preserve the HTML structure but ensure math images are handled correctly
+                    let processedHTML = el.innerHTML.trim();
+                    
+                    // Find all inline math images and ensure they're properly formatted
+                    const mathImages = el.querySelectorAll('img.math-image.inline');
+                    mathImages.forEach(img => {
+                        // Ensure the math image has all necessary attributes
+                        const latex = img.getAttribute('data-latex') || img.getAttribute('alt') || '';
+                        const width = img.getAttribute('data-math-width') || '20';
+                        const height = img.getAttribute('data-math-height') || '20';
+                        const baseline = img.getAttribute('data-math-baseline') || '0';
+                        const src = img.getAttribute('src') || '';
+                        
+                        // Create a properly formatted math image tag
+                        const mathImgHTML = `<img alt="${latex}" class="math-image inline" data-latex="${latex}" data-math-width="${width}" data-math-height="${height}" data-math-baseline="${baseline}" src="${src}" style="vertical-align: -${baseline}px;"/>`;
+                        
+                        // Replace the original img tag with the properly formatted one
+                        processedHTML = processedHTML.replace(img.outerHTML, mathImgHTML);
+                    });
+                    
+                    return {
+                        type: 'text',
+                        html: processedHTML,
+                        text: el.textContent.trim(),
+                        originalTag: tagName,
+                        hasInlineMath: true  // Flag to indicate this paragraph has inline math
+                    };
+                }
+                
+                // For other text elements, preserve formatting AND original tag
                 return {
                     type: 'text',
                     html: el.innerHTML.trim(),
@@ -501,7 +535,7 @@ class StructuredLayoutParser:
                 
             except (ValueError, TypeError) as e:
                 if self.debug:
-                    print(f"Warning: Failed to parse pptx-box element: {e}")
+                    logger.warning(f"Failed to parse pptx-box element: {e}")
                 continue
         
         return elements
@@ -568,7 +602,8 @@ class StructuredLayoutParser:
                 text_content = content.get('html', content.get('text', ''))
                 # No need to re-parse tag from HTML since we have originalTag
             elif content['type'] == 'image':
-                text_content = content.get('alt', '')
+                # For images, preserve the original HTML to retain data attributes
+                text_content = content.get('html', content.get('alt', ''))
             else:
                 text_content = content.get('text', str(content))
             

@@ -4,8 +4,11 @@ Main slide generator module that ties together layout engine and PowerPoint rend
 """
 
 import os
+import logging
 from .layout_engine import LayoutEngine
 from .pptx_renderer import PPTXRenderer
+
+logger = logging.getLogger(__name__)
 
 
 class SlideGenerator:
@@ -45,7 +48,7 @@ class SlideGenerator:
         # Create a temp directory for this generation session
         temp_dir = tempfile.mkdtemp()
         if self.debug:
-            print(f"🗂️ Using temp directory: {temp_dir}")
+            logger.info(f"Using temp directory: {temp_dir}")
         
         # Step 1: Layout engine processes markdown and returns paginated blocks
         pages = self.layout_engine.measure_and_paginate(
@@ -57,9 +60,9 @@ class SlideGenerator:
         self.pptx_renderer.render(pages, output_path)
         
         if self.debug:
-            print(f"Generated presentation saved to: {output_path}")
-            print(f"Total pages: {len(pages)}")
-            print(f"Theme: {self.theme}")
+            logger.info(f"Generated presentation saved to: {output_path}")
+            logger.info(f"Total pages: {len(pages)}")
+            logger.info(f"Theme: {self.theme}")
         
         return output_path
 
@@ -69,7 +72,7 @@ def main():
     import sys
     
     if len(sys.argv) < 2:
-        print("Usage: python -m slide_generator.generator <markdown_file> [output_file] [theme]")
+        logger.error("Usage: python -m slide_generator.generator <markdown_file> [output_file] [theme]")
         sys.exit(1)
     
     markdown_file = sys.argv[1]
@@ -78,7 +81,7 @@ def main():
     
     # Check if markdown file exists
     if not os.path.exists(markdown_file):
-        print(f"Error: Markdown file '{markdown_file}' not found.")
+        logger.error(f"Markdown file '{markdown_file}' not found.")
         sys.exit(1)
     
     # Read markdown content
@@ -89,7 +92,7 @@ def main():
     generator = SlideGenerator(debug=True, theme=theme)
     output_path = generator.generate(markdown_content, output_file)
     
-    print(f"Slides generated successfully: {output_path}")
+    logger.info(f"Slides generated successfully: {output_path}")
 
 
 if __name__ == "__main__":
