@@ -856,24 +856,18 @@ class PPTXRenderer:
             try:
                 if image_path and os.path.exists(image_path):
                     if is_math_image:
-                        # Skip inline math images (treated as LaTeX text elsewhere)
-                        if 'inline' in (block.className or ''):
-                            # Do nothing – inline math handled as text inside paragraph
-                            if self.debug:
-                                logger.info("Skipped inline math image (rendered as text)")
-                        else:
-                            # Handle display math images with special positioning
-                            self._add_math_image_to_slide(slide, block, x_scale, y_scale, image_path)
+                        # Handle math images with special positioning
+                        self._add_math_image_to_slide(slide, block, x_scale, y_scale, image_path)
                     else:
                         # Regular image handling
                         slide.shapes.add_picture(image_path, Inches(block.x * x_scale), top, width=width, height=height)
                     
                     if self.debug:
-                        logger.info(f"Successfully added {'math ' if is_math_image else ''}image to slide")
+                        print(f"✅ Successfully added {'math ' if is_math_image else ''}image to slide")
                     return  # Successfully added image, exit early
                 else:
                     if self.debug:
-                        logger.warning(f"Image file not accessible: {image_path}")
+                        print(f"⚠️ Image file not accessible: {image_path}")
                     raise FileNotFoundError(f"Image file not found: {image_path}")
             except Exception as e:
                 # fallback placeholder with more details
@@ -1188,7 +1182,6 @@ class PPTXRenderer:
         """
         from pptx.util import Inches
         import os
-        import re
         
         # Calculate position and size
         left = Inches(block.x * x_scale)
@@ -1234,7 +1227,7 @@ class PPTXRenderer:
         try:
             # Math images are now PNG files with transparent background, no conversion needed
             if self.debug:
-                logger.info(f"Adding math PNG image: {os.path.basename(image_path)}")
+                print(f"📐 Adding math PNG image: {os.path.basename(image_path)}")
             
             # Add the math image to the slide
             slide.shapes.add_picture(image_path, left, top, width=width, height=height)
@@ -1250,22 +1243,22 @@ class PPTXRenderer:
             
         except Exception as e:
             if self.debug:
-                logger.warning(f"Failed to add math image: {e}")
+                print(f"⚠️ Failed to add math image: {e}")
             
             # Skip math equation if we can't convert it to PNG
             # This ensures Google Slides compatibility by only using actual images
             return
         
         if self.debug:
-            logger.info("Successfully added math image to slide")
+            print("✅ Successfully added math image to slide")
     
     def _add_math_only_block(self, slide, block: Block, x_scale: float, y_scale: float):
         """
-        Handle blocks that contain only display math images.
+        Handle blocks that contain only display math (block math).
         
         Args:
             slide: PowerPoint slide object
-            block: Block object containing math image
+            block: Block object containing only display math
             x_scale: Horizontal scaling factor
             y_scale: Vertical scaling factor
         """
@@ -1274,38 +1267,59 @@ class PPTXRenderer:
         
         import re
         import os
+        from bs4 import BeautifulSoup
         
-        # Extract image path and LaTeX from the img tag
-        src_match = re.search(r'src="([^"]*)"', block.content)
-        latex_match = re.search(r'data-latex="([^"]*)"', block.content)
+        # Parse the HTML content
+        soup = BeautifulSoup(block.content, 'html.parser')
         
-        if not src_match:
+        # For display math blocks, the LaTeX is stored in the data-latex attribute
+        # of the outer div, not in the inner content. We need to extract it from the block itself.
+        # The block content contains the rendered KaTeX HTML, but the LaTeX source is in the outer div.
+        
+        # Try to find the LaTeX in the HTML content first
+        latex = None
+        
+        # Look for LaTeX in the MathML annotation (more reliable than data-latex)
+        import re
+        import html
+        
+        # Try to extract LaTeX from the MathML annotation tag
+        annotation_match = re.search(r'<annotation[^>]*encoding="application/x-tex"[^>]*>([^<]*)</annotation>', block.content)
+        if annotation_match:
+            latex = annotation_match.group(1)
+            # Decode HTML entities
+            latex = html.unescape(latex)
+        
+        # Fallback: try to find data-latex attribute (might be in the content)
+        if not latex:
+            latex_match = re.search(r'data-latex="([^"]*)"', block.content)
+            if latex_match:
+                latex = latex_match.group(1)
+                latex = html.unescape(latex)
+        
+        if not latex:
             if self.debug:
-                logger.warning(f"No image source found in math block: {block.content[:100]}...")
+                print(f"⚠️ No LaTeX found in display math block content: {block.content[:100]}...")
             return
-            
-        image_path = src_match.group(1)
-        latex = latex_match.group(1) if latex_match else "math equation"
         
         if self.debug:
-            logger.info(f"Processing display math image: {latex}")
+            print(f"🧮 Processing display math: {latex}")
         
         try:
-            if os.path.exists(image_path):
-                # Get image dimensions from data attributes
-                width_match = re.search(r'data-width="([^"]*)"', block.content)
-                height_match = re.search(r'data-height="([^"]*)"', block.content)
-                
-                if width_match and height_match:
-                    math_width_px = float(width_match.group(1))
-                    math_height_px = float(height_match.group(1))
-                else:
-                    # Fallback to block dimensions
-                    math_width_px = block.width
-                    math_height_px = block.height
+            # Import math renderer
+            from .math_renderer import get_math_renderer
+            math_renderer = get_math_renderer(debug=self.debug)
+            
+            # Render LaTeX to PNG for PowerPoint (display mode)
+            png_path, metadata = math_renderer.render_to_png(latex, display_mode=True)
+            
+            if os.path.exists(png_path):
+                # Get math dimensions
+                math_width_px = metadata['width']
+                math_height_px = metadata['height']
                 
                 # Convert to inches for PowerPoint
-                math_width_in = math_width_px / 96.0
+                math_width_in = math_width_px / 96.0  # 96 DPI
                 math_height_in = math_height_px / 96.0
                 
                 # Center the math horizontally within the block
@@ -1318,18 +1332,18 @@ class PPTXRenderer:
                 height = Inches(math_height_in)
                 
                 # Add the math image to the slide
-                slide.shapes.add_picture(image_path, left, top, width=width, height=height)
+                slide.shapes.add_picture(png_path, left, top, width=width, height=height)
                 
                 if self.debug:
-                    logger.info(f"Added display math image: {latex}")
+                    print(f"📐 Added display math block: {latex}")
                     
             else:
                 if self.debug:
-                    logger.warning(f"Math image not found: {image_path}")
+                    print(f"⚠️ PNG file not found for display math: {latex}")
                 
         except Exception as e:
             if self.debug:
-                logger.warning(f"Failed to add math image: {e}")
+                print(f"⚠️ Failed to render display math: {latex} - {e}")
 
     def _add_table_to_slide(self, slide, block: Block, left, top, width, height):
         """Add a PowerPoint table to the slide from HTML table content."""

@@ -502,9 +502,8 @@ class LayoutEngine:
             # Get math renderer instance
             math_renderer = get_math_renderer(debug=self.debug)
             
-            # Process math elements - use images mode for PowerPoint compatibility
-            # This ensures math is converted to PNG images that work in PowerPoint
-            processed_html = math_renderer.render_math_html(html_content, temp_dir, mode="images")
+            # Process math elements 
+            processed_html = math_renderer.render_math_html(html_content, temp_dir, mode="html")
             
             if self.debug:
                 logger.info(f"Processed math equations in HTML")
@@ -969,11 +968,11 @@ class LayoutEngine:
                 try:
                     shutil.copy2(file_path, temp_image_path)
                     
-                    # Replace file:// URL with relative URL (no scaling yet)
+                    # Replace file:// URL with path pointing to temp copy and keep original via data-filepath
                     old_src = f'src="file://{file_path}"'
-                    new_src = f'src="{filename}"'
+                    new_src = f'src="file://{temp_image_path}" data-filepath="{file_path}"'
                     updated_html = updated_html.replace(old_src, new_src)
-                    
+
                     if self.debug:
                         logger.info(f"📸 Copied image: {filename} -> {temp_image_path}")
                         
@@ -1239,49 +1238,31 @@ class LayoutEngine:
     
     def _slice_dom_for_page(self, bids):
         """Copy the minimal DOM subtrees that contain all bids, preserving wrappers
-        like .columns/.column so the debug HTML matches the measured layout.
-        """
+        like .columns/.column so the debug HTML matches the measured layout."""
         if not hasattr(self, '_original_soup') or self._original_soup is None:
             return ''
 
-        # Find all elements that match the BIDs for this page
         src = self._original_soup
-        copied_roots = []
-        copied_root_ids = set()
+        copied_roots = []        # original nodes that will be deep-copied once
+        copied_root_ids = set()  # use id() to avoid duplicates
 
-        # For each BID, find the corresponding element in the original soup
         for bid in bids:
             if not bid:
                 continue
-                
-            # Find the element with this BID
             node = src.select_one(f'[data-bid="{bid}"]')
-            
             if not node:
-                # If BID doesn't match, this is likely due to math processing differences
-                # Skip this BID but log it for debugging
-                if self.debug:
-                    logger.warning(f"Could not find element with BID {bid} in original soup")
                 continue
 
-            # Find the top-level container for this element
-            # Climb up until we find a direct child of the slide container
+            # climb until parent is the slide container (has class "slide")
             anc = node
-            while anc.parent and not (anc.parent.has_attr('class') and 'slide' in anc.parent.get('class', [])):
+            while anc.parent and not (anc.parent.has_attr('class') and 'slide' in anc.parent['class']):
                 anc = anc.parent
 
-            # anc is now a direct child of the slide container
-            # Make sure we don't duplicate root elements
+            # anc is now direct child of slide (or node itself if already)
             if id(anc) not in copied_root_ids:
                 copied_roots.append(anc)
                 copied_root_ids.add(id(anc))
 
-        # Convert each root to string and return
-        html_parts = []
-        for root in copied_roots:
-            # Make a deep copy to avoid modifying the original
-            from bs4 import BeautifulSoup
-            root_copy = BeautifulSoup(str(root), 'html.parser')
-            html_parts.append(str(root_copy))
-
+        # Deep-copy each root to avoid mutating original soup
+        html_parts = [str(root) for root in copied_roots]
         return '\n'.join(html_parts)

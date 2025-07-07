@@ -8,7 +8,7 @@
     --slide-aspect-ratio: 16/9;  /* 16:9 aspect ratio */
     --slide-padding: 19px;       /* Configurable slide padding in pixels */
     --slide-font-family: 'Arial'; /* Font family that matches PowerPoint exactly */
-    --column-gap: 10px;          /* Gap between columns */
+    --column-gap: 15px;          /* Gap between columns */
     --column-padding: 5px;       /* Padding inside each column */
     
     /* Table styling deltas */
