@@ -493,7 +493,7 @@ Pie chart (60% height):
 
 ![Pie Chart|0.6y]({pie_fig})
 
-# Two-column slide: table on left, text on right
+# Two-column slide: table on left, [text on right]{.wavy .blue}
 
 :::columns
 
@@ -503,9 +503,9 @@ Pie chart (60% height):
 
 | Task | Owner | Progress |
 |------|-------|----------|
-| Authentication | Alice | 100% |
-| Database | Bob | 80% |
-| API Docs | Carol | 100% |
+| Authentication | Alice | [100%]{.red} |
+| Database | Bob | [80%]{.green} |
+| API Docs | Carol | [100%]{.green .underline} |
 | Analytics | Dave | 60% |
 
 :::
@@ -514,7 +514,8 @@ Pie chart (60% height):
 
 ### ✍️ Notes
 
-All core features are either complete or in progress. Remaining items are performance tuning and UX polish.
+All core features are either complete or in final testing. 
+[Performance]{.bold .blue} metrics are excellent.
 
 :::
 

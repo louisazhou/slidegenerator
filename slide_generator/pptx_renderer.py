@@ -10,7 +10,7 @@ from typing import List, Optional, Dict
 from pptx import Presentation
 from pptx.util import Inches, Pt
 from pptx.dml.color import RGBColor
-from pptx.enum.text import PP_ALIGN, MSO_AUTO_SIZE
+from pptx.enum.text import PP_ALIGN, MSO_AUTO_SIZE, MSO_UNDERLINE
 from pptx.enum.shapes import MSO_AUTO_SHAPE_TYPE
 from pptx.oxml.ns import qn, nsdecls
 from pptx.oxml import parse_xml
@@ -671,9 +671,12 @@ class PPTXRenderer:
                     color_name = None
                     hyperlink_url = None
                     is_code = False
-
                     for fmt in format_stack:
-                        if fmt in ['strong', 'b']:
+                        # Parse color classes...
+                        if isinstance(fmt, tuple) and len(fmt) == 3:
+                            # RGB tuple - direct color application
+                            run.font.color.rgb = RGBColor(*fmt)
+                        elif fmt in ['strong', 'b']:
                             run.font.bold = True
                         elif fmt in ['em', 'i']:
                             run.font.italic = True
@@ -681,7 +684,6 @@ class PPTXRenderer:
                             run.font.underline = True
                         elif fmt == 'u_wavy':
                             try:
-                                from pptx.enum.text import MSO_UNDERLINE
                                 run.font.underline = MSO_UNDERLINE.WAVY_LINE
                             except Exception:
                                 run.font.underline = True
@@ -707,6 +709,11 @@ class PPTXRenderer:
                             highlight_hex = self.theme_config['colors'].get('highlight')
                             if not highlight_hex:
                                 raise ValueError("❌ CSS theme missing highlight color (mark rule). Please define in CSS.")
+                            run.font.color.rgb = RGBColor(*self._hex_to_rgb(highlight_hex))
+                            run.font.bold = True  # Make highlighted text bold too
+
+                        elif isinstance(fmt, str) and fmt.startswith('highlight:'):
+                            highlight_hex = fmt.split(':', 1)[1]
                             run.font.color.rgb = RGBColor(*self._hex_to_rgb(highlight_hex))
                             run.font.bold = True  # Make highlighted text bold too
                         elif isinstance(fmt, str) and fmt.startswith('link:'):
@@ -1416,11 +1423,8 @@ class PPTXRenderer:
                     # Add formatted text to the cell
                     self._add_formatted_text(p, cell_block)
                     
-                    # Apply table-specific styling
+                    # Apply table-specific styling (preserve colors set by _add_formatted_text)
                     for run in p.runs:
-                        # Set text color based on theme
-                        run.font.color.rgb = RGBColor(*text_rgb)
-                        
                         # Apply header styling if this is a header row
                         if cell_data.get('is_header', False):
                             run.font.bold = True
@@ -1486,19 +1490,36 @@ class PPTXRenderer:
                 # Apply text color and table-specific font sizing
                 for paragraph in cell.text_frame.paragraphs:
                     for run in paragraph.runs:
-                        if run.text.strip():  # Only apply to non-empty runs
+                        if not run.text.strip():
+                            continue  # skip empty
+
+                        # --------------------------------------------------
+                        # Font colour – honour any colour already applied by
+                        # inline <span class="red"> … processing.  Only if
+                        # *no* RGB has been set do we fall back to the theme's
+                        # default table text colour.
+                        # --------------------------------------------------
+                        # Don't override if color already exists
+                        try:
+                            current_color = run.font.color.rgb
+                            if current_color is None:
+                                run.font.color.rgb = RGBColor(*text_rgb)
+                        except AttributeError:
+                            # Color not initialized yet, safe to set
                             run.font.color.rgb = RGBColor(*text_rgb)
-                            
-                            # Reduce TABLE font size based on CSS variable (--table-font-delta)
-                            # This only affects table cells, not other text elements
-                            font_delta = self.theme_config['table_deltas']['font_delta']
-                            if run.font.size:
-                                current_size = run.font.size.pt
-                                run.font.size = Pt(max(8, current_size + font_delta))
-                            else:
-                                # Default table font size (body text + delta)
-                                body_font_size = self.theme_config['font_sizes']['p']
-                                run.font.size = Pt(max(8, body_font_size + font_delta))
+
+                        # --------------------------------------------------
+                        # Font size – always apply the table-specific delta so
+                        # that overall sizing stays consistent.
+                        # --------------------------------------------------
+                        font_delta = self.theme_config['table_deltas']['font_delta']
+                        if run.font.size:
+                            current_size = run.font.size.pt
+                            run.font.size = Pt(max(8, current_size + font_delta))
+                        else:
+                            # Default table font size (body text + delta)
+                            body_font_size = self.theme_config['font_sizes']['p']
+                            run.font.size = Pt(max(8, body_font_size + font_delta))
                 
                 # NOTE: python-pptx has limited table border color support
                 # See: https://github.com/scanny/python-pptx/issues/71

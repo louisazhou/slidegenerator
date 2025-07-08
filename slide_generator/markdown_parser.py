@@ -206,7 +206,58 @@ class MarkdownParser:
         # when running under the CommonMark preset (see GH issue #70).  Until the
         # plugin supports it natively we convert the syntax to a `<span>` so the
         # downstream HTML carries the class and our renderer can map it.
-        processed = re.sub(r'\[([^\]]+)\]\{\.([a-zA-Z0-9_-]+)\}', r'<span class="\2">\1</span>', processed)
+        
+        # Handle markdown-it-attrs syntax: [text]{.class1 .class2 attr=value}
+        def convert_attrs(match):
+            text = match.group(1)
+            attrs_content = match.group(2).strip()
+            
+            # Parse the attributes content
+            classes = []
+            attributes = []
+            
+            # Split by spaces but be careful with quoted values
+            import shlex
+            try:
+                tokens = shlex.split(attrs_content.replace('=', ' = '))
+            except:
+                # Fallback to simple split if shlex fails
+                tokens = attrs_content.split()
+            
+            i = 0
+            while i < len(tokens):
+                token = tokens[i]
+                if token.startswith('.'):
+                    # CSS class
+                    classes.append(token[1:])
+                elif token.startswith('#'):
+                    # ID attribute
+                    attributes.append(f'id="{token[1:]}"')
+                elif '=' in token or (i + 2 < len(tokens) and tokens[i + 1] == '='):
+                    # Attribute with value
+                    if '=' in token:
+                        attr_name, attr_value = token.split('=', 1)
+                        clean_value = attr_value.strip('\'"')
+                        attributes.append(f'{attr_name}="{clean_value}"')
+                    else:
+                        attr_name = token
+                        attr_value = tokens[i + 2] if i + 2 < len(tokens) else ''
+                        clean_value = attr_value.strip('\'"')
+                        attributes.append(f'{attr_name}="{clean_value}"')
+                        i += 2  # Skip the '=' and value
+                i += 1
+            
+            # Build the span tag
+            span_attrs = []
+            if classes:
+                span_attrs.append(f'class="{" ".join(classes)}"')
+            span_attrs.extend(attributes)
+            
+            attr_str = ' '.join(span_attrs)
+            return f'<span {attr_str}>{text}</span>' if attr_str else f'<span>{text}</span>'
+        
+        # Apply the conversion
+        processed = re.sub(r'\[([^\]]+)\]\{([^}]+)\}', convert_attrs, processed)
 
         # Handle Pandoc-style multi-column blocks
         def convert_columns(text: str) -> str:
