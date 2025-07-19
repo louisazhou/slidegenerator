@@ -1,8 +1,6 @@
 """Theme loader for slide generation CSS themes."""
-
-import os
 from pathlib import Path
-from typing import Optional, List
+from typing import List
 
 
 def get_css(theme: str = "default") -> str:

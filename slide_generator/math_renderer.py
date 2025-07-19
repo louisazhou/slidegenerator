@@ -6,8 +6,6 @@ Uses KaTeX for high-quality math rendering.
 
 import hashlib
 import subprocess
-import tempfile
-import os
 from pathlib import Path
 from typing import Dict, Tuple, Optional
 import shutil
@@ -16,6 +14,8 @@ from bs4 import BeautifulSoup
 import re
 import xml.etree.ElementTree as ET
 
+import logging
+logger = logging.getLogger(__name__)
 
 class MathRenderer:
     """
@@ -34,12 +34,16 @@ class MathRenderer:
         self.debug = debug
         self.cache_dir = Path(cache_dir) if cache_dir else Path.cwd() / "output" / "math_cache"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+
+        # Text colour for rendering PNGs (hex string like '#ffffff') – can be
+        # overridden by the layout engine depending on light/dark theme.
+        self.png_text_color = "#000000"
         
         # Check if KaTeX CLI is available
         self._check_katex_availability()
         
         if self.debug:
-            print(f"📐 Math renderer initialized with cache: {self.cache_dir}")
+            logger.info("Math renderer cache directory: %s", self.cache_dir)
     
     def _check_katex_availability(self):
         """Check if KaTeX CLI is available on the system."""
@@ -57,7 +61,7 @@ class MathRenderer:
                                       capture_output=True, text=True, check=True)
                 self.katex_cmd = cmd_parts
                 if self.debug:
-                    print(f"✅ KaTeX CLI available via '{cmd}': {result.stdout.strip()}")
+                    logger.info("KaTeX CLI available via '%s': %s", cmd, result.stdout.strip())
                 return
             except (subprocess.CalledProcessError, FileNotFoundError):
                 continue
@@ -112,7 +116,7 @@ class MathRenderer:
         # Check if already cached
         if svg_path.exists() and metadata_path.exists():
             if self.debug:
-                print(f"📋 Using cached math: {cache_key}")
+                logger.info("Using cached math: %s", cache_key)
             try:
                 with open(metadata_path, 'r') as f:
                     metadata = json.load(f)
@@ -123,7 +127,7 @@ class MathRenderer:
         
         # Render using KaTeX CLI
         if self.debug:
-            print(f"🔧 Rendering math: {latex[:50]}{'...' if len(latex) > 50 else ''}")
+            logger.info("Rendering math: %s", latex[:50])
         
         try:
             # Prepare KaTeX command using the detected command
@@ -134,9 +138,19 @@ class MathRenderer:
             if display_mode:
                 katex_cmd.append('--display-mode')
             
+            if self.debug:
+                logger.debug("KaTeX command: %s", ' '.join(katex_cmd))
+                logger.debug("LaTeX input: %s", repr(latex))
+                logger.debug("LaTeX content preview: %s...", latex[:100])
+            
             # Run KaTeX with LaTeX as stdin
             result = subprocess.run(katex_cmd, input=latex, capture_output=True, text=True, check=True)
             html_content = result.stdout
+            
+            if self.debug:
+                if result.stderr:
+                    logger.debug("KaTeX stderr: %s", result.stderr)
+                logger.debug("KaTeX output length: %s", len(html_content))
             
             if not html_content.strip():
                 raise RuntimeError(f"KaTeX produced empty output for: {latex}")
@@ -155,16 +169,24 @@ class MathRenderer:
                 json.dump(metadata, f)
             
             if self.debug:
-                print(f"✅ Math rendered: {cache_key} ({metadata['width']}x{metadata['height']}px)")
+                logger.info("Math rendered: %s (%sx%s px)", cache_key, metadata['width'], metadata['height'])
             
             return str(svg_path), metadata
             
         except subprocess.CalledProcessError as e:
-            error_msg = f"KaTeX rendering failed for: {latex}\n"
-            error_msg += f"Error: {e.stderr}"
-            raise RuntimeError(error_msg)
+            if self.debug:
+                logger.error("KaTeX failed with exit code %s", e.returncode)
+                logger.error("KaTeX stdout: %s", e.stdout)
+                logger.error("KaTeX stderr: %s", e.stderr)
+                logger.error("Failed LaTeX: %s", repr(latex))
+            raise RuntimeError(f"KaTeX failed: {e.stderr or e.stdout}")
+        except Exception as e:
+            if self.debug:
+                logger.error("Unexpected error running KaTeX: %s", e)
+                logger.error("Failed LaTeX: %s", repr(latex))
+            raise
     
-    def render_to_png(self, latex: str, display_mode: bool = False) -> Tuple[str, Dict]:
+    async def render_to_png(self, latex: str, display_mode: bool = False) -> Tuple[str, Dict]:
         """
         Render LaTeX math to PNG format with transparent background.
         
@@ -188,7 +210,7 @@ class MathRenderer:
         # Check if already cached
         if png_path.exists() and metadata_path.exists():
             if self.debug:
-                print(f"📋 Using cached math: {cache_key}")
+                logger.info("Using cached math: %s", cache_key)
             try:
                 with open(metadata_path, 'r') as f:
                     metadata = json.load(f)
@@ -199,7 +221,7 @@ class MathRenderer:
         
         # Render using KaTeX CLI
         if self.debug:
-            print(f"🔧 Rendering math: {latex[:50]}{'...' if len(latex) > 50 else ''}")
+            logger.info("Rendering math: %s", latex[:50])
         
         try:
             # Prepare KaTeX command using the detected command
@@ -218,7 +240,10 @@ class MathRenderer:
                 raise RuntimeError(f"KaTeX produced empty output for: {latex}")
             
             # Convert HTML to PNG using Puppeteer
-            png_data, dimensions = self._convert_katex_html_to_png(html_content, display_mode)
+            png_data, dimensions = await self._convert_katex_html_to_png(html_content, display_mode)
+            
+            if self.debug:
+                logger.debug("Got PNG data: %s bytes, dimensions: %s", len(png_data), dimensions)
             
             # Create metadata
             metadata = {
@@ -228,22 +253,35 @@ class MathRenderer:
             }
             
             # Save PNG to cache
+            if self.debug:
+                logger.debug("Saving PNG to: %s", png_path)
             with open(png_path, 'wb') as f:
                 f.write(png_data)
+            
+            if self.debug:
+                logger.debug("PNG file size after save: %s bytes", png_path.stat().st_size)
             
             # Save metadata to cache
             with open(metadata_path, 'w') as f:
                 json.dump(metadata, f)
             
             if self.debug:
-                print(f"✅ Math rendered: {cache_key} ({metadata['width']}x{metadata['height']}px)")
+                logger.info("Math rendered: %s (%sx%s px)", cache_key, metadata['width'], metadata['height'])
             
             return str(png_path), metadata
             
         except subprocess.CalledProcessError as e:
+            if self.debug:
+                logger.error("KaTeX subprocess failed: %s", e)
             error_msg = f"KaTeX rendering failed for: {latex}\n"
             error_msg += f"Error: {e.stderr}"
             raise RuntimeError(error_msg)
+        except Exception as e:
+            if self.debug:
+                logger.error("PNG rendering failed: %s", e)
+                import traceback
+                traceback.print_exc()
+            raise RuntimeError(f"PNG rendering failed: {e}")
     
     def _extract_svg_metadata(self, svg_content: str) -> Dict:
         """
@@ -335,18 +373,18 @@ class MathRenderer:
             # Unknown unit, assume pixels
             return value
     
-    def _convert_katex_html_to_png(self, katex_html: str, display_mode: bool = False) -> Tuple[bytes, Dict]:
+    async def _convert_katex_html_to_png(self, katex_html: str, display_mode: bool = False) -> Tuple[bytes, Dict]:
         """
         Convert KaTeX HTML output to PNG using Puppeteer with transparent background.
         """
-        import asyncio
         import tempfile
         import os
-        from pathlib import Path
         
         # Create a temporary HTML file with the KaTeX output
         with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False) as f:
             # Include KaTeX CSS for proper rendering with transparent background
+            text_color = self.png_text_color
+
             html_template = f'''<!DOCTYPE html>
 <html>
 <head>
@@ -357,14 +395,17 @@ class MathRenderer:
             padding: 8px; 
             font-family: serif; 
             background: transparent !important;
+            color: {text_color};
         }}
         .katex {{ 
             font-size: 1.2em;
             background: transparent !important;
+            color: {text_color};
         }}
         .katex-display {{ 
             text-align: center; 
             margin: 0.5em 0; 
+            color: {text_color};
         }}
     </style>
 </head>
@@ -376,29 +417,19 @@ class MathRenderer:
             temp_html_path = f.name
         
         try:
-            # Use Puppeteer to render HTML to PNG directly
-            # Check if we're already in an event loop
-            try:
-                loop = asyncio.get_running_loop()
-                # We're in an event loop, create a new thread to run the async function
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future = executor.submit(asyncio.run, self._render_html_to_png(temp_html_path, display_mode))
-                    png_data, dimensions = future.result()
-            except RuntimeError:
-                # No event loop running, safe to use asyncio.run
-                png_data, dimensions = asyncio.run(self._render_html_to_png(temp_html_path, display_mode))
-            
-            return png_data, dimensions
+            # Render the HTML file to PNG
+            png_data, dimensions = await self._render_html_to_png(temp_html_path)
         finally:
-            # Clean up temporary file
+            # Clean up the temporary file
             os.unlink(temp_html_path)
+            
+        return png_data, dimensions
     
-    async def _render_html_to_png(self, html_path: str, display_mode: bool = False) -> Tuple[bytes, Dict]:
+    async def _render_html_to_png(self, html_path: str) -> Tuple[bytes, Dict]:
         """Use Puppeteer to render HTML directly to PNG with transparent background."""
         try:
             from pyppeteer import launch
-            
+
             browser = await launch({'headless': True})
             page = await browser.newPage()
             
@@ -421,34 +452,64 @@ class MathRenderer:
             # Load the HTML file
             await page.goto(f'file://{html_path}')
             
-            # Wait for KaTeX to render
-            await page.waitForSelector('.katex')
+            # Wait for KaTeX to render with a reasonable timeout
+            try:
+                await page.waitForSelector('.katex', {'timeout': 5000})  # 5 second timeout
+            except Exception as e:
+                if self.debug:
+                    logger.warning("KaTeX selector timeout or not found: %s", e)
+                # Try to get page content for debugging
+                try:
+                    content = await page.content()
+                    if self.debug:
+                        logger.debug("Page content length: %s", len(content))
+                        if 'katex' not in content.lower():
+                            logger.warning("No KaTeX content found in page")
+                        if 'error' in content.lower():
+                            logger.warning("Error found in page content: %s...", content[:500])
+                except:
+                    pass
+                await browser.close()
+                raise RuntimeError(f"KaTeX rendering failed: {e}")
             
-            # Get the dimensions and baseline of the rendered math
-            dimensions = await page.evaluate('''() => {
-                const katexElement = document.querySelector('.katex');
-                const rect = katexElement.getBoundingClientRect();
-                
-                // Calculate baseline offset for inline math
+            # Embed colour via injected style so KaTeX SVG/text picks it up
+            css_colour = self.png_text_color
+            style_rules = (
+                f"body, .katex, .katex-display {{ color:{css_colour} !important; }}"
+                f" .katex svg * {{ fill:{css_colour} !important; stroke:{css_colour} !important; }}"
+            )
+            await page.addStyleTag({'content': style_rules})
+
+            # Compute dimensions & baseline
+            dims_js = """() => {
+                const el = document.querySelector('.katex-display') || document.querySelector('.katex');
+                const rect = el.getBoundingClientRect();
                 let baseline = 0;
-                if (katexElement.querySelector('.base')) {
-                    const baseRect = katexElement.querySelector('.base').getBoundingClientRect();
-                    baseline = rect.bottom - baseRect.bottom;
+                const base = el.querySelector('.base');
+                if (base) {
+                    const br = base.getBoundingClientRect();
+                    baseline = rect.bottom - br.bottom;
                 }
-                
-                return {
-                    width: Math.ceil(rect.width),
-                    height: Math.ceil(rect.height),
-                    baseline: Math.ceil(baseline)
-                };
-            }''')
-            
-            # Take a screenshot of just the math element with transparent background
-            element = await page.querySelector('.katex')
-            screenshot = await element.screenshot({
-                'type': 'png',
-                'omitBackground': True  # This ensures transparent background
-            })
+                return { width: Math.ceil(rect.width), height: Math.ceil(rect.height), baseline: Math.ceil(baseline) };
+            }"""
+            dimensions = await page.evaluate(dims_js)
+
+            # grab wrapper first, else inner
+            try:
+                let_el = await page.querySelector('.katex-display')
+                if let_el is None:
+                    let_el = await page.querySelector('.katex')
+                if let_el is None:
+                    raise RuntimeError('KaTeX element not found for screenshot')
+
+                screenshot = await let_el.screenshot({
+                  'type': 'png',
+                  'omitBackground': True  # This ensures transparent background
+              })
+            except Exception as e:
+                if self.debug:
+                    logger.error("math PNG render failed: %s", e)
+                raise
             
             await browser.close()
             
@@ -456,10 +517,10 @@ class MathRenderer:
             
         except Exception as e:
             if self.debug:
-                print(f"⚠️ Failed to render with Puppeteer: {e}")
+                logger.warning("Failed to render with Puppeteer: %s", e)
             raise e
     
-    def render_math_html(self, html_content: str, temp_dir: str, mode: str = "mixed") -> str:
+    async def render_math_html(self, html_content: str, temp_dir: str, mode: str = "mixed") -> str:
         """
         Process HTML content and handle math elements.
         
@@ -518,7 +579,7 @@ class MathRenderer:
                         element.replace_with(plain_span)
                 else:
                     # Render to PNG (for display math or when mode="images")
-                    png_path, metadata = self.render_to_png(latex, display_mode=is_display)
+                    png_path, metadata = await self.render_to_png(latex, display_mode=is_display)
                     
                     # Copy PNG to temp directory for browser access
                     png_filename = Path(png_path).name
@@ -550,11 +611,11 @@ class MathRenderer:
                     element.replace_with(img_tag)
                 
                 if self.debug:
-                    print(f"📐 Rendered math ({mode}): {latex[:30]}...")
+                    logger.info("Rendered math (%s): %s...", mode, latex[:30])
                     
             except Exception as e:
                 if self.debug:
-                    print(f"⚠️ Failed to render math: {latex[:50]}... Error: {e}")
+                    logger.warning("Failed to render math: %s... Error: %s", latex[:50], e)
                 # Leave the original element if rendering fails
                 continue
         
@@ -593,58 +654,6 @@ class MathRenderer:
             error_msg = f"KaTeX HTML rendering failed for: {latex}\n"
             error_msg += f"Error: {e.stderr}"
             raise RuntimeError(error_msg)
-    
-    def copy_math_images_to_temp(self, html_content: str, temp_dir: str) -> str:
-        """
-        Copy math SVG files referenced in HTML to temp directory.
-        
-        Args:
-            html_content: HTML content with math images
-            temp_dir: Destination directory
-            
-        Returns:
-            Updated HTML with corrected file paths
-        """
-        soup = BeautifulSoup(html_content, 'html.parser')
-        
-        # Find all math images
-        math_images = soup.find_all('img', class_=re.compile(r'math-image'))
-        
-        for img in math_images:
-            src = img.get('src', '')
-            if src.startswith('file://'):
-                # Extract the original file path
-                original_path = Path(src.replace('file://', ''))
-                if original_path.exists():
-                    # Copy to temp directory
-                    temp_path = Path(temp_dir) / original_path.name
-                    shutil.copy2(original_path, temp_path)
-                    
-                    # Update src to point to temp file
-                    img['src'] = f'file://{temp_path.absolute()}'
-        
-        return str(soup)
-
-    # ------------------------------------------------------------------
-    # Convenience wrappers expected by LayoutEngine
-    # ------------------------------------------------------------------
-    def render_to_katex_html(self, html_content: str) -> str:
-        """Return HTML where **all** math has been converted to KaTeX HTML markup.
-
-        This is primarily for browser previews / debug output.  Internally a
-        temporary directory is used for any intermediate assets that might be
-        generated (though for pure HTML none are needed)."""
-        import tempfile
-        temp_dir = tempfile.mkdtemp()
-        return self.render_math_html(html_content, temp_dir, mode="html")
-
-    def render_to_images(self, html_content: str) -> str:
-        """Return HTML where *display* maths are replaced by PNGs while inline maths
-        remain embedded as KaTeX HTML.  This mixed representation matches the
-        expectations of the measurement + PPTX rendering pipeline."""
-        import tempfile
-        temp_dir = tempfile.mkdtemp()
-        return self.render_math_html(html_content, temp_dir, mode="mixed")
 
 
 # Global math renderer instance

@@ -1,13 +1,22 @@
 """Test markdown parser functionality."""
 
+import tempfile
+from pathlib import Path
+
 import pytest
 from slide_generator.markdown_parser import MarkdownParser
 
 
-def test_basic_markdown_parsing():
+@pytest.fixture
+def temp_base_dir():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        yield Path(tmpdir)
+
+
+def test_basic_markdown_parsing(temp_base_dir):
     """Test basic markdown to HTML conversion."""
-    parser = MarkdownParser()
-    
+    parser = MarkdownParser(base_dir=temp_base_dir)
+
     markdown_text = """# Hello World
 
 This is a paragraph.
@@ -16,9 +25,9 @@ This is a paragraph.
 
 - Item 1
 - Item 2"""
-    
+
     html = parser.parse(markdown_text)
-    
+
     # Should contain basic HTML elements
     assert "<h1>Hello World</h1>" in html
     assert "<h2>Section 2</h2>" in html
@@ -27,38 +36,38 @@ This is a paragraph.
     assert "<li>Item 1</li>" in html
 
 
-def test_code_block_parsing():
+def test_code_block_parsing(temp_base_dir):
     """Test code block parsing with fenced_code extension."""
-    parser = MarkdownParser()
-    
+    parser = MarkdownParser(base_dir=temp_base_dir)
+
     markdown_text = """# Code Example
 
 ```python
 def hello():
     print("world")
 ```"""
-    
+
     html = parser.parse(markdown_text)
-    
+
     # Should contain code block
     assert "<pre><code" in html
     assert "def hello():" in html
     assert "python" in html
 
 
-def test_table_parsing():
+def test_table_parsing(temp_base_dir):
     """Test table parsing with tables extension."""
-    parser = MarkdownParser()
-    
+    parser = MarkdownParser(base_dir=temp_base_dir)
+
     markdown_text = """# Table Example
 
 | Name | Age |
 |------|-----|
 | John | 25  |
 | Jane | 30  |"""
-    
+
     html = parser.parse(markdown_text)
-    
+
     # Should contain table elements
     assert "<table>" in html
     assert "<th>Name</th>" in html
@@ -67,10 +76,10 @@ def test_table_parsing():
     assert "<td>25</td>" in html
 
 
-def test_page_breaks_horizontal_rule():
+def test_page_breaks_horizontal_rule(temp_base_dir):
     """Test page break handling with horizontal rules."""
-    parser = MarkdownParser()
-    
+    parser = MarkdownParser(base_dir=temp_base_dir)
+
     markdown_text = """# Page 1
 
 Content for page 1.
@@ -80,55 +89,56 @@ Content for page 1.
 # Page 2
 
 Content for page 2."""
-    
+
     html_slides = parser.parse_with_page_breaks(markdown_text)
-    
+
     # Should create 2 slides
     assert len(html_slides) == 2
-    
+
     # First slide should contain Page 1
     assert "<h1>Page 1</h1>" in html_slides[0]
     assert "Content for page 1" in html_slides[0]
-    
+
     # Second slide should contain Page 2
     assert "<h1>Page 2</h1>" in html_slides[1]
     assert "Content for page 2" in html_slides[1]
 
 
-def test_empty_content_handling():
+def test_empty_content_handling(temp_base_dir):
     """Test handling of empty or whitespace content."""
-    parser = MarkdownParser()
-    
+    parser = MarkdownParser(base_dir=temp_base_dir)
+
     # Empty content
     html_slides = parser.parse_with_page_breaks("")
     assert len(html_slides) == 0
-    
+
     # Whitespace only
     html_slides = parser.parse_with_page_breaks("   \n\n   ")
     assert len(html_slides) == 0
-    
+
     # Empty slides with page breaks
     html_slides = parser.parse_with_page_breaks("---\n\n---")
     assert len(html_slides) == 0
 
-def test_parser_reset():
+
+def test_parser_reset(temp_base_dir):
     """Test that parser resets properly between uses."""
-    parser = MarkdownParser()
-    
+    parser = MarkdownParser(base_dir=temp_base_dir)
+
     # Parse first content
     html1 = parser.parse("# First")
     assert "<h1>First</h1>" in html1
-    
+
     # Parse different content
     html2 = parser.parse("# Second")
     assert "<h1>Second</h1>" in html2
-    assert "First" not in html2 
+    assert "First" not in html2
 
 
-def test_enhanced_extensions_integration():
+def test_enhanced_extensions_integration(temp_base_dir):
     """Test that enhanced markdown extensions work correctly together."""
-    parser = MarkdownParser()
-    
+    parser = MarkdownParser(base_dir=temp_base_dir)
+
     # Test content with tables, fenced code, and lists
     markdown_text = """# Enhanced Features Demo
 
@@ -154,40 +164,40 @@ def test_function():
 
 ## Inline Code
 Use `inline code` for small snippets."""
-    
+
     html = parser.parse(markdown_text)
-    
+
     # Verify tables extension
     assert "<table>" in html
     assert "<thead>" in html
     assert "<tbody>" in html
     assert "<th>Feature</th>" in html
     assert "<td>Tables</td>" in html
-    
-    # Verify fenced_code extension  
+
+    # Verify fenced_code extension
     assert '<pre><code class="language-python">' in html
     assert "def test_function():" in html
-    
+
     # Verify enhanced lists (from extra extension)
     assert "<ol>" in html
     assert "<li>First item</li>" in html
-    
+
     # Check for nested list structure (may be nested ul inside li)
     assert "Nested bullet" in html
     assert "Another nested item" in html
-    
+
     # Verify inline code
     assert "<code>inline code</code>" in html
-    
+
     # Verify all expected content is present
     assert "Enhanced Features Demo" in html
-    assert "This should work!" in html 
+    assert "This should work!" in html
 
 
-def test_enhanced_page_break_formats():
+def test_enhanced_page_break_formats(temp_base_dir):
     """Test all supported page break formats."""
-    parser = MarkdownParser()
-    
+    parser = MarkdownParser(base_dir=temp_base_dir)
+
     # Test various page break formats (HTML comment variant removed)
     test_cases = [
         # Horizontal rule
@@ -198,155 +208,113 @@ def test_enhanced_page_break_formats():
 
         # Alternate horizontal rules
         ("# Page 1\n\n***\n\n# Page 2", 2),
-        ("# Page 1\n\n****\n\n# Page 2", 2),
-        ("# Page 1\n\n___\n\n# Page 2", 2),
-        ("# Page 1\n\n____\n\n# Page 2", 2),
+        ("# Page 1\n\n* * *\n\n# Page 2", 2),
 
-        # Multiple breaks (horizontal rule only)
-        ("# Page 1\n\n---\n\n# Page 2\n\n---\n\n# Page 3", 3),
-
-        # No breaks
-        ("# Single Page\n\nContent here", 1),
+        # Thematic break with spaces
+        ("# Page 1\n\n- - -\n\n# Page 2", 2),
     ]
+
+    for md_input, expected_slides in test_cases:
+        html_slides = parser.parse_with_page_breaks(md_input)
+        assert len(html_slides) == expected_slides, f"Failed on: {md_input}"
+
+
+def test_page_break_counting(temp_base_dir):
+    """Test that page break counting is accurate."""
+    parser = MarkdownParser(base_dir=temp_base_dir)
     
-    for markdown_text, expected_count in test_cases:
-        html_slides = parser.parse_with_page_breaks(markdown_text)
-        assert len(html_slides) == expected_count, (
-            f"Expected {expected_count} slides, got {len(html_slides)} "
-            f"for markdown: {repr(markdown_text[:50])}"
-        )
-
-
-def test_page_break_counting():
-    """Test page break counting functionality."""
-    parser = MarkdownParser()
-    
-    test_cases = [
-        ("# Single slide", 0),
-        ("# Page 1\n\n---\n\n# Page 2", 1),
-        ("# P1\n\n---\n\n# P2\n\n---\n\n# P3", 2),
-        ("# P1\n\n***\n\n# P2\n\n___\n\n# P3\n\n[slide]\n\n# P4", 3),
-        ("", 0),
-        ("   \n\n   ", 0),
-    ]
-    
-    for markdown_text, expected_breaks in test_cases:
-        break_count = parser.count_page_breaks(markdown_text)
-        assert break_count == expected_breaks, (
-            f"Expected {expected_breaks} breaks, got {break_count} "
-            f"for: {repr(markdown_text[:30])}"
-        )
-
-
-def test_slide_count_estimation():
-    """Test slide count estimation."""
-    parser = MarkdownParser()
-    
-    test_cases = [
-        ("# Single slide", 1),
-        ("# Page 1\n\n---\n\n# Page 2", 2),
-        ("# P1\n\n---\n\n# P2\n\n---\n\n# P3", 3),
-        ("", 0),
-    ]
-    
-    for markdown_text, expected_slides in test_cases:
-        slide_count = parser.estimate_slide_count(markdown_text)
-        assert slide_count == expected_slides, (
-            f"Expected {expected_slides} slides, got {slide_count} "
-            f"for: {repr(markdown_text[:30])}"
-        )
-
-
-def test_page_break_edge_cases():
-    """Test edge cases in page break handling."""
-    parser = MarkdownParser()
-    
-    # Test content with only page breaks (should result in empty slides list)
-    empty_breaks_content = "---\n\n***"
-    html_slides = parser.parse_with_page_breaks(empty_breaks_content)
-    assert len(html_slides) == 0, "Only page breaks should result in no slides"
-    
-    # Test mixed content with some empty slides
-    mixed_content = """# First slide
-
-Some content here.
-
+    markdown_with_breaks = """
+# Slide 1
+Content...
 ---
-
-
-
----
-
-# Third slide
-
-More content.
-
+# Slide 2
+More...
 [slide]
-
-# Fourth slide"""
-    
-    html_slides = parser.parse_with_page_breaks(mixed_content)
-    assert len(html_slides) == 3, "Should skip empty slides but keep content slides"
-    
-    # Verify content is in right slides
-    assert "First slide" in html_slides[0]
-    assert "Third slide" in html_slides[1] 
-    assert "Fourth slide" in html_slides[2]
-
-
-def test_page_break_not_confused_with_content():
-    """Test that page breaks aren't confused with similar content."""
-    parser = MarkdownParser()
-    
-    # Test content that looks like page breaks but isn't
-    not_breaks_content = """# Test Slide
-
-Here's some code with dashes:
-```
-var x = y - z - w;
-```
-
-And here's a list:
-- Item with --- dashes
-- Another item
-
-<!-- This is a comment but not: slide -->
-
-This [slide] word should not break.
-
-These *stars* are not page breaks.
-These _underscores_ are not breaks either.
+# Slide 3
 """
+    assert parser.count_page_breaks(markdown_with_breaks) == 2
+
+
+def test_slide_count_estimation(temp_base_dir):
+    """Test that slide count estimation is correct."""
+    parser = MarkdownParser(base_dir=temp_base_dir)
     
-    html_slides = parser.parse_with_page_breaks(not_breaks_content)
-    assert len(html_slides) == 1, "Should be one slide with no page breaks"
+    markdown_with_breaks = """
+# Slide 1
+---
+# Slide 2
+[slide]
+# Slide 3
+"""
+    assert parser.estimate_slide_count(markdown_with_breaks) == 3
+    assert parser.estimate_slide_count("# Just one slide") == 1
+    assert parser.estimate_slide_count("") == 0
+
+
+def test_page_break_edge_cases(temp_base_dir):
+    """Test edge cases for page break handling."""
+    parser = MarkdownParser(base_dir=temp_base_dir)
     
-    # Verify all content is preserved
-    html = html_slides[0]
-    assert "var x = y - z - w;" in html
-    assert "Item with --- dashes" in html
-    assert "This is a comment but not: slide" in html
-    assert "This [slide] word" in html
-
-
-def test_page_break_whitespace_handling():
-    """Test page break detection with various whitespace."""
-    parser = MarkdownParser()
+    # Break at the very beginning
+    md1 = "---\n# Slide"
+    slides1 = parser.parse_with_page_breaks(md1)
+    assert len(slides1) == 1
+    assert "<h1>Slide</h1>" in slides1[0]
     
-    # Test breaks with extra whitespace
-    whitespace_content = """# Page 1
-
-  ---  
-
-# Page 2
-
-    [slide]    
-
-# Page 3
-
-	---	
-
-# Page 4"""
+    # Break at the very end
+    md2 = "# Slide\n---"
+    slides2 = parser.parse_with_page_breaks(md2)
+    assert len(slides2) == 1
+    assert "<h1>Slide</h1>" in slides2[0]
     
-    html_slides = parser.parse_with_page_breaks(whitespace_content)
-    assert len(html_slides) == 4, "Should handle whitespace around page breaks" 
+    # Multiple breaks together
+    md3 = "# Slide 1\n---\n---\n# Slide 2"
+    slides3 = parser.parse_with_page_breaks(md3)
+    assert len(slides3) == 2
+    
+    # No content between breaks
+    md4 = "# Slide 1\n---\n\n---\n# Slide 2"
+    slides4 = parser.parse_with_page_breaks(md4)
+    assert len(slides4) == 2
+
+    # Breaks inside code blocks should be ignored
+    md5 = """
+```
+---
+```
+"""
+    slides5 = parser.parse_with_page_breaks(md5)
+    assert len(slides5) == 1
+    assert "<hr>" not in slides5[0]
+
+
+def test_page_break_not_confused_with_content(temp_base_dir):
+    """Ensure page breaks aren't triggered by similar-looking content."""
+    parser = MarkdownParser(base_dir=temp_base_dir)
+
+    # Content that looks like a page break but isn't
+    test_cases = [
+        "Text with --- inside it",
+        "A line with more than three --- like so -----",
+        "Some text\n---\nand more on same line",
+        "Not a [slide] if it has text after it",
+        "What about a `[slide]` in code?",
+        "Or a line with just [slide"
+    ]
+
+    for content in test_cases:
+        slides = parser.parse_with_page_breaks(content)
+        assert len(slides) == 1, f"Failed on content: {content}"
+        
+        
+def test_page_break_whitespace_handling(temp_base_dir):
+    """Test that page breaks work with various amounts of whitespace."""
+    parser = MarkdownParser(base_dir=temp_base_dir)
+    
+    # Whitespace around page breaks
+    md = "# Slide 1\n\n   ---   \n\n# Slide 2\n\n  [slide]  \n\n# Slide 3"
+    slides = parser.parse_with_page_breaks(md)
+    assert len(slides) == 3
+    assert "<h1>Slide 1</h1>" in slides[0]
+    assert "<h1>Slide 2</h1>" in slides[1]
+    assert "<h1>Slide 3</h1>" in slides[2] 

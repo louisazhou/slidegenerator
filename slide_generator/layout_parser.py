@@ -8,6 +8,7 @@ import logging
 import os
 from typing import List, Optional, Dict, Any
 from bs4 import BeautifulSoup
+from pathlib import Path
 
 from .models import Block
 from .theme_loader import get_css
@@ -24,9 +25,10 @@ class StructuredLayoutParser:
     to extract this information.
     """
     
-    def __init__(self, theme: str = "default", debug: bool = False):
+    def __init__(self, theme: str, base_dir: Path, debug: bool = False):
         self.theme = theme
         self.debug = debug
+        self.base_dir = base_dir
         self._load_theme_variables()
     
     def _load_theme_variables(self):
@@ -79,11 +81,13 @@ class StructuredLayoutParser:
         viewport_width = self._get_px_value('slide-width')
         viewport_height = self._get_px_value('slide-height')
         
-        # Copy images to temp directory if needed
-        if temp_dir:
-            html_content = self._copy_images_for_measurement(html_content, temp_dir)
+        # Images referenced directly via file:// – no temp copies needed
         
-        browser = await launch()
+        browser = await launch(args=[
+            '--allow-file-access-from-files',
+            '--disable-web-security',
+            '--allow-file-access'
+        ])
         page = await browser.newPage()
         
         # Set viewport size to match CSS theme dimensions
@@ -186,15 +190,31 @@ class StructuredLayoutParser:
                 const tagName = el.tagName.toLowerCase();
                 
                 if (tagName === 'img') {
+                    // Check if this image has a caption from data-caption attribute
+                    let caption = el.getAttribute('data-caption') || '';
+                    
+                    // For PPTX rendering, we need the original file path, not Base64 data URIs
+                    let originalSrc = el.getAttribute('src') || '';
+                    let filePath = el.getAttribute('data-filepath') || '';
+                    
+                    // If no data-filepath but src is a file:// URL, extract the path
+                    if (!filePath && originalSrc.startsWith('file://')) {
+                        filePath = originalSrc.substring(7); // Remove 'file://' prefix
+                    }
+                    
+                    // Use data-filepath for PPTX, but keep original src for HTML preview
+                    let srcForPptx = filePath || originalSrc;
+                    
                     return {
                         type: 'image',
-                        src: el.getAttribute('data-filepath') || el.getAttribute('src'),
+                        src: srcForPptx,  // Use file path for PPTX rendering
                         alt: el.getAttribute('alt') || '',
+                        caption: caption,
                         scaleX: el.getAttribute('data-scale-x'),
                         scaleY: el.getAttribute('data-scale-y'),
                         scaleType: el.getAttribute('data-scale-type'),
                         inColumn: el.getAttribute('data-in-column'),
-                        html: el.outerHTML,  // Preserve full HTML with all attributes
+                        html: el.outerHTML,  // Preserve full HTML with all attributes for debugging
                         originalTag: tagName  // Preserve original tag
                     };
                 }
@@ -351,8 +371,41 @@ class StructuredLayoutParser:
                 };
             }
             
+            // Helper to create caption elements for images with captions
+            function createCaptionElement(img, caption) {
+                const captionEl = document.createElement('p');
+                captionEl.className = 'figure-caption';
+                captionEl.textContent = caption;
+                // match caption width and horizontal position to image
+                const imgRect = img.getBoundingClientRect();
+                const parentRect = img.parentElement.getBoundingClientRect();
+                // Compute caption width so that its right edge aligns with the
+                // image’s right edge *after* slide-padding is stripped later on.
+                //   left offset within parent:
+                const leftOffset = imgRect.left - parentRect.left;
+                //   full width relative to parent left edge:
+                const fullWidth = imgRect.right - parentRect.left;
+                captionEl.style.width = fullWidth + 'px';
+                captionEl.style.marginLeft = leftOffset + 'px';
+                
+                // Insert the caption after the image
+                img.parentNode.insertBefore(captionEl, img.nextSibling);
+                return captionEl;
+            }
+            
             // Main function to wrap elements
             function wrapElementsInPptxBoxes() {
+                // First, create caption elements for images with captions
+                document.querySelectorAll('img[data-caption]').forEach(img => {
+                    const caption = img.getAttribute('data-caption');
+                    if (caption && caption.trim()) {
+                        const nextEl = img.nextElementSibling;
+                        if (!(nextEl && nextEl.classList && nextEl.classList.contains('figure-caption'))) {
+                            createCaptionElement(img, caption);
+                        }
+                    }
+                });
+                
                 const elementsToWrap = document.querySelectorAll('.slide *, .page-break');
                 const processedElements = new Set();
                 
@@ -652,18 +705,21 @@ class StructuredLayoutParser:
                             else:
                                 block_bid_candidate = first_child_bid
             
-            # Create block
-            block = Block(
-                tag=tag,
-                content=text_content,
-                x=int(element['x']),
-                y=int(element['y']),
-                w=int(element['width']),
-                h=int(element['height']),
-                className=element.get('original_class', ''),
-                style=element.get('style', {}),
-                parentClassName=element['parent'].get('class') if element.get('parent') else None
-            )
+            # Create block using from_element for better consistency
+            element_dict = {
+                'tagName': tag,
+                'textContent': text_content,
+                'x': int(element['x']),
+                'y': int(element['y']),
+                'width': int(element['width']),
+                'height': int(element['height']),
+                'className': element.get('original_class', ''),
+                'style': element.get('style', {}),
+                'parentClassName': element['parent'].get('class') if element.get('parent') else None,
+                'bid': element.get('bid')
+            }
+            
+            block = Block.from_element(element_dict)
             
             # Add additional attributes for images
             if content['type'] == 'image':
@@ -682,71 +738,40 @@ class StructuredLayoutParser:
                 block.parentColumnWidth = element['column']['width']
                 block.columnMode = element['column']['mode']
             
-            # Add bid from the structured element or generate one
-            if element.get('bid'):
-                block.bid = element['bid']
-            elif block_bid_candidate:
-                # Use the candidate BID found during processing (e.g., from list content)
-                block.bid = block_bid_candidate
-            else:
-                # Extract BID from HTML content if available
-                import re
-                html_content = content.get('html', '')
-                bid_match = re.search(r'data-bid="([^"]+)"', html_content)
-                if bid_match:
-                    block.bid = bid_match.group(1)
+            # Handle bid assignment if not already set by from_element
+            if not block.bid:
+                if block_bid_candidate:
+                    # Use the candidate BID found during processing (e.g., from list content)
+                    block.bid = block_bid_candidate
                 else:
-                    block.bid = f"structured_{len(blocks)}"
+                    # Extract BID from HTML content if available
+                    import re
+                    html_content = content.get('html', '')
+                    bid_match = re.search(r'data-bid="([^"]+)"', html_content)
+                    if bid_match:
+                        block.bid = bid_match.group(1)
+                    else:
+                        block.bid = f"structured_{len(blocks)}"
             
             blocks.append(block)
         
         return blocks
     
-    def _copy_images_for_measurement(self, html_content: str, temp_dir: str) -> str:
-        """Copy images to temp directory for measurement."""
-        import re
-        import shutil
-        
-        def replace_image_src(match):
-            src = match.group(1)
-            
-            # Skip if already absolute path or URL
-            if src.startswith(('http://', 'https://', 'file://', '/')):
-                return match.group(0)
-            
-            # Copy image to temp directory
-            try:
-                if os.path.exists(src):
-                    filename = os.path.basename(src)
-                    temp_path = os.path.join(temp_dir, filename)
-                    if not os.path.exists(temp_path):
-                        shutil.copy2(src, temp_path)
-                    # Use just the filename, not the full temp path
-                    return f'src="{filename}" data-filepath="{src}"'
-                else:
-                    return match.group(0)
-            except Exception:
-                return match.group(0)
-        
-        # Replace image src attributes
-        return re.sub(r'src="([^"]+)"', replace_image_src, html_content)
-
 
 # Convenience function for backward compatibility
 async def parse_html_with_structured_layout(html_content: str, theme: str = "default", 
-                                           temp_dir: Optional[str] = None, debug: bool = False) -> List[Block]:
+                                           temp_dir: Optional[str] = None, debug: bool = False,
+                                           base_dir: Optional[str] = None) -> List[Block]:
     """
     Parse HTML using the structured pptx-box approach.
     
     Args:
         html_content: HTML content to parse
         theme: Theme name for CSS variables
-        temp_dir: Temporary directory for files
+        temp_dir: Temporary directory for assets
         debug: Enable debug output
-        
-    Returns:
-        List of Block objects
+        base_dir: Base directory for resolving relative image paths
     """
-    parser = StructuredLayoutParser(theme=theme, debug=debug)
+    parser = StructuredLayoutParser(theme=theme, base_dir=Path(base_dir) if base_dir else Path.cwd(), debug=debug)
     structured_elements = await parser.parse_html_with_layout(html_content, temp_dir)
     return parser.convert_to_blocks(structured_elements)

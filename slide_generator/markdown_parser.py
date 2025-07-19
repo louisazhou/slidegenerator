@@ -4,20 +4,24 @@ Enhanced markdown parser with support for multiple page break formats.
 from typing import List, Optional
 from markdown_it import MarkdownIt
 import os
+from pathlib import Path
 
+from .paths import resolve_asset
 
 class MarkdownParser:
     """
     Enhanced markdown parser with page break support using markdown-it-py.
     """
     
-    def __init__(self):
+    def __init__(self, base_dir: Path):
         """
         Initialize the markdown parser.
         
         Args:
-            extensions: List of markdown extensions to enable (for compatibility)
+            base_dir: Base directory for resolving relative image paths. Required.
         """
+        self.base_dir = base_dir
+        
         # markdown-it-py doesn't use the same extension system as the old markdown library
         # but it has most features built-in by default
         self.markdown_processor = MarkdownIt('commonmark', {
@@ -194,7 +198,7 @@ class MarkdownParser:
         
         # Convert ++underline++ (single) and ^^wavy^^ underline first
         processed = re.sub(r'\+\+(.*?)\+\+', r'<u>\1</u>', processed)
-        processed = re.sub(r'\^\^(.*?)\^\^', r'<u data-wavy="true">\1</u>', processed)
+        processed = re.sub(r'\^\^(.*?)\^\^', r'<u class="wavy">\1</u>', processed)
 
         # Convert ~~strikethrough~~ to <del>
         processed = re.sub(r'~~(.*?)~~', r'<del>\1</del>', processed)
@@ -349,20 +353,38 @@ class MarkdownParser:
 
         processed = convert_columns(processed)
         
-        # Handle image scaling syntax ![alt|0.8x](path)
+        # Handle image scaling syntax ![alt|0.8x](path) and new caption syntax ![Caption: text|0.8x](path)
         def replace_image(match):
-            alt = match.group(1)
+            alt_and_maybe_caption = match.group(1)
             scale = match.group(2)
             axis = match.group(3)
             src = match.group(4)
 
-            # Convert relative paths to absolute for file existence check
-            if not src.startswith(('http://', 'https://', 'file://')):
-                abs_path = os.path.abspath(src)
-                browser_src = f"file://{abs_path}"
+            # Parse caption and alt text from the alt field
+            caption = ""
+            alt = alt_and_maybe_caption
+            
+            # Check if alt starts with "Caption: "
+            if alt_and_maybe_caption.startswith("Caption: "):
+                # Extract caption and remove it from alt text
+                caption_start = len("Caption: ")
+                if '|' in alt_and_maybe_caption[caption_start:]:
+                    caption_part, rest = alt_and_maybe_caption[caption_start:].split('|', 1)
+                    caption = caption_part.strip()
+                    alt = rest.strip()  # The rest becomes the alt text
+                else:
+                    caption = alt_and_maybe_caption[caption_start:].strip()
+                    alt = ""  # No alt text, just caption
             else:
-                abs_path = src
-                browser_src = src
+                # No caption, the whole thing is alt text
+                alt = alt_and_maybe_caption
+                caption = ""
+
+            # Resolve asset once via helper (copies into tmp_dir for browser)
+            browser_src, abs_path = resolve_asset(
+                src,
+                base_dir=self.base_dir,
+            )
 
             attrs = [f'data-filepath="{abs_path}"']
             if scale and axis:
@@ -370,11 +392,15 @@ class MarkdownParser:
                 # The layout engine will calculate exact dimensions using theme CSS values
                 attrs.append(f'data-scale-{axis.lower()}="{scale}"')
                 attrs.append(f'data-scale-type="{axis.lower()}"')
+            
+            # Add caption data if present
+            if caption:
+                attrs.append(f'data-caption="{caption}"')
 
             attr_str = ' '.join(attrs)
             return f'<img src="{browser_src}" alt="{alt}" {attr_str} />'
 
-        # First process images to add scaling attributes
+        # First process images to add scaling attributes and caption data
         processed = re.sub(r'!\[([^\]|]+)(?:\|([0-9.]+)([xy]))?\]\(([^)\s]+)\)', replace_image, processed)
         
         # After processing columns, mark images that are within column divs

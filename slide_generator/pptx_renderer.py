@@ -225,8 +225,7 @@ class PPTXRenderer:
             ],
             'code_text': [
                 r'pre\s*{[^}]*color:\s*([^;}\s]+)',  # Look for separate pre rule
-                r'code\s*{[^}]*color:\s*([^;}\s]+)',
-                # r'pre,?\s*code\s*{[^}]*color:\s*([^;}\s]+)'  # Keep for backwards compatibility
+                r'code\s*{[^}]*color:\s*([^;}\s]+)'
             ],
             'heading_text': [
                 r'h[1-6]\s*{[^}]*color:\s*([^;}\s]+)',
@@ -340,25 +339,24 @@ class PPTXRenderer:
         prs.slide_width = Inches(slide_width_inches)
         prs.slide_height = Inches(slide_height_inches)
         
-        for page_idx, page in enumerate(pages):
-            # Add a new slide
-            slide_layout = prs.slide_layouts[6]  # Blank layout
-            slide = prs.slides.add_slide(slide_layout)
+        for page_idx, page_blocks in enumerate(pages):
+            slide = prs.slides.add_slide(prs.slide_layouts[6]) # Blank layout
+            # Reset cached image width for each new slide
+            self._last_image_block_width = None
+
+            # Track cumulative height for element positioning
+            # Start with top padding
+            self._page_offset_px = 0
             
-            # Apply CSS-defined slide background color for any theme
+            # Apply background colour from theme CSS
             bg_hex = self.theme_config['colors'].get('background')
             if bg_hex and bg_hex.startswith('#'):
                 r, g, b = self._hex_to_rgb(bg_hex)
-                background = slide.background
-                fill = background.fill
-                fill.solid()
-                fill.fore_color.rgb = RGBColor(r, g, b)
+                bg_fill = slide.background.fill
+                bg_fill.solid()
+                bg_fill.fore_color.rgb = RGBColor(r, g, b)
             
-            # Track cumulative vertical offset (in px) required to compensate for min-height adjustments
-            self._page_offset_px = 0
-            
-            # Add each block to the slide with dynamic offset adjustment
-            for block in page:
+            for block in page_blocks:
                 # Adjust top position by current cumulative offset
                 block._adjusted_top_px = block.y + self._page_offset_px  # stash for use in _add_element_to_slide
 
@@ -498,8 +496,7 @@ class PPTXRenderer:
                 # Assume it's already a number
                 paragraph.line_spacing = float(css_line_height)
                 
-            if self.debug:
-                logger.info(f"Applied CSS line-height: {css_line_height} -> {paragraph.line_spacing}")
+
     
     def _add_nested_list_paragraphs(self, first_paragraph, content, level_data, list_type):
         """Add additional paragraphs to handle nested lists within a text frame."""
@@ -750,31 +747,6 @@ class PPTXRenderer:
         
         return  # Parsing complete – no additional defaults applied
     
-    def _extract_and_handle_math(self, slide, block: Block, x_scale: float, y_scale: float):
-        """
-        Simple math processing for PowerPoint.
-        
-        Math images are already embedded as <img> tags with math-image class.
-        Inline math is already converted to plain text like $E=mc^2$.
-        
-        Args:
-            slide: PowerPoint slide object
-            block: Block object containing the paragraph
-            x_scale: Horizontal scaling factor
-            y_scale: Vertical scaling factor
-        """
-        if not hasattr(block, 'content') or not block.content:
-            return
-            
-        # Math is already processed by the math renderer:
-        # - Display math: <img class="math-image display" src="path.png" data-latex="...">
-        # - Inline math: Plain text like $E=mc^2$
-        # 
-        # The layout engine handles math images as separate blocks,
-        # so this method doesn't need to do anything special.
-        # Just let the normal text processing handle inline math text.
-        pass
-    
     def _add_element_to_slide(self, slide, block: Block, adjusted_top_px: Optional[int] = None, extra_padding_px: int = 0):
         """Add a Block element to a slide."""
         # Convert browser coordinates to slide coordinates using CSS-defined dimensions
@@ -808,9 +780,22 @@ class PPTXRenderer:
         )
 
         if is_text_block:
-            # Calculate width as slide width minus left margin so line wrapping matches HTML measurement
-            available_width_px = browser_width_px - block.x
-            width = Inches(available_width_px * x_scale)
+            # Special case: figure captions should use their own measured width so centering aligns to the figure
+            if block.className and 'figure-caption' in block.className:
+                # Prefer the width of the preceding image block (same slide) if any
+                cached_width = getattr(self, '_last_image_block_width', None)
+                if cached_width:
+                    width = Inches(cached_width * x_scale)
+                    if self.debug:
+                        logger.info(f"CAPTION: Using cached image width: {cached_width}px -> {width.inches:.2f}in")
+                else:
+                    width = Inches(block.width * x_scale)
+                    if self.debug:
+                        logger.warning(f"CAPTION: No cached image width found. Using own width: {block.width}px")
+            else:
+                # Regular paragraphs – widen to remaining slide width so wrapping matches browser view
+                available_width_px = browser_width_px - block.x
+                width = Inches(available_width_px * x_scale)
         else:
             width = Inches(block.width * x_scale)
         
@@ -839,6 +824,22 @@ class PPTXRenderer:
         if block.is_image():
             import os
             image_path = block.src
+            
+            # Store this image's width so an upcoming caption can use it for alignment
+            self._last_image_block_width = block.width
+            if self.debug:
+                logger.info(f"IMAGE: Caching image width for caption use: {block.width}px")
+            
+            # Extract the original file path from data-filepath if available
+            # This handles cases where the src has been modified for browser display
+            if hasattr(block, 'content') and 'data-filepath' in block.content:
+                filepath_match = re.search(r'data-filepath="([^"]+)"', block.content)
+                if filepath_match:
+                    original_path = filepath_match.group(1)
+                    if os.path.exists(original_path):
+                        image_path = original_path
+                        if self.debug:
+                            logger.info(f"Using original file path from data-filepath: {image_path}")
             
             # Handle file:// URLs by extracting the actual path
             if image_path and image_path.startswith('file://'):
@@ -870,11 +871,11 @@ class PPTXRenderer:
                         slide.shapes.add_picture(image_path, Inches(block.x * x_scale), top, width=width, height=height)
                     
                     if self.debug:
-                        print(f"✅ Successfully added {'math ' if is_math_image else ''}image to slide")
+                        logger.info(f"✅ Successfully added {'math ' if is_math_image else ''}image to slide")
                     return  # Successfully added image, exit early
                 else:
                     if self.debug:
-                        print(f"⚠️ Image file not accessible: {image_path}")
+                        logger.info(f"⚠️ Image file not accessible: {image_path}")
                     raise FileNotFoundError(f"Image file not found: {image_path}")
             except Exception as e:
                 # fallback placeholder with more details
@@ -1051,6 +1052,24 @@ class PPTXRenderer:
                     if not already:
                         run.font.color.rgb = default_rgb
 
+        # Post-formatting for figure captions
+
+        if block.className and 'figure-caption' in block.className:
+            for run in p.runs:
+                # Apply italic style and colour based on CSS theme definitions
+                run.font.italic = True
+                class_colors = self.theme_config.get('class_colors', {})
+                if 'figure-caption' in class_colors:
+                    r, g, b = class_colors['figure-caption']
+                    run.font.color.rgb = RGBColor(r, g, b)
+                else:
+                    # Fallback to theme default text colour
+                    default_hex = self.theme_config['colors'].get('text', '#666666')
+                    r, g, b = self._hex_to_rgb(default_hex)
+                    run.font.color.rgb = RGBColor(r, g, b)
+            # ensure caption is centred within its text box
+            p.alignment = PP_ALIGN.CENTER
+
     # ------------------------------------------------------------------
     # Admonition / Call-out box support
     # ------------------------------------------------------------------
@@ -1172,10 +1191,6 @@ class PPTXRenderer:
             p_body.font.color.rgb = RGBColor(*text_rgb)
             p_body.alignment = PP_ALIGN.LEFT
 
-
-
-
-
     def _add_math_image_to_slide(self, slide, block: Block, x_scale: float, y_scale: float, image_path: str):
         """
         Add a math image (SVG) to the slide with proper positioning and scaling.
@@ -1234,7 +1249,7 @@ class PPTXRenderer:
         try:
             # Math images are now PNG files with transparent background, no conversion needed
             if self.debug:
-                print(f"📐 Adding math PNG image: {os.path.basename(image_path)}")
+                logger.info(f"📐 Adding math PNG image: {os.path.basename(image_path)}")
             
             # Add the math image to the slide
             slide.shapes.add_picture(image_path, left, top, width=width, height=height)
@@ -1250,14 +1265,14 @@ class PPTXRenderer:
             
         except Exception as e:
             if self.debug:
-                print(f"⚠️ Failed to add math image: {e}")
+                logger.error(f"⚠️ Failed to add math image: {e}")
             
             # Skip math equation if we can't convert it to PNG
             # This ensures Google Slides compatibility by only using actual images
             return
         
         if self.debug:
-            print("✅ Successfully added math image to slide")
+            logger.info("✅ Successfully added math image to slide")
     
     def _add_math_only_block(self, slide, block: Block, x_scale: float, y_scale: float):
         """
@@ -1306,11 +1321,11 @@ class PPTXRenderer:
         
         if not latex:
             if self.debug:
-                print(f"⚠️ No LaTeX found in display math block content: {block.content[:100]}...")
+                logger.info(f"⚠️ No LaTeX found in display math block content: {block.content[:100]}...")
             return
         
         if self.debug:
-            print(f"🧮 Processing display math: {latex}")
+            logger.info(f"🧮 Processing display math: {latex}")
         
         try:
             # Import math renderer
@@ -1342,19 +1357,18 @@ class PPTXRenderer:
                 slide.shapes.add_picture(png_path, left, top, width=width, height=height)
                 
                 if self.debug:
-                    print(f"📐 Added display math block: {latex}")
+                    logger.info(f"📐 Added display math block: {latex}")
                     
             else:
                 if self.debug:
-                    print(f"⚠️ PNG file not found for display math: {latex}")
+                    logger.info(f"⚠️ PNG file not found for display math: {latex}")
                 
         except Exception as e:
             if self.debug:
-                print(f"⚠️ Failed to render display math: {latex} - {e}")
+                logger.error(f"⚠️ Failed to render display math: {latex} - {e}")
 
     def _add_table_to_slide(self, slide, block: Block, left, top, width, height):
         """Add a PowerPoint table to the slide from HTML table content."""
-        from html import unescape
         
         # Parse the HTML table to extract structure
         table_data = self._parse_html_table(block.content)
@@ -1579,8 +1593,6 @@ class PPTXRenderer:
                 if self.debug:
                     logger.error(f"⚠️  tblBorders injection failed: {e}")
                 pass
-        
-        # Helper ends here (no recursive calls)
     
     def _parse_html_table(self, html_content):
         """Parse HTML table content into structured data."""

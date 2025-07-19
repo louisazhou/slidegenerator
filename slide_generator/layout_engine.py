@@ -1,13 +1,12 @@
 """Layout engine for measuring HTML elements and pagination."""
-import tempfile
-import re
+import re, os
 import logging
 from typing import List, Optional, Callable
 from pathlib import Path
 from PIL import Image
 from html import unescape
 from bs4 import BeautifulSoup
-
+import base64, mimetypes
 from .models import Block
 from .markdown_parser import MarkdownParser
 from .theme_loader import get_css
@@ -200,6 +199,22 @@ def _is_lonely_heading(current_page: List[Block]) -> bool:
     return len(current_page) == 1 and current_page[0].tag in ['h1', 'h2', 'h3']
 
 
+def _is_divider_slide(page_blocks: List[Block]) -> bool:
+    """
+    Check if a page should be treated as a divider slide.
+    A divider slide contains only headings (H1, H2, H3) with no other content.
+    """
+    if not page_blocks:
+        return False
+    
+    # Check if all blocks are headings
+    for block in page_blocks:
+        if block.tag not in ['h1', 'h2', 'h3']:
+            return False
+    
+    return True
+
+
 def _should_keep_content_group_together(current_page: List[Block], new_block: Block, max_height: int) -> bool:
     """
     Determine if a new block should be kept with the current page based on content grouping.
@@ -308,8 +323,10 @@ def _should_break_page(current_page: List[Block], new_block: Block, max_height: 
     for rule in sorted_rules:
         try:
             if rule.condition(current_page, new_block, max_height):
-# Uncomment for debugging:
-                # Debug code removed - pagination working correctly
+                # Debug logging for content grouping decisions
+                if rule.name == "keep_content_groups_together":
+                    total_height = sum(b.height for b in current_page) + new_block.height
+                    logger.debug(f"📋 Content grouping: Keeping {new_block.tag}({new_block.height}px) with page (total: {total_height}px, limit: {max_height}px)")
                 
                 if rule.action == "break":
                     return True
@@ -428,11 +445,20 @@ class LayoutEngine:
     Layout engine for measuring HTML elements and pagination.
     """
     
-    def __init__(self, debug: bool = False, theme: str = "default"):
-        """Initialize the layout engine with theme support."""
+    def __init__(self, *, debug: bool = False, theme: str = "default", tmp_dir: Path, base_dir: Path = None):
+        """
+        Args:
+            debug: Whether to enable debug output
+            theme: Theme name (e.g. "default", "dark")
+            tmp_dir: Directory to store temporary files
+            base_dir: Base directory for resolving relative image paths
+        """
         self.debug = debug
         self.theme = theme
+        self.tmp_dir = tmp_dir
+        self.base_dir = base_dir or Path.cwd()
         self.css_reader = CSSVariableReader(theme)
+        self._default_tmp_dir = tmp_dir  # may be None; used if caller passes explicit tmp
         self.image_scaler = ImageScaler(self.css_reader, debug)
     
     def convert_markdown_to_html(self, markdown_text):
@@ -442,7 +468,7 @@ class LayoutEngine:
             return ""
         
         # Use the new markdown parser
-        parser = MarkdownParser()
+        parser = MarkdownParser(base_dir=self.base_dir)
         html_slides = parser.parse_with_page_breaks(markdown_text)
         
         # If no content slides, return empty string
@@ -499,8 +525,8 @@ class LayoutEngine:
             # Import math renderer
             from .math_renderer import get_math_renderer
             
-            # Get math renderer instance
-            math_renderer = get_math_renderer(debug=self.debug)
+            # Use temp_dir as cache directory for math images
+            math_renderer = get_math_renderer(cache_dir=temp_dir, debug=self.debug)
             
             # Process math elements 
             processed_html = math_renderer.render_math_html(html_content, temp_dir, mode="html")
@@ -519,15 +545,13 @@ class LayoutEngine:
                 logger.warning(f"Error processing math equations: {e}")
             return html_content
     
-    def measure_and_paginate(self, markdown_text: str, page_height: int = 540, temp_dir: Optional[str] = None) -> List[List[Block]]:
+    async def measure_and_paginate(self, markdown_text: str) -> List[List[Block]]:
         """
         Convert markdown to HTML, measure layout, and return paginated Block objects.
         
         Args:
             markdown_text: Markdown content to process
-            page_height: Maximum height in pixels for a single slide
-            temp_dir: Optional directory for debug files
-            
+
         Returns:
             List of pages, where each page is a list of Block objects
         """
@@ -543,13 +567,20 @@ class LayoutEngine:
         # 2. PowerPoint version with PNG images for display math, text for inline math
         try:
             from .math_renderer import get_math_renderer
-            math_renderer = get_math_renderer(debug=self.debug)
+            math_renderer = get_math_renderer(cache_dir=str(self.tmp_dir), debug=self.debug)
+            # Derive theme text colour from CSS so math PNGs match theme
+            import re
+            from .theme_loader import get_css
+            css = get_css(self.theme)
+            m = re.search(r'body\s*{[^}]*?color:\s*([^;\s]+)', css, re.IGNORECASE | re.DOTALL)
+            theme_text_color = m.group(1).strip() if m else '#000000'
+            math_renderer.png_text_color = theme_text_color
             
             # For HTML debug output - beautiful KaTeX rendering
-            preview_html = math_renderer.render_to_katex_html(html_raw)
-            
+            preview_html = await math_renderer.render_math_html(html_raw, str(self.tmp_dir), mode="html")
+
             # For PowerPoint processing - display math as images, inline as text
-            measurement_html = math_renderer.render_to_images(html_raw)
+            measurement_html = await math_renderer.render_math_html(html_raw, str(self.tmp_dir), mode="mixed")
             
         except Exception as e:
             if self.debug:
@@ -564,11 +595,10 @@ class LayoutEngine:
         if not html_content:
             return []
 
-        # Create a temporary directory for debug files if not provided
-        if temp_dir is None:
-            temp_dir = tempfile.mkdtemp()
-            if self.debug:
-                logger.info(f"Debug files will be saved to: {temp_dir}")
+        # Use the tmp_dir passed at construction
+        temp_dir = self.tmp_dir
+        if self.debug:
+            logger.info(f"Debug files will be saved to: {temp_dir}")
         
         # Store temp_dir for image processing
         self._current_temp_dir = temp_dir
@@ -582,23 +612,14 @@ class LayoutEngine:
         # Set up _original_soup for debug HTML generation and add bid attributes
         # Use the same BID assignment logic as legacy preprocessing
         processed_html_for_bids = self._preprocess_html_for_measurement(html_content)
-        from bs4 import BeautifulSoup
         
         # Use structured parser with properly preprocessed HTML that has BIDs
-        import asyncio
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        
-        blocks = loop.run_until_complete(
-            parse_html_with_structured_layout(
-                processed_html_for_bids, 
-                theme=self.theme, 
-                temp_dir=temp_dir, 
-                debug=self.debug
-            )
+        blocks = await parse_html_with_structured_layout(
+            processed_html_for_bids,
+            theme=self.theme,
+            temp_dir=str(temp_dir),
+            debug=self.debug,
+            base_dir=str(self.base_dir)
         )
         
         # Build _original_soup from the MEASUREMENT version to ensure BID consistency
@@ -607,14 +628,17 @@ class LayoutEngine:
         
         # The BIDs are already assigned in processed_html_for_bids, so we don't need to add them again
 
-        # Apply intelligent image scaling based on column context 
-        blocks = self._apply_intelligent_image_scaling_to_blocks(blocks, temp_dir)
+        # Apply intelligent image scaling based on column context
+        for block in blocks:
+            if block.is_image():
+                logger.info(f"IMAGE BLOCK: src='{block.src}', content='{block.content}'")
+        blocks = self._apply_intelligent_image_scaling_to_blocks(blocks, str(temp_dir))
 
         # Merge consecutive list items into text blocks
         blocks = self._merge_consecutive_lists(blocks)
         
         # --- Determine usable page height (slide height minus padding) ---
-        slide_height_px = page_height if page_height else self.css_reader.get_px_value('slide-height')
+        slide_height_px = self.css_reader.get_px_value('slide-height')
         padding_px = self.css_reader.get_px_value('slide-padding')
         
         usable_height_px = slide_height_px - 2 * padding_px
@@ -655,13 +679,7 @@ class LayoutEngine:
         Preprocess HTML content to match what will actually be rendered in PowerPoint.
         This ensures the browser measures the same content that will be displayed.
         """
-        
-        # FIRST: Prepare images for measurement (copy to temp dir and fix URLs)
-        # This must be done BEFORE any other processing to ensure images display correctly
-        temp_dir = getattr(self, '_current_temp_dir', None)
-        if temp_dir:
-            html_content = self._copy_images_for_measurement(html_content, temp_dir)
-        
+
         def process_list_content(match):
             """Process a single list (ul or ol) and convert to formatted text with level information"""
             list_tag = match.group(1).lower()  # 'ul' or 'ol'
@@ -669,6 +687,13 @@ class LayoutEngine:
             
             # Extract list items with their nested structure
             items_with_levels = self._extract_list_items_with_levels(list_content, list_tag)
+
+            # Debug: show what the parser extracted to help diagnose missing items
+            if self.debug:
+                try:
+                    logger.debug("📝 List (%s) extracted %d items: %s", list_tag, len(items_with_levels), [txt for txt, _ in items_with_levels])
+                except Exception:
+                    pass
             
             if not items_with_levels:
                 return match.group(0)  # Return original if no items found
@@ -693,6 +718,28 @@ class LayoutEngine:
         # Process all lists in the HTML - handle nested lists properly
         # We need to process from outermost to innermost to preserve structure
         processed_html = html_content
+        
+        # ------------------------------------------------------------
+        # DEBUG-ONLY: Insert <p class="figure-caption"> after each
+        # <img data-caption> so that the paginated HTML preview shows
+        # captions exactly as the JS step will create them.  Because the
+        # JavaScript in layout_parser now skips caption creation when one
+        # already exists, this will not cause duplicates in PPTX.
+        # ------------------------------------------------------------
+        if self.debug:
+            try:
+                _soup = BeautifulSoup(processed_html, 'html.parser')
+                for _img in _soup.find_all('img'):
+                    cap_txt = _img.get('data-caption')
+                    if cap_txt and cap_txt.strip():
+                        nxt = _img.find_next_sibling()
+                        if not (nxt and getattr(nxt, 'get', lambda *_: None)('class') and 'figure-caption' in nxt['class']):
+                            cap_el = _soup.new_tag('p', **{'class': 'figure-caption'})
+                            cap_el.string = cap_txt
+                            _img.insert_after(cap_el)
+                processed_html = str(_soup)
+            except Exception:
+                pass  # Fail silently – preview captions are a convenience
         
         # Keep processing until no more top-level lists are found
         max_iterations = 50  # Increased limit for complex documents with many lists
@@ -808,90 +855,44 @@ class LayoutEngine:
         return str(soup)
     
     def _extract_list_items_with_levels(self, list_content, list_tag, base_level=0):
-        """Extract list items with their nesting levels"""
-        import re
-        
+        """Extract list items and their nesting level using BeautifulSoup (robust)."""
+
+        soup = BeautifulSoup(list_content, 'html.parser')
+
         items_with_levels = []
-        
-        # Use a more robust approach: find top-level <li> tags only
-        current_pos = 0
-        
-        while current_pos < len(list_content):
-            # Find next <li> or </li> tag
-            li_open_match = re.search(r'<li(?:[^>]*)>', list_content[current_pos:])
-            li_close_match = re.search(r'</li>', list_content[current_pos:])
-            
-            if not li_open_match:
-                break
-                
-            # Start of <li> tag
-            li_start = current_pos + li_open_match.start()
-            li_content_start = current_pos + li_open_match.end()
-            
-            # Find the matching closing </li> by tracking depth
-            search_pos = li_content_start
-            li_depth = 1
-            
-            while search_pos < len(list_content) and li_depth > 0:
-                # Look for next <li> or </li>
-                next_open = re.search(r'<li(?:[^>]*)>', list_content[search_pos:])
-                next_close = re.search(r'</li>', list_content[search_pos:])
-                
-                if next_close and (not next_open or next_close.start() < next_open.start()):
-                    # Found closing tag first
-                    li_depth -= 1
-                    if li_depth == 0:
-                        # This is our matching closing tag
-                        li_content_end = search_pos + next_close.start()
+
+        def _walk(list_element, level):
+            for li in list_element.find_all('li', recursive=False):
+                # capture text/html before any nested lists
+                parts = []
+                for child in li.contents:
+                    if child.name in ('ul', 'ol'):
                         break
-                    search_pos += next_close.end()
-                elif next_open:
-                    # Found opening tag first
-                    li_depth += 1
-                    search_pos += next_open.end()
-                else:
-                    # No more tags found
-                    li_content_end = len(list_content)
-                    break
-            else:
-                # Reached end without finding closing tag
-                li_content_end = len(list_content)
-            
-            # Extract the content of this <li> item
-            item_content = list_content[li_content_start:li_content_end]
-            
-            # Check if this item contains nested lists
-            nested_list_pattern = r'<(ul|ol)[^>]*>(.*?)</\1>'
-            nested_matches = list(re.finditer(nested_list_pattern, item_content, re.DOTALL | re.IGNORECASE))
-            
-            if nested_matches:
-                # Extract text before the first nested list
-                first_nested_start = nested_matches[0].start()
-                text_before_nested = item_content[:first_nested_start]
-                
-                # Clean and add the text content if not empty
-                text_content = self._clean_html_for_measurement(text_before_nested)
-                if text_content.strip():
-                    items_with_levels.append((text_content, base_level))
-                
-                # Process each nested list
-                for nested_match in nested_matches:
-                    nested_tag = nested_match.group(1).lower()
-                    nested_content = nested_match.group(2)
-                    nested_items = self._extract_list_items_with_levels(nested_content, nested_tag, base_level + 1)
-                    items_with_levels.extend(nested_items)
-            else:
-                # Simple item without nesting
-                text_content = self._clean_html_for_measurement(item_content)
-                if text_content.strip():
-                    items_with_levels.append((text_content, base_level))
-            
-            # Move to after this </li> tag - advance position  
-            if li_depth == 0 and 'next_close' in locals():
-                current_pos = search_pos + next_close.end()
-            else:
-                current_pos = len(list_content)  # End if we couldn't find proper closing
-            
+                    parts.append(str(child))
+
+                combined = ''.join(parts)
+                clean = self._clean_html_for_measurement(combined)
+                if clean.strip():
+                    items_with_levels.append((clean, level))
+
+                # recurse into nested lists directly under this li
+                for sub in li.find_all(['ul', 'ol'], recursive=False):
+                    _walk(sub, level + 1)
+
+        # Locate the first list element matching current tag
+        if soup.name in ('ul', 'ol'):
+            root = soup
+        else:
+            root = soup.find(list_tag) or soup.find(['ul', 'ol'])
+
+        if not root:
+            # The fragment did not include the outer list tag; wrap it
+            wrapped = f'<{list_tag}>' + list_content + f'</{list_tag}>'
+            root = BeautifulSoup(wrapped, 'html.parser').find(list_tag)
+
+        if root:
+            _walk(root, base_level)
+
         return items_with_levels
 
     def _clean_html_for_measurement(self, text):
@@ -904,8 +905,9 @@ class LayoutEngine:
         text = re.sub(r'<code(?:[^>]*)>(.*?)</code>', r'`\1`', text, flags=re.IGNORECASE | re.DOTALL)
         text = re.sub(r'<mark(?:[^>]*)>(.*?)</mark>', r'==\1==', text, flags=re.IGNORECASE | re.DOTALL)
         
-        # Remove all other HTML tags
-        text = re.sub(r'<[^>]+>', '', text)
+        # Remove all other HTML tags EXCEPT inline formatting we want to preserve
+        # Keep span/u/del/strong/em/i/b/code/mark tags with any attributes
+        text = re.sub(r'<(?!/?(?:span|u|del|strong|b|em|i|code|mark)\b)[^>]+>', '', text, flags=re.IGNORECASE)
         
         # Clean up whitespace
         text = re.sub(r'\s+', ' ', text).strip()
@@ -940,50 +942,7 @@ class LayoutEngine:
         
         return merged_blocks 
 
- 
-    
-    def _copy_images_for_measurement(self, html_content: str, temp_dir: str) -> str:
-        """
-        Copy images to temp directory and convert file:// URLs to relative URLs.
-        Image scaling happens later after browser measurement.
-        """
-        import re
-        import os
-        import shutil
-        
-        # Find all file:// image URLs
-        pattern = r'src="file://([^"]*)"'
-        matches = re.finditer(pattern, html_content)
-        
-        # Process each image
-        updated_html = html_content
-        for match in matches:
-            file_path = match.group(1)
-            
-            if os.path.exists(file_path):
-                # Copy image to temp directory
-                filename = os.path.basename(file_path)
-                temp_image_path = os.path.join(temp_dir, filename)
-                
-                try:
-                    shutil.copy2(file_path, temp_image_path)
-                    
-                    # Replace file:// URL with path pointing to temp copy and keep original via data-filepath
-                    old_src = f'src="file://{file_path}"'
-                    new_src = f'src="file://{temp_image_path}" data-filepath="{file_path}"'
-                    updated_html = updated_html.replace(old_src, new_src)
 
-                    if self.debug:
-                        logger.info(f"📸 Copied image: {filename} -> {temp_image_path}")
-                        
-                except Exception as e:
-                    if self.debug:
-                        logger.warning(f"⚠️ Failed to copy image {file_path}: {e}")
-            else:
-                if self.debug:
-                    logger.warning(f"⚠️ Image file not found: {file_path}")
-        
-        return updated_html
 
     def _apply_intelligent_image_scaling_to_blocks(self, blocks: List[Block], temp_dir: str) -> List[Block]:
         """
@@ -1001,7 +960,6 @@ class LayoutEngine:
         
         # Track pagination context for accurate height constraints
         usable_height = self.css_reader.get_px_value('slide-height') - 2 * self.css_reader.get_px_value('slide-padding')
-        current_page_height = 0
         
         for i, block in enumerate(blocks):
             if block.is_image() and hasattr(block, 'src'):
@@ -1077,8 +1035,61 @@ class LayoutEngine:
                             logger.info(f"📐 Scaled block {block.src}: {old_dims} -> {final_width:.0f}x{final_height:.0f} ({context}, {constraint_type})")
                     elif self.debug:
                         logger.warning(f"⚠️ Failed to calculate dimensions for {block.src}")
-                elif self.debug and block.is_image():
-                    logger.warning(f"📍 Image block {block.src} has no scaling data")
+                elif block.is_image():
+                    # AUTO-FIT when no data-scale-x / data-scale-y is present
+                    
+                    # 1. Calculate available width (respecting columns)
+                    available_w = (block.parentColumnWidth
+                                   if getattr(block, 'parentColumnWidth', None)
+                                   else self.image_scaler.content_width) * 0.95
+
+                    # 2. Estimate available HEIGHT on *this* page so far
+                    #    Approximate page start = last major heading (h1) before this image
+                    page_start_idx = 0
+                    for j in range(i-1, -1, -1):
+                        if blocks[j].tag == 'h1':
+                            page_start_idx = j
+                            break
+
+                    content_above_height = sum(b.height for b in blocks[page_start_idx:i])
+                    available_h = max(0, usable_height - content_above_height) * 0.95
+
+                    try:
+                        from PIL import Image
+                        with Image.open(block.src) as img:
+                            original_w, original_h = img.size
+                    except Exception as e:
+                        if self.debug:
+                            logger.warning(f"⚠️ Auto-fit failed to read image size for {block.src}: {e}")
+                        continue
+                    
+                    # If image already fits, no scaling needed
+                    if original_w <= available_w and original_h <= available_h:
+                        continue
+
+                    # 3. Calculate shrink ratio for both axes and pick the smallest
+                    ratio_w = available_w / original_w if original_w > 0 else 1
+                    ratio_h = available_h / original_h if original_h > 0 else 1
+                    ratio = min(ratio_w, ratio_h, 1) # Use min to guarantee fit, cap at 1 (no enlarging)
+
+                    # 4. Apply final dimensions to block
+                    block.w = int(original_w * ratio)
+                    block.h = int(original_h * ratio)
+
+                    # Update corresponding <img> in _original_soup so debug HTML shows correct size
+                    if hasattr(self, '_original_soup') and hasattr(block, 'bid'):
+                        try:
+                            node = self._original_soup.select_one(f'[data-bid="{block.bid}"]')
+                            if node and node.name == 'img':
+                                node['width'] = str(block.w)
+                                node['height'] = str(block.h)
+                        except Exception:
+                            pass
+
+                    if self.debug:
+                        context = "column" if getattr(block, 'inColumn', None) == "true" else "full-width"
+                        logger.info(f"🖼️  Auto-fit {block.src} ({context}): "
+                                    f"{original_w}x{original_h} → {block.w}x{block.h} ({ratio*100:.1f}%)")
         
         return blocks
 
@@ -1110,7 +1121,12 @@ class LayoutEngine:
                 continue
                 
             html_parts.append('<hr style="border:2px dashed #999;margin:40px 0;">')
-            html_parts.append(f'<div class="slide" id="slide-{page_idx}" data-idx="{page_idx}">')
+            
+            # Check if this is a divider slide
+            is_divider = _is_divider_slide(page_blocks)
+            slide_class = "slide divider" if is_divider else "slide"
+            
+            html_parts.append(f'<div class="{slide_class}" id="slide-{page_idx}" data-idx="{page_idx}">')
             
             # Use WYSIWYG slice – copy original DOM nodes for this page
             bids_this_page = [blk.bid for blk in page_blocks if hasattr(blk, 'bid')]
@@ -1118,8 +1134,7 @@ class LayoutEngine:
 
             # ---- Beautify lists for debug view ----
             try:
-                from bs4 import BeautifulSoup as _BS
-                soup_page = _BS(page_html, 'html.parser')
+                soup_page = BeautifulSoup(page_html, 'html.parser')
                 for p in soup_page.select('p[data-list-levels]'):
                     levels = [int(x) for x in p['data-list-levels'].split(',')]
                     list_type = p.get('data-list-type', 'ul')
@@ -1154,85 +1169,40 @@ class LayoutEngine:
             html_parts.append('</div>')  # close .slide
 
         # Small CSS for debug bullets
+        # Update img src to point to embedded versions happened above.
+
         html_parts.extend([
             "<style>.dbg-list{display:block;text-indent:-1em;padding-left:1em;margin-left:20px;margin-top:0;margin-bottom:0;line-height:inherit;}</style>",
             "</body>", "</html>"])
 
         paginated_html = "\n".join(html_parts)
 
-        # Copy images used in this HTML from temp_dir to output/debug_assets
-        if temp_dir:
-            import os, shutil, re
-            output_dir = Path.cwd() / "output" / "debug_assets"
-            output_dir.mkdir(parents=True, exist_ok=True)
-            
-            # Track which images we've copied
-            copied_images = {}
+        # Embed images in the generated HTML
+        soup_embed = BeautifulSoup(paginated_html, "html.parser")
+        for img_tag in soup_embed.find_all("img"):
+            src = img_tag.get("src", "")
+            if src.startswith("data:"):
+                continue  # already embedded
+            # Resolve file path
+            if src.startswith("file://"):
+                file_path = src[7:]
+            else:
+                file_path = os.path.join(temp_dir or "", src)
+                if not os.path.exists(file_path):
+                    file_path = os.path.abspath(src)
+            if not os.path.exists(file_path):
+                continue
+            try:
+                mime, _ = mimetypes.guess_type(file_path)
+                if not mime:
+                    mime = "image/png"
+                with open(file_path, "rb") as fh:
+                    b64 = base64.b64encode(fh.read()).decode()
+                img_tag["src"] = f"data:{mime};base64,{b64}"
+            except Exception:
+                pass
 
-            # Find all <img> tags in HTML and extract src and data-filepath
-            for match in re.finditer(r'<img[^>]+', paginated_html):
-                img_tag = match.group(0)
-                
-                # Extract src and data-filepath attributes
-                src_match = re.search(r'src="([^"]+)"', img_tag)
-                filepath_match = re.search(r'data-filepath="([^"]+)"', img_tag)
-                
-                if src_match:
-                    src = src_match.group(1)
-                    original_filepath = filepath_match.group(1) if filepath_match else None
-                    
-                    # Determine the source file to copy
-                    source_file = None
-                    filename = None
-                    
-                    if src.startswith('file://'):
-                        # Extract path from file:// URL
-                        file_path = src[7:]  # Remove 'file://' prefix
-                        if os.path.exists(file_path):
-                            source_file = file_path
-                            filename = os.path.basename(file_path)
-                    elif original_filepath and os.path.exists(original_filepath):
-                        # Use the original filepath
-                        source_file = original_filepath
-                        filename = os.path.basename(original_filepath)
-                    elif not any(sep in src for sep in ['/', '\\']):
-                        # Simple filename, check in temp_dir
-                        temp_file = os.path.join(temp_dir, src)
-                        if os.path.exists(temp_file):
-                            source_file = temp_file
-                            filename = src
-                    
-                    # Copy the file if we found a valid source and haven't copied it yet
-                    if source_file and filename and filename not in copied_images:
-                        dest_path = output_dir / filename
-                        try:
-                            shutil.copy2(source_file, dest_path)
-                            copied_images[filename] = str(dest_path)
-                            if self.debug:
-                                logger.info(f"📁 Copied image for debug HTML: {filename}")
-                        except Exception as e:
-                            if self.debug:
-                                logger.warning(f"⚠️ Failed to copy image {filename}: {e}")
-
-            # Update img src to point to debug_assets folder
-            def fix_img_src(match):
-                full_match = match.group(0)
-                src = match.group(1)
-                
-                # Handle different types of src attributes
-                if src.startswith('file://'):
-                    # Extract filename from file:// URL
-                    file_path = src[7:]
-                    filename = os.path.basename(file_path)
-                    if filename in copied_images:
-                        return full_match.replace(f'src="{src}"', f'src="debug_assets/{filename}"')
-                elif not any(sep in src for sep in ['/', '\\']) and not src.startswith('debug_assets/'):
-                    # Simple filename that should be in debug_assets
-                    return full_match.replace(f'src="{src}"', f'src="debug_assets/{src}"')
-                
-                return full_match
-                    
-            paginated_html = re.sub(r'src="([^"]*)"', fix_img_src, paginated_html)
+        paginated_html = str(soup_embed)
 
         return paginated_html
     

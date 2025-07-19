@@ -1,3 +1,11 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Paginated Slide Content</title>
+<style>
 /* Default theme for slide generation */
 /* Extracted from layout_engine.py hardcoded CSS */
 
@@ -334,3 +342,26 @@ mark {
     max-width: 100% !important;
     overflow: hidden !important;
 } 
+/* list bullet helper for debug view will be injected later */
+.slide{margin-bottom:40px;border:3px solid red;position:relative;}
+.slide:before{position:absolute;top:-26px;left:0;background:red;color:#fff;padding:4px 8px;font-weight:bold;content:attr(data-idx);}
+</style>
+</head>
+<body>
+<hr style="border:2px dashed #999;margin:40px 0;"/>
+<div class="slide" data-idx="1" id="slide-1">
+<h1 data-bid="b0">Action Items &amp; Next Steps</h1>
+<h2 data-bid="b1">Immediate Actions</h2>
+<p data-bid="b2" data-list-levels="0,1,1,0,1,1,0,1,1" data-list-type="ol"><strong data-bid="b3">West Region Focus</strong><br data-bid="b4"/>Implement growth strategy<br data-bid="b5"/>Target: 10% improvement<br data-bid="b6"/><strong data-bid="b7">Product Development</strong><br data-bid="b8"/>Launch new features in Q1 2025<br data-bid="b9"/>Expected impact: $500,000 revenue<br data-bid="b10"/><strong data-bid="b11">Market Expansion</strong><br data-bid="b12"/>Enter 3 new markets<br data-bid="b13"/>Timeline: 6 months</p>
+<h2 data-bid="b14">Success Metrics</h2>
+<p data-bid="b15" data-list-levels="0,0,0" data-list-type="ul">Overall growth target: 18%<br data-bid="b16"/>Customer satisfaction: 95%<br data-bid="b17"/>Market share goal: 38%</p>
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;"/>
+<div class="slide" data-idx="2" id="slide-2">
+<h1 data-bid="b18">Simple List Test</h1>
+<h2 data-bid="b19">Basic List</h2>
+<p data-bid="b20" data-list-levels="0,0,0,0,0" data-list-type="ul">Item 1<br data-bid="b21"/>Item 2<br data-bid="b22"/>Item 3<br data-bid="b23"/>Item 4<br data-bid="b24"/>Item 5</p>
+</div>
+<style>.dbg-list{display:block;text-indent:-1em;padding-left:1em;margin-left:20px;margin-top:0;margin-bottom:0;line-height:inherit;}</style>
+</body>
+</html>
