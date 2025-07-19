@@ -16,13 +16,13 @@ from pptx.oxml.ns import qn, nsdecls
 from pptx.oxml import parse_xml
 
 from .models import Block
-from .theme_loader import get_css
 
 logger = logging.getLogger(__name__)
 
 # Helper function to convert pixels to inches
 def px(pixels):
-    return Inches(pixels / 96)
+    """Convert pixels to inches at 96 DPI (PowerPoint standard)."""
+    return Inches(pixels / 96.0)
 
 class PPTXRenderer:
     """
@@ -33,133 +33,27 @@ class PPTXRenderer:
         """Initialize the PowerPoint renderer with theme support."""
         self.theme = theme
         self.debug = debug
+        # Use centralized CSS parsing
+        from .css_utils import CSSParser
+        self.css_parser = CSSParser(theme)
         self.theme_config = self._parse_theme_config()
     
     def _parse_theme_config(self) -> Dict:
-        """Parse CSS theme to extract font sizes and styling configuration."""
-        css_content = get_css(self.theme)
-        
-        # Extract font sizes from CSS or fail
+        """Parse CSS theme to extract font sizes and styling configuration using centralized parser."""
         config = {
-            'font_sizes': {},
-            'line_height': None,
-            'colors': {},
-            'slide_dimensions': {},
-            'table_deltas': {},
-            'css_content': css_content
+            'font_sizes': self.css_parser.get_font_sizes(),
+            'line_height': self.css_parser.get_line_height(),
+            'colors': self.css_parser.get_colors(),
+            'slide_dimensions': self.css_parser.get_slide_dimensions(),
+            'table_deltas': self.css_parser.get_table_config(),
+            'class_colors': self.css_parser.get_class_colors(),
+            'admonition_colors': self.css_parser.get_admonition_colors(),
+            'css_content': self.css_parser.css_content
         }
         
-        # Parse font sizes from CSS - REQUIRED, no defaults
-        font_size_patterns = {
-            'h1': r'h1\s*{[^}]*font-size:\s*(\d+)px',
-            'h2': r'h2\s*{[^}]*font-size:\s*(\d+)px',
-            'h3': r'h3\s*{[^}]*font-size:\s*(\d+)px',
-            'p': r'p\s*{[^}]*font-size:\s*(\d+)px',
-            'ul, ol': r'ul,\s*ol\s*{[^}]*font-size:\s*(\d+)px',
-            'pre': r'pre\s*{[^}]*font-size:\s*(\d+)px'  # Look for separate pre rule
-        }
+        # Add backwards compatibility mappings
+        config['font_family'] = config['slide_dimensions']['font_family']
         
-        for element, pattern in font_size_patterns.items():
-            match = re.search(pattern, css_content, re.IGNORECASE | re.DOTALL)
-            if match:
-                px_size = int(match.group(1)) # PowerPoint/Microsoft Office's point system is 1 px ≈ 1 pt at standard screen resolution so we don't need to do 1 CSS px = 0.75 CSS pt (at 96 DPI) Web Standards
-                # Use half-point precision for better accuracy (PowerPoint supports 9.5pt, 10.5pt, etc.)
-                pt_size = round(px_size * 2) / 2  # Round to nearest 0.5pt
-                
-                if element == 'ul, ol':
-                    config['font_sizes']['li'] = pt_size
-                elif element == 'pre':
-                    config['font_sizes']['code'] = pt_size
-                else:
-                    config['font_sizes'][element] = pt_size
-            else:
-                raise ValueError(f"❌ CSS theme '{self.theme}' missing required font-size for {element}. "
-                               f"Add 'font-size: XXpx' to {element} rule in themes/{self.theme}.css")
-        
-        # Parse line height - REQUIRED
-        line_height_match = re.search(r'line-height:\s*([\d.]+)', css_content)
-        if line_height_match:
-            config['line_height'] = float(line_height_match.group(1))
-        else:
-            raise ValueError(f"❌ CSS theme '{self.theme}' missing required line-height. "
-                           f"Add 'line-height: X.X' to CSS rules in themes/{self.theme}.css")
-        
-        # Parse slide dimensions from CSS variables - REQUIRED
-        width_match = re.search(r'--slide-width:\s*(\d+)px', css_content)
-        height_match = re.search(r'--slide-height:\s*(\d+)px', css_content)
-        padding_match = re.search(r'--slide-padding:\s*(\d+)px', css_content)
-        font_family_match = re.search(r'--slide-font-family:\s*[\'"]([^\'\"]+)[\'"]', css_content)
-        
-        if not width_match or not height_match:
-            raise ValueError(f"❌ CSS theme '{self.theme}' missing required slide dimensions. "
-                           f"Add '--slide-width: XXXpx' and '--slide-height: XXXpx' to :root in themes/{self.theme}.css")
-        
-        if not padding_match:
-            raise ValueError(f"❌ CSS theme '{self.theme}' missing required --slide-padding variable. "
-                           f"Add '--slide-padding: XXpx' to :root in themes/{self.theme}.css")
-                           
-        if not font_family_match:
-            raise ValueError(f"❌ CSS theme '{self.theme}' missing required --slide-font-family variable. "
-                           f"Add '--slide-font-family: \"FontName\"' to :root in themes/{self.theme}.css")
-        
-        config['slide_dimensions'] = {
-            'width_px': int(width_match.group(1)),
-            'height_px': int(height_match.group(1)),
-            'padding_px': int(padding_match.group(1)),
-        }
-        
-        config['font_family'] = font_family_match.group(1)
-        
-        # Parse table styling deltas from CSS variables - REQUIRED
-        font_delta_match = re.search(r'--table-font-delta:\s*(-?\d+)pt', css_content)
-        width_safety_match = re.search(r'--table-width-safety:\s*([\d.]+)', css_content)
-        
-        if not font_delta_match or not width_safety_match:
-            raise ValueError(f"❌ CSS theme '{self.theme}' missing required table styling variables. "
-                           f"Add '--table-font-delta: -Xpt' and '--table-width-safety: X.XX' to :root in themes/{self.theme}.css")
-        
-        config['table_deltas'] = {
-            'font_delta': int(font_delta_match.group(1)),
-            'width_safety': float(width_safety_match.group(1))
-        }
-            
-        # Calculate inches from pixels (96 DPI standard)
-        config['slide_dimensions']['width_inches'] = config['slide_dimensions']['width_px'] / 96
-        config['slide_dimensions']['height_inches'] = config['slide_dimensions']['height_px'] / 96
-        
-        # Extract colors from CSS theme - REQUIRED
-        config['colors'] = self._extract_colors_from_css(css_content)
-        
-        # -----------------------------------------------------------------
-        # Inline colour classes (e.g. .red { color: #RRGGBB })
-        # -----------------------------------------------------------------
-        class_colors = {}
-        class_color_pattern = r'\.([a-zA-Z0-9_-]+)\s*\{[^}]*?color:\s*([^;}{]+)'
-        for cls, val in re.findall(class_color_pattern, css_content, re.IGNORECASE | re.DOTALL):
-            val = val.strip()
-            rgb = None
-            if val.startswith('#') and len(val) in (4, 7):  # #rgb or #rrggbb
-                hexval = val[1:]
-                if len(hexval) == 3:
-                    hexval = ''.join([c*2 for c in hexval])
-                try:
-                    rgb = tuple(int(hexval[i:i+2], 16) for i in (0, 2, 4))
-                except ValueError:
-                    rgb = None
-            else:
-                # rgb(r,g,b) or named colours are ignored for now
-                rgb_match = re.match(r'rgb\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)', val, re.IGNORECASE)
-                if rgb_match:
-                    rgb = tuple(int(rgb_match.group(i)) for i in range(1,4))
-            if rgb:
-                class_colors[cls] = rgb
-
-        config['class_colors'] = class_colors
-
-        # -------------------------------------------------------------
-        # Admonition colour extraction (border & background per type)
-        # -------------------------------------------------------------
-        config['admonition_colors'] = self._extract_admonition_colors(css_content)
         return config
 
     def _extract_admonition_colors(self, css_content: str):
@@ -196,71 +90,7 @@ class PPTXRenderer:
         
         return colours
     
-    def _extract_colors_from_css(self, css_content: str) -> Dict:
-        """Extract all colors from CSS theme file."""
-        
-        colors = {}  # NO FALLBACKS - extract from CSS or fail
-        
-        # Required color types that MUST be defined in CSS
-        required_colors = ['text', 'background', 'table_border', 'table_text', 'code_text', 'heading_text', 'highlight']
-        
-        # Extract colors from CSS rules
-        color_patterns = {
-            'text': [
-                # Match 'color:' in body rule but skip 'background-color:'
-                r'body\s*{[^}]*?(?<!background-)color:\s*([^;}\s]+)',
-                r'p\s*{[^}]*?(?<!background-)color:\s*([^;}\s]+)'
-            ],
-            'background': [
-                r'body\s*{[^}]*background-color:\s*([^;}\s]+)',
-                r'\.slide\s*{[^}]*background-color:\s*([^;}\s]+)'
-            ],
-            'table_border': [
-                r'th,?\s*td\s*{[^}]*border:[^}]*solid\s+([^;}\s]+)',
-                r'table\s*{[^}]*border-color:\s*([^;}\s]+)'
-            ],
-            'table_text': [
-                r'th,?\s*td\s*{[^}]*color:\s*([^;}\s]+)',
-                r'th\s*{[^}]*color:\s*([^;}\s]+)'
-            ],
-            'code_text': [
-                r'pre\s*{[^}]*color:\s*([^;}\s]+)',  # Look for separate pre rule
-                r'code\s*{[^}]*color:\s*([^;}\s]+)'
-            ],
-            'heading_text': [
-                r'h[1-6]\s*{[^}]*color:\s*([^;}\s]+)',
-                r'h1\s*{[^}]*color:\s*([^;}\s]+)'
-            ],
-            'highlight': [
-                r'mark\s*{[^}]*?(?<!-)color:\s*([^;}\s]+)'
-            ]
-        }
-        
-        for color_type, patterns in color_patterns.items():
-            color_found = False
-            for pattern in patterns:
-                match = re.search(pattern, css_content, re.IGNORECASE | re.DOTALL)
-                if match:
-                    color_value = match.group(1).strip()
-                    # Normalize color format
-                    if color_value.startswith('#'):
-                        colors[color_type] = color_value
-                        color_found = True
-                        break
-                    elif color_value in ['transparent', 'inherit']:
-                        continue  # Skip these values
-                    else:
-                        # Try to convert named colors or other formats
-                        colors[color_type] = color_value
-                        color_found = True
-                        break
-            
-            # Require all colors to be explicitly defined
-            if not color_found and color_type in required_colors:
-                raise ValueError(f"❌ CSS theme '{self.theme}' missing required color for {color_type}. "
-                               f"Add appropriate color definition to themes/{self.theme}.css")
-        
-        return colors
+    # Removed _extract_colors_from_css - now handled by centralized CSSParser
     
     def _match_table_to_html_dimensions(self, table, block: Block, rows: int, cols: int):
         """Match PowerPoint table dimensions exactly to HTML measurements."""

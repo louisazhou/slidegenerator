@@ -29,40 +29,9 @@ class StructuredLayoutParser:
         self.theme = theme
         self.debug = debug
         self.base_dir = base_dir
-        self._load_theme_variables()
-    
-    def _load_theme_variables(self):
-        """Load CSS variables from theme for layout calculations."""
-        css_content = get_css(self.theme)
-        
-        # Extract CSS variables from :root section
-        import re
-        root_match = re.search(r':root\s*\{([^}]+)\}', css_content, re.DOTALL)
-        if not root_match:
-            raise ValueError(f"No :root section found in theme '{self.theme}'")
-        
-        root_content = root_match.group(1)
-        
-        # Parse CSS variables
-        self._css_vars = {}
-        variable_pattern = r'--([^:]+):\s*([^;]+);'
-        for match in re.finditer(variable_pattern, root_content):
-            var_name = match.group(1).strip()
-            var_value = match.group(2).strip()
-            self._css_vars[var_name] = var_value
-    
-    def _get_px_value(self, var_name: str) -> int:
-        """Get pixel value from CSS variable."""
-        value = self._css_vars.get(var_name)
-        if not value:
-            raise ValueError(f"CSS variable '--{var_name}' not found")
-        
-        import re
-        px_match = re.search(r'(\d+)px', value)
-        if not px_match:
-            raise ValueError(f"CSS variable '--{var_name}' is not a pixel value: {value}")
-        
-        return int(px_match.group(1))
+        # Use centralized CSS parsing
+        from .css_utils import CSSParser
+        self.css_parser = CSSParser(theme)
     
     async def parse_html_with_layout(self, html_content: str, temp_dir: Optional[str] = None) -> List[Dict[str, Any]]:
         """
@@ -78,8 +47,8 @@ class StructuredLayoutParser:
         from pyppeteer import launch
         
         # Get slide dimensions from CSS theme
-        viewport_width = self._get_px_value('slide-width')
-        viewport_height = self._get_px_value('slide-height')
+        viewport_width = self.css_parser.get_px_value('slide-width')
+        viewport_height = self.css_parser.get_px_value('slide-height')
         
         # Images referenced directly via file:// – no temp copies needed
         

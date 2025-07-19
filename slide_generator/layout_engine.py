@@ -14,75 +14,25 @@ from .theme_loader import get_css
 logger = logging.getLogger(__name__)
 
 
-class CSSVariableReader:
-    """Utility class to read CSS variables from theme files."""
-    
-    def __init__(self, theme: str = "default"):
-        self.theme = theme
-        self._variables = {}
-        self._load_variables()
-    
-    def _load_variables(self):
-        """Load CSS variables from the theme file."""
-        css_content = get_css(self.theme)
-        
-        # Extract CSS variables from :root section
-        root_match = re.search(r':root\s*\{([^}]+)\}', css_content, re.DOTALL)
-        if not root_match:
-            raise ValueError(f"No :root section found in theme '{self.theme}'")
-        
-        root_content = root_match.group(1)
-        
-        # Parse CSS variables
-        variable_pattern = r'--([^:]+):\s*([^;]+);'
-        for match in re.finditer(variable_pattern, root_content):
-            var_name = match.group(1).strip()
-            var_value = match.group(2).strip()
-            self._variables[var_name] = var_value
-    
-    def get_px_value(self, variable_name: str) -> int:
-        """Get a pixel value from CSS variable."""
-        value = self._variables.get(variable_name)
-        if not value:
-            raise ValueError(f"CSS variable '--{variable_name}' not found in theme '{self.theme}'")
-        
-        # Extract pixel value
-        px_match = re.search(r'(\d+)px', value)
-        if not px_match:
-            raise ValueError(f"CSS variable '--{variable_name}' is not a pixel value: {value}")
-        
-        return int(px_match.group(1))
-    
-    def get_value(self, variable_name: str) -> str:
-        """Get raw CSS variable value."""
-        value = self._variables.get(variable_name)
-        if not value:
-            raise ValueError(f"CSS variable '--{variable_name}' not found in theme '{self.theme}'")
-        return value
-    
-    def get_column_gap(self) -> int:
-        """Get column gap value from CSS variables."""
-        return self.get_px_value('column-gap')
-    
-    def get_column_padding(self) -> int:
-        """Get column padding value from CSS variables."""
-        return self.get_px_value('column-padding')
+# Use centralized CSS parsing
+from .css_utils import CSSParser
 
 
 class ImageScaler:
     """Utility class for consistent image scaling logic."""
     
-    def __init__(self, css_reader: CSSVariableReader, debug: bool = False):
-        self.css_reader = css_reader
+    def __init__(self, css_parser: CSSParser, debug: bool = False):
+        self.css_parser = css_parser
         self.debug = debug
         
         # Cache frequently used values
-        self.viewport_width = css_reader.get_px_value('slide-width')
-        self.viewport_height = css_reader.get_px_value('slide-height')
-        self.padding_px = css_reader.get_px_value('slide-padding')
+        self.viewport_width = css_parser.get_px_value('slide-width')
+        self.viewport_height = css_parser.get_px_value('slide-height')
+        self.padding_px = css_parser.get_px_value('slide-padding')
         self.content_width = self.viewport_width - 2 * self.padding_px
         self.content_height = self.viewport_height - 2 * self.padding_px
-        self.column_width = (self.content_width - css_reader.get_column_gap()) / 2
+        column_config = css_parser.get_column_config()
+        self.column_width = (self.content_width - column_config['gap']) / 2
     
     def calculate_image_dimensions(self, image_path: str, scale_x: Optional[str] = None, 
                                  scale_y: Optional[str] = None, in_column: bool = False, 
@@ -457,9 +407,9 @@ class LayoutEngine:
         self.theme = theme
         self.tmp_dir = tmp_dir
         self.base_dir = base_dir or Path.cwd()
-        self.css_reader = CSSVariableReader(theme)
+        self.css_parser = CSSParser(theme)
         self._default_tmp_dir = tmp_dir  # may be None; used if caller passes explicit tmp
-        self.image_scaler = ImageScaler(self.css_reader, debug)
+        self.image_scaler = ImageScaler(self.css_parser, debug)
     
     def convert_markdown_to_html(self, markdown_text):
         """Convert markdown to HTML with layout CSS."""
@@ -638,8 +588,8 @@ class LayoutEngine:
         blocks = self._merge_consecutive_lists(blocks)
         
         # --- Determine usable page height (slide height minus padding) ---
-        slide_height_px = self.css_reader.get_px_value('slide-height')
-        padding_px = self.css_reader.get_px_value('slide-padding')
+        slide_height_px = self.css_parser.get_px_value('slide-height')
+        padding_px = self.css_parser.get_px_value('slide-padding')
         
         usable_height_px = slide_height_px - 2 * padding_px
         if usable_height_px <= 0:
@@ -959,7 +909,7 @@ class LayoutEngine:
             logger.info(f"🔍 Applying intelligent image scaling to {len(blocks)} blocks...")
         
         # Track pagination context for accurate height constraints
-        usable_height = self.css_reader.get_px_value('slide-height') - 2 * self.css_reader.get_px_value('slide-padding')
+        usable_height = self.css_parser.get_px_value('slide-height') - 2 * self.css_parser.get_px_value('slide-padding')
         
         for i, block in enumerate(blocks):
             if block.is_image() and hasattr(block, 'src'):

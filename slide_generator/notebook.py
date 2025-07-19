@@ -574,7 +574,6 @@ class SlideNotebook:
         
         try:
             from IPython.display import HTML, display
-            # Import theme CSS for proper formatting in Jupyter
             from .theme_loader import get_css
             theme_css = get_css(self.theme)
             

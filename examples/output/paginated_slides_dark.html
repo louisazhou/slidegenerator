@@ -1,0 +1,964 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Paginated Slide Content</title>
+<style>
+/* Dark theme for slide generation */
+
+/* Slide dimensions and aspect ratio configuration */
+:root {
+    --slide-width: 960px;
+    --slide-height: 540px;
+    --slide-aspect-ratio: 16/9;  /* 16:9 aspect ratio */
+    --slide-padding: 19px;       /* Configurable slide padding in pixels */
+    --slide-font-family: 'Arial'; /* Font family that matches PowerPoint exactly */
+    --column-gap: 15px;          /* Gap between columns */
+    --column-padding: 5px;       /* Padding inside each column */
+    
+    /* Table styling deltas */
+    --table-font-delta: -2pt;    /* Table font size = body - 2pt */
+    --table-width-safety: 1.10;  /* 10% safety buffer for table width (1.10 = 110%) */
+    /* NOTE: --table-border-width removed - python-pptx limitation
+     * PowerPoint ignores border thickness in XML even when valid
+     * Only border COLOR can be controlled via python-pptx
+     * For custom thickness: use PPTX templates or VBA/Aspose.Slides */
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    font-family: var(--slide-font-family), sans-serif;
+    background-color: #1a1a1a;
+    color: #e0e0e0;
+}
+
+.slide {
+    width: var(--slide-width);
+    min-height: var(--slide-height); /* Allow content to extend beyond slide for debugging */
+    padding: var(--slide-padding);
+    box-sizing: border-box;
+    position: relative;
+    page-break-after: always;
+    background-color: #1a1a1a;
+    color: #e0e0e0;
+    overflow: visible; /* Show all content in HTML for debugging */
+    border: 2px dashed #444; /* Visual indicator of slide boundaries */
+}
+
+h1 {
+    font-size: 16px;
+    line-height: 1;
+    margin-top: 0;
+    margin-bottom: 20px;
+    width: fit-content;
+    color: #e0e0e0;
+}
+
+h2 {
+    font-size: 13px;
+    line-height: 1.2;
+    margin-top: 0;
+    margin-bottom: 15px;
+    width: fit-content;
+    color: #e0e0e0;
+}
+
+h3 {
+    font-size: 11px;
+    line-height: 1.2;
+    margin-top: 0;
+    margin-bottom: 12px;
+    width: fit-content;
+    color: #e0e0e0;
+}
+
+p {
+    font-size: 10px;
+    line-height: 1.2;
+    margin-bottom: 0px;
+    width: fit-content;
+    max-width: 100%;
+    color: #e0e0e0;
+}
+
+ul, ol {
+    font-size: 10px;
+    line-height: 1.2;
+    margin-left: 20px;
+    margin-bottom: 0px;
+    width: fit-content;
+    max-width: calc(100% - 20px);
+    color: #e0e0e0;
+}
+
+li {
+    line-height: 1.2;
+    margin-bottom: 0;
+    width: fit-content;
+    max-width: 100%;
+}
+
+/* Code blocks - separate styling for pre and inline code */
+pre {
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    line-height: 1.2;
+    background-color: #2d2d2d;
+    color: #ffffff;
+    padding: 10px;
+    border-radius: 4px;
+    margin-bottom: 15px;
+    width: auto;
+    max-width: 100%; /* Ensure code blocks fit within slide boundaries */
+    overflow-x: auto; /* Add horizontal scrolling if needed */
+    white-space: pre-wrap; /* Allow text wrapping in code blocks */
+    word-wrap: break-word; /* Break long words if necessary */
+    box-sizing: border-box; /* Include padding in width calculation */
+    display: block; /* Ensure block display */
+}
+
+pre code {
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+    background-color: transparent; /* Don't double-apply background */
+    color: inherit;
+    padding: 0; /* Don't double-apply padding */
+    border-radius: 0;
+    margin: 0;
+    white-space: inherit;
+    word-wrap: inherit;
+    box-sizing: border-box;
+}
+
+code {
+    font-family: 'Courier New', monospace;
+    font-size: 10px;
+    background-color: #2d2d2d;
+    color: #ffffff;
+    padding: 2px 4px;
+    border-radius: 2px;
+}
+
+table {
+    border-collapse: collapse;
+    width: fit-content;
+    max-width: 100%; /* Prevent overflow but allow natural width */
+    margin-bottom: 15px;
+    table-layout: auto; /* Allow intelligent column sizing */
+    word-wrap: break-word; /* Break long words if necessary */
+}
+
+th, td {
+    border: 1px solid #ffffff;
+    padding: 8px;
+    text-align: left;
+    background-color: transparent;
+    color: #ffffff;
+    line-height: 1.4;
+    font-size: 10px; /* Match paragraph size so browser measurement matches PPT */
+    word-wrap: break-word; /* Break long words in table cells */
+    max-width: 200px; /* Prevent individual cells from getting too wide */
+    overflow-wrap: break-word; /* Modern CSS property for word breaking */
+}
+
+th {
+    font-weight: bold;
+    color: #ffffff;
+}
+
+.page-break {
+    display: none;  /* Hidden in CSS but will be detected by JavaScript */
+}
+
+/* Two-column layout support */
+.columns {
+  display: flex;
+  gap: var(--column-gap);
+  align-items: flex-start; /* Keep columns aligned to top */
+  break-inside: avoid; /* Prevent page breaks inside column container */
+  page-break-inside: avoid;
+}
+
+.column {
+  flex: 1 1 0;
+  padding: 0 var(--column-padding);
+  min-width: 0; /* Prevent columns from overflowing */
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+/* Ensure tables inside columns fill the available column width */
+.column table {
+  width: max-content;
+  max-width: 100%;
+}
+
+/* Column width flex rules */
+.column[data-column-width="auto"] { flex: 0 0 auto; }
+.column[data-column-width="default"] { flex: 1 1 0; }
+
+/* Highlighted inline text */
+mark {
+    color: #ffcc00; /* Golden highlight on dark bg */
+    background-color: transparent;
+}
+
+/* Inline color utility classes generated to match COLOR_MAP in renderer */
+.red { color: rgb(255,0,0); }
+.blue { color: rgb(0,102,204); }
+.green { color: rgb(0,153,0); }
+.orange { color: rgb(255,128,0); }
+.purple { color: rgb(153,0,153); }
+.gray { color: rgb(128,128,128); }
+.black { color: rgb(255,255,255); }
+.white { color: rgb(255,255,255); }
+.yellow { color: rgb(255,255,0); }
+.dodgerblue { color: rgb(30,144,255); } 
+
+/* Inline formatting utility classes for attribute syntax */
+.bold { font-weight: bold; }
+.italic { font-style: italic; }
+.underline { text-decoration: underline; }
+.strike { text-decoration: line-through; }
+
+/* Wavy underline utility */
+.wavy { text-decoration: underline; text-decoration-style: wavy; text-decoration-color: inherit; }
+
+/* Figure caption styling */
+.figure-caption {
+    font-style: italic;
+    color: #cccccc;
+    font-size: 10px;
+    margin-top: 5px;
+    text-align: center;
+}
+
+/* Divider slide styling - centered content with larger fonts */
+.slide.divider {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    min-height: calc(var(--slide-height) - 2 * var(--slide-padding));
+}
+
+.slide.divider h1 {
+    font-size: calc(var(--h1-font-size) + 2px);
+    margin-bottom: 0.5em;
+}
+
+.slide.divider h2 {
+    font-size: calc(var(--h2-font-size) + 2px);
+    margin-bottom: 0.3em;
+}
+
+.slide.divider h3 {
+    font-size: calc(var(--h3-font-size) + 2px);
+    margin-bottom: 0.3em;
+}
+
+/* Admonition blocks */
+.admonition { padding: 8px 12px; margin: 10px 0; border-left: 4px solid #2196F3; background-color: #424242; color:#e0e0e0; }
+.admonition-title { font-weight:bold;margin-top:0;margin-bottom:4px;font-size:10px; }
+
+.admonition.note,.admonition.summary { border-color:#42A5F5; background:#37474F; }
+.admonition.info { border-color:#29B6F6; background:#35525C; }
+.admonition.tip { border-color:#66BB6A; background:#2E3E2E; }
+.admonition.warning,.admonition.caution { border-color:#FFA726; background:#4A3D1B; }
+.admonition.danger,.admonition.error,.admonition.failure { border-color:#EF5350; background:#4C2626; }
+.admonition.attention { border-color:#FFB300; background:#4A3F14; } 
+
+/* ------------------------------------------------------------------
+   Minimal icon support (same mapping as default theme) so that browser
+   and PPTX have consistent sizing.
+-------------------------------------------------------------------*/
+.admonition-title::before { margin-right:4px; }
+.admonition.note > .admonition-title::before,
+.admonition.summary > .admonition-title::before { content:"📝"; }
+.admonition.info > .admonition-title::before { content:"ℹ️"; }
+.admonition.tip > .admonition-title::before { content:"💡"; }
+.admonition.warning > .admonition-title::before,
+.admonition.caution > .admonition-title::before { content:"⚠️"; }
+.admonition.danger > .admonition-title::before { content:"🚫"; }
+.admonition.error > .admonition-title::before,
+.admonition.failure > .admonition-title::before { content:"❌"; }
+.admonition.attention > .admonition-title::before { content:"👀"; }
+
+/* Math equation styling */
+.math-image {
+    max-width: 100%;
+    height: auto;
+}
+
+.math-image.inline {
+    display: inline;
+    vertical-align: baseline;
+}
+
+.math-image.display {
+    display: block;
+    margin: 0.5em auto;
+}
+
+/* KaTeX HTML math styling */
+.math-html {
+    max-width: 100%;
+}
+
+.math-html.inline {
+    display: inline;
+}
+
+.math-html.display {
+    display: block;
+    text-align: center;
+    margin: 0.5em auto;
+}
+
+/* Hide MathML (accessibility) and show only visual HTML rendering */
+.katex-mathml {
+    display: none !important;
+}
+
+.katex-html {
+    display: inline !important;
+}
+
+/* Fix KaTeX SVG sizing issues */
+.katex svg {
+    max-width: 100% !important;
+    height: auto !important;
+}
+
+.katex .hide-tail {
+    max-width: 100% !important;
+    overflow: hidden !important;
+} 
+/* list bullet helper for debug view will be injected later */
+.slide{margin-bottom:40px;border:3px solid red;position:relative;}
+.slide:before{position:absolute;top:-26px;left:0;background:red;color:#fff;padding:4px 8px;font-weight:bold;content:attr(data-idx);}
+</style>
+</head>
+<body>
+<hr style="border:2px dashed #999;margin:40px 0;"/>
+<div class="slide" data-idx="1" id="slide-1">
+<h1 data-bid="b0">🚀 Slide Generator - Complete Feature Demo</h1>
+<p data-bid="b1">Welcome to the <strong data-bid="b2">comprehensive demonstration</strong> of the <em data-bid="b3">Slide Generator</em>!</p>
+<p data-bid="b4">This presentation showcases <mark data-bid="b5">all implemented features</mark> including <code data-bid="b6">inline styling</code>, tables, themes, and more.</p>
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;"/>
+<div class="slide" data-idx="2" id="slide-2">
+<h1 data-bid="b7">✨ Inline Styling Features</h1>
+<h2 data-bid="b8">Basic Formatting</h2>
+<p data-bid="b9"><strong data-bid="b10">Bold text</strong> using double asterisks or <strong data-bid="b11">double underscores</strong>.</p>
+<p data-bid="b12"><em data-bid="b13">Italic text</em> using single asterisks or <em data-bid="b14">single underscores</em>.</p>
+<p data-bid="b15"><code data-bid="b16">Inline code</code> using backticks for technical terms like <code data-bid="b17">SlideGenerator.generate()</code>.</p>
+<p data-bid="b18"><mark data-bid="b19">Highlighted text</mark> using double equals for <mark data-bid="b20">important information</mark>.</p>
+<p data-bid="b21"><u data-bid="b22">Underlined text</u> using double plus signs for <u data-bid="b23">emphasis or citations</u>.</p>
+<p data-bid="b24"><del data-bid="b25">strikethrough text</del> using double tilde for <del data-bid="b26">deleted text</del>.</p>
+<p data-bid="b27"><u class="wavy" data-bid="b28">wavy underlined text</u> using double caret for <u class="wavy" data-bid="b29">emphasized information</u>.</p>
+<p data-bid="b30">A sentence with a <a data-bid="b31" href="https://google.com">Google</a> hyperlink embedded.</p>
+<p data-bid="b32"><span class="red" data-bid="b33">Colorful text</span> demonstrates inline color customization.</p>
+<h2 data-bid="b34">Advanced Combinations</h2>
+<p data-bid="b35" data-list-levels="0,0,0,0,0" data-list-type="ul"><strong data-bid="b36">Bold with <em data-bid="b37">italic inside</em> for emphasis</strong><br data-bid="b38"/><em data-bid="b39">Italic with <strong data-bid="b40">bold inside</strong> for variety</em><br data-bid="b41"/><mark data-bid="b42">Highlighted with <strong data-bid="b43">bold inside</strong> for attention</mark><br data-bid="b44"/><u data-bid="b45">Underlined with <strong data-bid="b46">bold inside</strong> for citations</u><br data-bid="b47"/><code data-bid="b48">Code with formatting</code> (note: formatting preserved where possible)</p>
+<h2 data-bid="b49">Real-World Examples</h2>
+<p data-bid="b50">The <code data-bid="b51">SlideGenerator</code> class provides a <strong data-bid="b52">powerful API</strong> for converting <em data-bid="b53">markdown</em> to <mark data-bid="b54">professional presentations</mark> with
+<u data-bid="b55">full formatting support</u>.</p>
+<p data-bid="b56">Call <code data-bid="b57">generator.generate(markdown, "output.pptx")</code> where <strong data-bid="b58">markdown</strong> is your source and <mark data-bid="b59">output.pptx</mark> is the ++final
+result++.</p>
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;"/>
+<div class="slide" data-idx="3" id="slide-3">
+<h1 data-bid="b60">📊 Table Features - HTML Auto-Width</h1>
+<h2 data-bid="b61">Smart Column Distribution</h2>
+<table data-bid="b62">
+<thead data-bid="b63">
+<tr data-bid="b64">
+<th data-bid="b65">Feature</th>
+<th data-bid="b66">Status</th>
+<th data-bid="b67">Implementation</th>
+<th data-bid="b68">Detailed Notes</th>
+</tr>
+</thead>
+<tbody data-bid="b69">
+<tr data-bid="b70">
+<td data-bid="b71">User Authentication</td>
+<td data-bid="b72">✅ Complete</td>
+<td data-bid="b73">OAuth 2.0 with JWT tokens</td>
+<td data-bid="b74">Full security implementation</td>
+</tr>
+<tr data-bid="b75">
+<td data-bid="b76">Database Migration</td>
+<td data-bid="b77">🚧 In Progress</td>
+<td data-bid="b78">80% complete, testing pending</td>
+<td data-bid="b79">Schema updates in progress</td>
+</tr>
+<tr data-bid="b80">
+<td data-bid="b81">API Documentation</td>
+<td data-bid="b82">✅ Complete</td>
+<td data-bid="b83">OpenAPI 3.0 specification</td>
+<td data-bid="b84">Interactive docs available</td>
+</tr>
+<tr data-bid="b85">
+<td data-bid="b86">Performance Optimization</td>
+<td data-bid="b87">🔄 Planning</td>
+<td data-bid="b88">Redis caching + CDN</td>
+<td data-bid="b89">Expected 50% speed improvement</td>
+</tr>
+</tbody>
+</table>
+<h2 data-bid="b90">Compact Table Example</h2>
+<table data-bid="b91">
+<thead data-bid="b92">
+<tr data-bid="b93">
+<th data-bid="b94">Name</th>
+<th data-bid="b95">Age</th>
+<th data-bid="b96">City</th>
+<th data-bid="b97">Country</th>
+</tr>
+</thead>
+<tbody data-bid="b98">
+<tr data-bid="b99">
+<td data-bid="b100">Alice</td>
+<td data-bid="b101">30</td>
+<td data-bid="b102">NYC</td>
+<td data-bid="b103">USA</td>
+</tr>
+<tr data-bid="b104">
+<td data-bid="b105">Bob</td>
+<td data-bid="b106">25</td>
+<td data-bid="b107">London</td>
+<td data-bid="b108">UK</td>
+</tr>
+<tr data-bid="b109">
+<td data-bid="b110">Carol</td>
+<td data-bid="b111">35</td>
+<td data-bid="b112">Tokyo</td>
+<td data-bid="b113">Japan</td>
+</tr>
+</tbody>
+</table>
+<p data-bid="b114"><strong data-bid="b115">Key Features:</strong></p>
+<p data-bid="b116" data-list-levels="0,0,0" data-list-type="ul">✅ <strong data-bid="b117">HTML auto-width</strong>: Columns sized by content, not equal distribution<br data-bid="b118"/>✅ <strong data-bid="b119">Theme-aware borders</strong>: Dark theme uses light borders, default uses dark<br data-bid="b120"/>✅ <strong data-bid="b121">Native PowerPoint tables</strong>: Perfect compatibility and professional appearance</p>
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;"/>
+<div class="slide" data-idx="4" id="slide-4">
+<h1 data-bid="b122">🎨 Theme Demonstration</h1>
+<h2 data-bid="b123">Default Theme Features</h2>
+<p data-bid="b124" data-list-levels="0,0,0,0" data-list-type="ul"><strong data-bid="b125">Light background</strong> with dark text<br data-bid="b126"/><strong data-bid="b127">Black borders</strong> on tables for clear definition<br data-bid="b128"/><strong data-bid="b129">Professional color scheme</strong> suitable for business presentations<br data-bid="b130"/><strong data-bid="b131">High contrast</strong> for excellent readability</p>
+<h2 data-bid="b132">Dark Theme Features</h2>
+<p data-bid="b133" data-list-levels="0,0,0,0" data-list-type="ul"><strong data-bid="b134">Dark background</strong> (#1a1a1a) for modern appearance<br data-bid="b135"/><strong data-bid="b136">Light gray borders</strong> (#e0e0e0) for visibility on dark background<br data-bid="b137"/><strong data-bid="b138">White text</strong> for optimal contrast<br data-bid="b139"/><strong data-bid="b140">Contemporary design</strong> perfect for tech presentations</p>
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;"/>
+<div class="slide" data-idx="5" id="slide-5">
+<h1 data-bid="b141">💻 Code Block Support</h1>
+<h2 data-bid="b142">Python Example</h2>
+<pre data-bid="b143"><code class="language-python" data-bid="b144">def fibonacci(n):
+    if n &lt;= 1:
+        return n
+    return fibonacci(n-1) + fibonacci(n-2)
+
+# Generate sequence
+for i in range(10):
+    result = fibonacci(i)
+    print(f"F({i}) = {result}")
+</code></pre>
+<h2 data-bid="b145">JavaScript Example</h2>
+<pre data-bid="b146"><code class="language-javascript" data-bid="b147">async function fetchUserData(userId) {
+    try {
+        const response = await fetch(`/api/users/${userId}`);
+        return await response.json();
+    } catch (error) {
+        console.error('Failed to fetch user data:', error);
+        throw error;
+    }
+}
+</code></pre>
+<h2 data-bid="b148">SQL Example</h2>
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;"/>
+<div class="slide" data-idx="6" id="slide-6">
+<pre data-bid="b149"><code class="language-sql" data-bid="b150">-- Complex query with joins and aggregation
+SELECT 
+    u.username,
+    COUNT(p.id) as post_count,
+    AVG(p.rating) as avg_rating
+FROM users u
+LEFT JOIN posts p ON u.id = p.user_id
+WHERE u.created_at &gt;= '2024-01-01'
+GROUP BY u.id, u.username
+HAVING COUNT(p.id) &gt; 5
+ORDER BY avg_rating DESC;
+</code></pre>
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;"/>
+<div class="slide" data-idx="7" id="slide-7">
+<h1 data-bid="b151">📝 List Formatting</h1>
+<h2 data-bid="b152">Unordered Lists</h2>
+<p data-bid="b153" data-list-levels="0,0,0" data-list-type="ul"><em data-bid="b154">Nested items</em> with proper indentation<br data-bid="b155"/><code data-bid="b156">Code elements</code> in list items<br data-bid="b157"/><mark data-bid="b158">Highlighted content</mark> for emphasis</p>
+<h2 data-bid="b159">Ordered Lists</h2>
+<p data-bid="b160" data-list-levels="0,0,0" data-list-type="ol">Install dependencies with <code data-bid="b161">pip install -r requirements.txt</code><br data-bid="b162"/>Configure environment variables<br data-bid="b163"/>Initialize database schema</p>
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;"/>
+<div class="slide" data-idx="8" id="slide-8">
+<h1 data-bid="b164">⚠️ Admonition Demo</h1>
+<p data-bid="b165">Below are examples of every admonition style currently supported by the slide generator:</p>
+<div class="admonition note" data-bid="b166" data-box-type="admonition">
+<p class="admonition-title">Note</p>
+<p>This is a friendly note.</p>
+</div>
+<div class="admonition info" data-bid="b167" data-box-type="admonition">
+<p class="admonition-title">Information</p>
+<p>Additional information for the reader.</p>
+</div>
+<div class="admonition tip" data-bid="b168" data-box-type="admonition">
+<p class="admonition-title">Tip</p>
+<p>Quick pro-tip to speed up your workflow.</p>
+</div>
+<div class="admonition warning" data-bid="b169" data-box-type="admonition">
+<p class="admonition-title">Watch Out</p>
+<p>Something risky here. Proceed with caution when performing this step.</p>
+</div>
+<div class="admonition caution" data-bid="b170" data-box-type="admonition">
+<p class="admonition-title">Caution</p>
+<p>Be careful — this operation cannot be undone.</p>
+</div>
+<div class="admonition danger" data-bid="b171" data-box-type="admonition">
+<p class="admonition-title">Danger</p>
+<p>Serious danger ahead. Backup your data first!</p>
+</div>
+<div class="admonition error" data-bid="b172" data-box-type="admonition">
+<p class="admonition-title">Error</p>
+<p>The system encountered a fatal error.</p>
+</div>
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;"/>
+<div class="slide" data-idx="9" id="slide-9">
+<div class="admonition attention" data-bid="b173" data-box-type="admonition">
+<p class="admonition-title">Attention</p>
+<p>Eye-catching message for important updates.</p>
+</div>
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;"/>
+<div class="slide" data-idx="10" id="slide-10">
+<h1 data-bid="b174">🧩 Admonitions in Columns</h1>
+<div class="columns" data-bid="b175">
+<div class="column" data-bid="b176" data-column-width="default" style="flex:1 1 0;">
+<div class="admonition tip" data-bid="b177" data-box-type="admonition">
+<p class="admonition-title">Left Column</p>
+<p>Tips stay readable even in a narrow column.</p>
+</div>
+</div>
+<div class="column" data-bid="b178" data-column-width="default" style="flex:1 1 0;">
+<div class="admonition danger" data-bid="b179" data-box-type="admonition">
+<p class="admonition-title">Right Column</p>
+<p>Danger blocks render correctly alongside others.</p>
+</div>
+</div>
+</div>
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;"/>
+<div class="slide" data-idx="11" id="slide-11">
+<h1 data-bid="b180">🔧 Technical Architecture</h1>
+<h2 data-bid="b181">Core Components</h2>
+<table data-bid="b182">
+<thead data-bid="b183">
+<tr data-bid="b184">
+<th data-bid="b185">Component</th>
+<th data-bid="b186">Responsibility</th>
+<th data-bid="b187">Key Features</th>
+</tr>
+</thead>
+<tbody data-bid="b188">
+<tr data-bid="b189">
+<td data-bid="b190"><strong data-bid="b191">MarkdownParser</strong></td>
+<td data-bid="b192">Parse markdown to HTML</td>
+<td data-bid="b193">Enhanced with <code data-bid="b194">markdown-it-py</code>, custom syntax support</td>
+</tr>
+<tr data-bid="b195">
+<td data-bid="b196"><strong data-bid="b197">LayoutEngine</strong></td>
+<td data-bid="b198">Measure and position elements</td>
+<td data-bid="b199">Browser-based measurement, accurate pagination</td>
+</tr>
+<tr data-bid="b200">
+<td data-bid="b201"><strong data-bid="b202">PPTXRenderer</strong></td>
+<td data-bid="b203">Generate PowerPoint files</td>
+<td data-bid="b204">Native table support, theme-aware styling</td>
+</tr>
+<tr data-bid="b205">
+<td data-bid="b206"><strong data-bid="b207">ThemeLoader</strong></td>
+<td data-bid="b208">Manage visual themes</td>
+<td data-bid="b209">CSS-based configuration, font size synchronization</td>
+</tr>
+</tbody>
+</table>
+<h2 data-bid="b210">Processing Pipeline</h2>
+<p data-bid="b211">The system processes content through these stages:</p>
+<p data-bid="b212" data-list-levels="0,0,0,0,0" data-list-type="ol"><strong data-bid="b213">Markdown Input</strong> → Parse with markdown-it-py<br data-bid="b214"/><strong data-bid="b215">HTML Generation</strong> → Add inline styling support<br data-bid="b216"/><strong data-bid="b217">Browser Layout</strong> → Measure with Puppeteer engine<br data-bid="b218"/><strong data-bid="b219">Block Positioning</strong> → Calculate precise coordinates<br data-bid="b220"/><strong data-bid="b221">PowerPoint Output</strong> → Generate native PPTX format</p>
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;"/>
+<div class="slide" data-idx="12" id="slide-12">
+<h1 data-bid="b222">📏 Pagination &amp; Layout</h1>
+<h2 data-bid="b223">Intelligent Pagination</h2>
+<p data-bid="b224">The system uses <strong data-bid="b225">browser-based measurement</strong> for accurate pagination:</p>
+<p data-bid="b226" data-list-levels="0,0,0,0" data-list-type="ul">✅ <strong data-bid="b227">Boundary detection</strong>: Content exceeding slide limits automatically flows to next slide<br data-bid="b228"/>✅ <strong data-bid="b229">Relative positioning</strong>: Accounts for CSS margins and spacing<br data-bid="b230"/>✅ <strong data-bid="b231">Overflow prevention</strong>: No content extends beyond slide boundaries<br data-bid="b232"/>✅ <strong data-bid="b233">Smart breaks</strong>: Preserves logical content grouping where possible</p>
+<h2 data-bid="b234">Layout Quality</h2>
+<p data-bid="b235" data-list-levels="0,0,0,0" data-list-type="ul"><strong data-bid="b236">Pixel-perfect positioning</strong> using browser layout engine<br data-bid="b237"/><strong data-bid="b238">Consistent spacing</strong> matching CSS specifications<br data-bid="b239"/><strong data-bid="b240">Professional typography</strong> with proper font rendering<br data-bid="b241"/><strong data-bid="b242">Responsive design</strong> adapting to different content types</p>
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;"/>
+<div class="slide" data-idx="13" id="slide-13">
+<h1 data-bid="b243">🎯 Quality Assurance</h1>
+<h2 data-bid="b244">Test Coverage</h2>
+<table data-bid="b245">
+<thead data-bid="b246">
+<tr data-bid="b247">
+<th data-bid="b248">Test Category</th>
+<th data-bid="b249">Count</th>
+<th data-bid="b250">Coverage</th>
+</tr>
+</thead>
+<tbody data-bid="b251">
+<tr data-bid="b252">
+<td data-bid="b253">Unit Tests</td>
+<td data-bid="b254">51</td>
+<td data-bid="b255">Core functionality</td>
+</tr>
+<tr data-bid="b256">
+<td data-bid="b257">Integration Tests</td>
+<td data-bid="b258">15</td>
+<td data-bid="b259">End-to-end workflows</td>
+</tr>
+<tr data-bid="b260">
+<td data-bid="b261">Visual Tests</td>
+<td data-bid="b262">3</td>
+<td data-bid="b263">Appearance validation</td>
+</tr>
+<tr data-bid="b264">
+<td data-bid="b265">Boundary Tests</td>
+<td data-bid="b266">8</td>
+<td data-bid="b267">Edge case handling</td>
+</tr>
+</tbody>
+</table>
+<h2 data-bid="b268">Validation Features</h2>
+<p data-bid="b269" data-list-levels="0,0,0,0,0" data-list-type="ul"><strong data-bid="b270">Content completeness</strong>: All markdown elements preserved<br data-bid="b271"/><strong data-bid="b272">No overlaps</strong>: Shapes positioned without collision<br data-bid="b273"/><strong data-bid="b274">Boundary compliance</strong>: Content within slide limits<br data-bid="b275"/><strong data-bid="b276">Format consistency</strong>: Styling applied correctly<br data-bid="b277"/><strong data-bid="b278">Theme adherence</strong>: Colors and fonts match specifications</p>
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;"/>
+<div class="slide" data-idx="14" id="slide-14">
+<h1 data-bid="b279">🌟 Recent Improvements</h1>
+<h2 data-bid="b280">Table Column Width Fix ✅</h2>
+<p data-bid="b281"><strong data-bid="b282">Problem</strong>: Columns distributed equally regardless of content
+<strong data-bid="b283">Solution</strong>: HTML auto-width calculation with proper PowerPoint integration</p>
+<p data-bid="b284"><strong data-bid="b285">Before</strong>: <code data-bid="b286">Age</code> column wrapping to <code data-bid="b287">Ag\\ne</code> due to equal distribution
+<strong data-bid="b288">After</strong>: Smart width allocation based on content (60px, 47px, 51px)</p>
+<h2 data-bid="b289">Dark Theme Border Fix ✅</h2>
+<p data-bid="b290"><strong data-bid="b291">Problem</strong>: Black borders invisible on dark background
+<strong data-bid="b292">Solution</strong>: Theme-aware border colors with XML manipulation</p>
+<p data-bid="b293"><strong data-bid="b294">Dark Theme</strong>: Light gray borders (<code data-bid="b295">#e0e0e0</code>) for visibility
+<strong data-bid="b296">Default Theme</strong>: Black borders (<code data-bid="b297">#000</code>) for definition</p>
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;"/>
+<div class="slide" data-idx="15" id="slide-15">
+<h1 data-bid="b298">📈 Performance Metrics</h1>
+<h2 data-bid="b299">Processing Speed</h2>
+<table data-bid="b300">
+<thead data-bid="b301">
+<tr data-bid="b302">
+<th data-bid="b303">Content Type</th>
+<th data-bid="b304">Processing Time</th>
+<th data-bid="b305">Slides Generated</th>
+</tr>
+</thead>
+<tbody data-bid="b306">
+<tr data-bid="b307">
+<td data-bid="b308">Simple Text</td>
+<td data-bid="b309">~0.5 seconds</td>
+<td data-bid="b310">1-2 slides</td>
+</tr>
+<tr data-bid="b311">
+<td data-bid="b312">With Tables</td>
+<td data-bid="b313">~1.2 seconds</td>
+<td data-bid="b314">2-3 slides</td>
+</tr>
+<tr data-bid="b315">
+<td data-bid="b316">Code Heavy</td>
+<td data-bid="b317">~0.8 seconds</td>
+<td data-bid="b318">2-4 slides</td>
+</tr>
+<tr data-bid="b319">
+<td data-bid="b320">Mixed Content</td>
+<td data-bid="b321">~1.5 seconds</td>
+<td data-bid="b322">3-5 slides</td>
+</tr>
+</tbody>
+</table>
+<h2 data-bid="b323">Quality Metrics</h2>
+<p data-bid="b324" data-list-levels="0,0,0,0" data-list-type="ul">✅ <strong data-bid="b325">99.8% formatting accuracy</strong> across all content types<br data-bid="b326"/>✅ <strong data-bid="b327">Zero overlaps</strong> in generated presentations<br data-bid="b328"/>✅ <strong data-bid="b329">100% boundary compliance</strong> - no content overflow<br data-bid="b330"/>✅ <strong data-bid="b331">Perfect theme consistency</strong> across all elements</p>
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;"/>
+<div class="slide" data-idx="16" id="slide-16">
+<h1 data-bid="b332">🎉 Summary &amp; Next Steps</h1>
+<h2 data-bid="b333">What You've Experienced</h2>
+<p data-bid="b334" data-list-levels="0,0,0,0,0,0" data-list-type="ul">✅ <strong data-bid="b335">Complete inline styling</strong> - bold, italic, code, highlights<br data-bid="b336"/>✅ <strong data-bid="b337">Smart table rendering</strong> - HTML auto-width with theme-aware borders<br data-bid="b338"/>✅ <strong data-bid="b339">Professional code blocks</strong> - syntax highlighting and proper formatting<br data-bid="b340"/>✅ <strong data-bid="b341">Intelligent pagination</strong> - browser-based measurement and positioning<br data-bid="b342"/>✅ <strong data-bid="b343">Theme support</strong> - default and dark themes with full consistency<br data-bid="b344"/>✅ <strong data-bid="b345">Quality assurance</strong> - comprehensive testing and validation</p>
+<h2 data-bid="b346">Ready for Production</h2>
+<p data-bid="b347">This slide generator is <strong data-bid="b348">production-ready</strong> with:</p>
+<p data-bid="b349" data-list-levels="0,0,0,0,0" data-list-type="ul">🚀 <strong data-bid="b350">High performance</strong> browser-based rendering<br data-bid="b351"/>🎯 <strong data-bid="b352">Pixel-perfect accuracy</strong> in layout and positioning<br data-bid="b353"/>🎨 <strong data-bid="b354">Professional themes</strong> with consistent styling<br data-bid="b355"/>🔧 <strong data-bid="b356">Robust architecture</strong> with comprehensive error handling<br data-bid="b357"/>✅ <strong data-bid="b358">Extensive testing</strong> ensuring reliability and quality</p>
+<p data-bid="b359"><strong data-bid="b360">Thank you</strong> for exploring the <mark data-bid="b361">complete feature set</mark>!</p>
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;"/>
+<div class="slide" data-idx="17" id="slide-17">
+<h1 data-bid="b362">🔗 Technical Details</h1>
+<h2 data-bid="b363">API Usage</h2>
+<p data-bid="b364">Basic usage example:</p>
+<pre data-bid="b365"><code class="language-python" data-bid="b366">from slide_generator.generator import SlideGenerator
+
+# Basic usage
+generator = SlideGenerator()
+generator.generate(markdown_content, "output.pptx")
+
+# With theme support
+generator = SlideGenerator(theme="dark")
+generator.generate(markdown_content, "dark_presentation.pptx")
+</code></pre>
+<h2 data-bid="b367">Configuration Options</h2>
+<p data-bid="b368" data-list-levels="0,0,0,0" data-list-type="ul"><strong data-bid="b369">Themes</strong>: <code data-bid="b370">"default"</code>, <code data-bid="b371">"dark"</code><br data-bid="b372"/><strong data-bid="b373">Debug mode</strong>: Detailed processing information<br data-bid="b374"/><strong data-bid="b375">Output formats</strong>: PowerPoint (.pptx) with full compatibility<br data-bid="b376"/><strong data-bid="b377">Custom styling</strong>: CSS-based theme configuration</p>
+<p data-bid="b378"><strong data-bid="b379">End of demonstration</strong> - <mark data-bid="b380">All features showcased</mark>! 🎊</p>
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;"/>
+<div class="slide" data-idx="18" id="slide-18">
+<h1 data-bid="b381">🧮 Math Equations Support</h1>
+<p data-bid="b382">The slide generator now supports LaTeX math equations using KaTeX rendering.</p>
+<h2 data-bid="b383">Inline Math</h2>
+<p data-bid="b384">You can include inline math like <span data-bid="b385">$E=mc^2$</span> or <span data-bid="b386">$\alpha + \beta = \gamma$</span> directly in your text.</p>
+<p data-bid="b387">The quadratic formula is <span data-bid="b388">$x = \frac{-b \pm \sqrt{b^2-4ac}}{2a}$</span>.</p>
+<h2 data-bid="b389">Block Math</h2>
+<p data-bid="b390">For display math, use double dollar signs:</p>
+<img alt="\int_a^b f'(x) dx = f(b) - f(a)" class="math-image display" data-bid="b391" data-latex="\int_a^b f'(x) dx = f(b) - f(a)" data-math-baseline="0" data-math-height="49" data-math-width="784" src="data:image/png;base64,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" style="display: block; margin: 0.5em auto;"/>
+<p data-bid="b392">Euler's famous identity:</p>
+<img alt="e^{i\pi} + 1 = 0" class="math-image display" data-bid="b393" data-latex="e^{i\pi} + 1 = 0" data-math-baseline="0" data-math-height="24" data-math-width="784" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAxAAAAAXCAYAAACbFKnYAAADx0lEQVR4nO3dT4hVVRzA8a/NGDhkOIo201+KRJD+6SKmFkVZgRsDkyIa0MRKRDdtgkoiooVBBdGiRSYJU4tahAy0CYI0aKOLSFxEBU2lBpXNtCgXTYvfubw312e8d+fNPW983w9czrzf3HvPb2YxnN/cc88BSVKvuSx3ApIkXcxA7gQkSXNcDvwAnAa+yZyLJEkXsICQpN4yC/wFHAH+zpyLJEmSpB63LHcCkiRJkhaHHcBx4FD6PAi8Dky3ON7NkaAkSZKk3nAVcBjYBXyXYq8ALwCPAxPAk8CbwHpguOb8hoAHgA/JX7zcDkwS073OAgeAK7JmJEmSJNVsOTACHANeSrGrU/sasA14inhKUdVa4IYK171BDNaL49D/n76gbiWewEwA1wKbiCLik4w5SZIkSVmsJQbo62gUD8uIAfMa4unDs/O4//PA3grXjQEbgYfIX0AcTDmsaIrtTbFNWTKSpD7jWuOS1Du2AV8STwm2pNjDwLfAr8TKeRvmcf8lFa/7CjhB/lWhlgM7ga+Bc03xE6ndXHtGktSHLCAkqX73Ey9HTwD7iL0fIAqFYWAceC/FHgU+SF+fAm6cR7+L/W/+9an9vRSfSe1YjblIUt8azJ2AJPWRUWIKzmbgOeBz4FVgJfAy8DHwGXP/u76dxgD5IPB+Xcl2wShwc4fXnOTCAqGwKrX/lOLnU7u6w74kSRVYQEhSPYaIlYM2Ek8VPkrxLcA1TeedK1030/T1eRqD5ZzanQp1B/BMG+f929S+QxRRrawsnV++frTNvCRJ82ABIUn1GCeKh6PAFPAE8CCwlRhod9N64M4W8buAP4idrsu+AL5v8/7tToX6NB3dUryDUe6/+PxnF/uSJF2EBYQk1WNrapcCe4CfiEH7PuY+ZeiGVcAtLeLD6Wj1vVO0X0Dk8ltql5biA6k9XWMuktS3LCAkqR7XpXacxkZxC+VoOsr2E08g3l7g/gtjdL4y0hFiN+5WfkntSCleTG36scO+JEkVWEBIUj2miKlF06X4GuBeGu9ELAbtvgMxA5zp8N6tplcVfiaWcL0t5TCb4sXmeJMd9iVJkiT1rKeJAW+xk/QS4B5iF+UXa8phP9U2kltBLKG6m/gZjhGD+BGq7y1R1Y6Uw2Pp8wCxmtUUMT1LkiRJuiQMAm8Rg9+TxJOI48B9NeZQtYA4TOQ93XTMpmOoa9m170Dqe5KYDnYWuClDHpIkSdKCuxJYR56Bd9UCoheNAo8Q079y/C4lSZKkS97dwIbcSUiSJEmSJEmSJEmSJEmSJEkV/Qca0plY5AcrkwAAAABJRU5ErkJggg==" style="display: block; margin: 0.5em auto;"/>
+<h2 data-bid="b394">Complex Equations</h2>
+<p data-bid="b395">More complex equations like matrices are also supported:</p>
+<img alt="\begin{pmatrix}
+a &amp; b \\
+c &amp; d
+\end{pmatrix}
+\begin{pmatrix}
+x \\
+y
+\end{pmatrix}
+=
+\begin{pmatrix}
+ax + by \\
+cx + dy
+\end{pmatrix}" class="math-image display" data-bid="b396" data-latex="\begin{pmatrix}
+a &amp; b \\
+c &amp; d
+\end{pmatrix}
+\begin{pmatrix}
+x \\
+y
+\end{pmatrix}
+=
+\begin{pmatrix}
+ax + by \\
+cx + dy
+\end{pmatrix}" data-math-baseline="0" data-math-height="47" data-math-width="784" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAxAAAAAuCAYAAAC4Yf+9AAABL2lDQ1BTa2lhAAAokX2Qv0vDUBSFP0tB1C6iooNDxi5qW7E/sA62atGxVahuaRqK2NaQRnTv6h/h7Ca4iNDZxUlwEnFxFwTXeNIMKUi9l5v7vfMOee8+iC2hiKeg0/XcaqVk1I9PjMkPJpTDMK2ew/iQ6+c19L6s/OMbF1NNu2epf6k8V4frl03xfCvkq4AbIV8HfOk5nvgmYPewWhbfi5OtEW6MsOW4gf9NXOy0L6zo3iTs7lFNva5apsK5skUbmzVqnHGKKUqxS4E86+rbyg1VmoyUAlmtUpQpkdM3x56UvPbS7AxZjuA9wyP777A18H3/MdIOBnCXhemHSEtuwmwCnp4jLXpjx3TNoRRXxewSfC9olFuY+4SZvtTFYHvMrMafWQ326WKxKspomjTZXwyUTdpToV43AAAQtklEQVR4nO2df7BdVXXHPy95CeTld0gCSYyUEJsgkBZEZPgRIDCUGlFBGJIiFASqNLQSUrSgBqqjoiOxIQM6DAqDpgyZiCkDKTINKb+GNtPXGjupDeOznUlbfVipPEZKW+rrH2vtOefd9+75dc+5597L9zPz5tyz39p7r7fuDqy199p7gxBC1M9HgUPAlLoVSeFCTM9j29RfP/AQ8ECBuvuAz5arTi20YoNe4ihgBFhbtyJCCCGEEHXzMWAUeFfdimRkCzAMLKu4n0nAdmAImFug/jLM4fx8mUq1mVZt0GtcjP1bURAhhBBCiLcsZ2AO0Q11K+KcAFwF3IytikzEVOB5YBA4vEJdPonZ5uQW2ljrbVxaikbtpwwbdAJZxlVW7sRssrxVpYQQQgghuo0F2Ez+w3UrEmMTNts9CjySILcYm93fVpEeIbBq1dkE+BO60+Es0wZ1k3VcZaEf2Ev1AawQQgghREcxCdgNHARm1axLI9djjt7vp8itoZrZ/flYYLW9pPa60eEs2wZlMQs4tWDdrOMqC2E/RFUBrBBCCCFEx3EN5kx9sG5FJmA7ptuqDLJ7MEeuzPz8h7z/xSW2eaa3ubnENqukChuUwZnAowXr5hlXWbjN2zunpPaEEEIIITqWKdhJRkPY7Hgn0YfNfI8AkzPIX0i5jvkKb+/+ktqLs4/yg50qqNIGrXIWxQKIvOMqC/MxO+0tqT0hhBBCiI7larKncqzBTj3aBhwPnAjMqU41VmK67QFuAXaQnKI0CTiAOYZl6PUg6bPUk4D12Iz2ZuBI4FzsmNNNwIwm9T7kbX+6BD2rJIsNwAKhTdjfvQGYyfiTvIraqhlnUyyASBtXU7F/F/d5H3FOAN7XpN27vd3VBXQSQgghhOgKpmArDyOkO29fxZyjz2GnNI36z3UV6ndtrJ8vYM7nKPClhDpXucynWux7ubfzZIJMHxZM7cPSwAaxme1R4A5/3tSkbj+28lNWsFMFWWwAtkoxArwIrMNm4Ue9LNCKrZpRNIBIG1ebgV3A4/43TPPyfn/f36TdYK89BXQSQgghhOgKLsEcnrS7CTa53IZY2WNedkY1qgFR7v21sbKwz6FZutXhROkprVyEt9X7viBBZg0WBAz4+5e9zvVEx3v+UUL9DS5zYwt6VkkWGxyJ2WAYmO5lp3i9p2JyrdpqIooGEEnjKtzXMQ8LdkaBhS4T/q57E9re6TInFdBLCCGEEKLjyZKessBlhhnrtB/w8ipPEpooT33Q+12ZUO8+WksliefIT0qQW89Y5/pZ73ce5oiuJ5q9noij6dy8+aw2+ArjV6I+6GW3xcpasdU8LKWo8WcLthow0e9OT9A5aVyt8/qL/f35mMzNXrY+oe0r6I7UNCGEEEKI3IR0jFGSN0+HdI9vxMqOoPpUjWO9j/gM82FEqSdJKVdhX8edBfs+yes/lqPOgNcZzNlXSOOZl7Ne1WSxwWQi/eM3gd/lZWc1qZfXVouxQKXxZ4f3P9Hvmjn5WcdVWB2KX6r4uJcdnaBrSGPKOw6EEEIIITqecDHYUylyO1zuyljZRUSzrANUc5LQBYzPiz/fyw6k1D3O5YYK9n2r1//jHHWCbvH9GXMx5zSJcJzo5XkUbANZbHAi0epUnP1ePg1Ygq1mxClqq0aKpDBlHVe7vWypv0/x90Mp7fcRBeZLcuomhBCFSFomFkKIMlnrz+cTpeBf/fn9WNl7Y3U/CfxeiXoFXvfnv8XK1vnzEyl1DwKvYbPiKwr0fbE//zpF7ibM6VyEOaEQ2XMG8APg7SltvODPZif71EUWG/zUn8/Eyt6GpcQ9h51m9EN/lmGrMsg6rlYALxMFDCf783sp7cc3nV9YUEchhBBCiI4k5KAnbZAFCzRGMYdyEvARonSPZZiDdVwF+s30Prb6+2X+/rWM9Xe5/BU5+z2c6O+bmSJ7yOXOJkrlWYNtJr4XO7EqjZPJNrPdTvLYYBBbcZiMBQdh4/E92FgJt1eXYatGiqxAZB1Xe7x8AJhNdLJUlvH0cZe9L6duQgghhBAdTUizSMu9Pwz4FlGqynYsnSm8b6lQx0uJnOsRYGOOurd43dtz9hnuCGh2VGecGzEbHMJy5cOxn8PYxWtJG6gDITUmpPx0AnlssBr7m0cwO1xJlP4zRLQCVIatGil6ClOWcbWKaLN1CH7iKU1JnMb4DdhCCCGEEF3NHCbOXU9iPnBM7H0A29xaNTOAd5A/xfP92N/4cM56YcXloYzys7GZ98BS0mftGwl7Bt6Zs15V5LVBP/YdTY+VLcJSl+KUYas4RQMISB5X87FL8PqwTdHhNu59GdsOhwyMpAkKIYQQQnQLIW3mYN2KVMhqss+ixwnpJ1vTBEskpMdc1MY+k6jDBkVYhN1lUjbhiOJwstQDJJ8q1Ug/0YpFp52uJYToQbSJWgjRDo71589q1aJafuHPVeT7b+uv+/OVctVJ5Of+XN7GPpOowwZF+AnFVyCaMRlbCfoxtuF6G3Ys8EZsY3gW3ox9XtZUSgghSkIBhBCiHYTjJTvdQWyFV2Of8xwzG3LcX02UKpfwPbytjX0mUYcNOoX/Az6ABaAvYHszzgT+NGc74fSydqT5CSHe4iRd5iSEEGUx4M+fJ0p1N3HnN89t2SGP/xeJUuUSAog8G4lPwzZgZ+WXwN9llK3DBp3EY+S7RHAiXsYCwk7ZGC+E6GEUQAgh2kFwqP+zVi2qJb6BNY8TF4KrdjrPoa+sevZhNyWnbUD+VezzK8B1Gduvwwa9RgjOFUAIISpHAYQQoh28FRzEX2GXyc0k3wpEsE0703dCIDeQKBXReDN42dRhg14jfKd5xp4QQhRCeyCEEO2gz59vJkr1Dn3pIuP439K1SKeInlVShw16jU77ToUQPYhWIIQQ7eB1f86qVYvqCSk+/5WjTrBNK/cT5CXsOXg9UWost5JvdvuXwJczytZhg14jfKd5xp4QQhRCAYQQoh284c9ucxDnAr+FXdR1BHA3zdOw4s71G01kJiI4zzNya1ecIoHOT8iXX/9aDtk6bFAnlwALsDH1OPCDEtqc4888Y08IIQqhAEII0Q6Co9ptKxCrgFuwi/AA7kyQjTu//52jjzpsM7uh7yw8WIUiTreOjyLMA24GzvD3vyqp3XB0sAIIIUTlaA+EEKIdDPtzdqJU5/EMsNY/Pw38T4JsfHUlz2lT/z5B/aoJjvpP29hnEnXYIC8XlNTOK9g9Dy/5e9ajbtPotO9UCNHDKIAQQrSDH/lzTqJUZxJmip9OkQvO70vk2yweHMl2zr6H7+FHiVLtow4b5GEy8L0S2zsKu337acpbMQiXAv5zSe0JIURTFEAIIdrBj/35m7VqUYyz/flcily4AfgfcrYfnPh35KzXCm9v6Ltu6rBBHso+2SgEpXtLai8EXq8RrfYJIURlaA+EEKId/IzojoSF2K25WVkCXAMcD/wjsJWxl7aVzbHAtcBS4AlsEzXA36bUW+XPlxKlxjPkz5MTpSKOAD6G5bx/nbFBwAWYrf8+of4U4N3+uVNmq/PaIJA0Ns7E7q54A9u/8SqwETsd6uvAv+Top9UAYo7reQoWYB7j5SEonQr8DnA6sB1LnQucAPwattm6Ge/05z+1qKcQQgghREfxInYh2dlpgk4/8IDXuRX4sH9+qBLtjKu9j+3AVZgzOkq2meJHXPbqnH1O93qjpB+T2gc8C3wOm2mOO5W/4W18JaWN412uk2aq89gA0sfGOuAQsMnLRrHv8k7//FhO/aZ4vSKc5H2/iAU0+4j+1nCB3mZgF/Z9jhCddtXv7/tT+viot1flRnchhBBCiLazFXNyNmSUv8Plw+bV6/39W+WrBsCF3v7OWNlmL/tMhvpDLntSgb4Pet1VKXKXAs9jM9qjwIHY7zZ62eUpbaxzuV0F9KySrDaA5LExF3O6T/TfvY8oKFzrn5Nm8yeiaACxyHUZJrqn4VzGBqVHu8w8ouBiof/uFH+/N6Wfr7ncHxTQUQghcqMUJiFEu3gC+EMsJSONNcDtwHeBp7xst9ff2axSC/RjAQ7Ap2Pl4WjMtP0Pc4BlWGrW9wv0vxO4DUtFSboTYBY2q36+v++I/e48f76Y0lfYh/LnOXWsmqw2SBsbxwCfItqLEtKi/gxbvbkG+IuE9tcDhzWUhf9XTrS6NAI82qStzVja3s1Y6hREG9hDALHEdT8cSy17gSjFb7U/08bfqf58MkVOCCGEEKKrmEaUOjM5RfZRl11ftVLOaUyc1nOAsakmzVjtcvcU7P908qWgBPuEWfYwQ34oQ929Lrs4TbDNZLVB3rHxrMvPTRPEDhb5LJYGFv/ZQpQe1vizuUlb/USpSsti5aGtcxrkN3j5DbGyx73s6ASdB1xmKEFGCCGEEKJr2Yk5O+elyA3TXif3Wu/vG7GyBV72LOZYJulyt8v+dsH+Q677KOlH3U5lvMP4Hi+7P6XuYpcbLKZmpWS1QZ6xMZPxf+8A6QFhI0VSmFaQHpQuIdqgvdvLlzb0mRYUfsjlki45FEKIUtExrkKIdhI2r/5uily4DKvR+VoAXFaqRsZ/+PNvYmVhhvgvsbSZbzapexhRasszTWTSeBP4jn++JEV2gT/jaS1n+TPtVuNgu2YpN3WS1QZpY+McLLhajZ3EBGM3wX8b20tSNa/4M35/yBIsRes5LED4IRYQggUcLxMFDCH1Ku3+iSv9+UQrygohhBBCdCrTiWaZk1JKPsPYlYpJmGN4iLF7FMpirvf3VX9/T0zPS7CTfK5vUvcil9vSog7v9nbS9jDMct2CU7yCaFY+KdUF7DSfTkxfCmSxQdrYuN9/fx3RrP7tLncNtgk9LYWukaKbqAcxm08GjvT3UWy/zUewjd2BPUQrE7OJUs2uSGg/rJLtRxOCQgghhOhhNmFOTzOHHCyd5UGXewpzkAdJT31qhY8TpYzsAy72z8OYQ9vseNEdlOeUh5z341LkwhGzw0TBQ1oO/ImMDZI6lTQbpI2Nc7Hv7SCwDfg80fe6G1heQKeiAcRqou9pCFstCEHNEBb8BVa53IjrGvZPLKU5N7jMxQV0E0IIIYToGmZgTtK+DLIDmOO7ME2wJAaAlUSzuf1Y2kkzlhLNKJdB2Mz9hQSZldjFYlMwZ/jyDHXAnOlRkv+eTiCLDSB5bATbBObSWoDXyj0Q/dgN29NjZYuIUpcA5gPvwvZDLCfaP5H0b6Qf209xAK0+CCGEEOItwCcwB+mMuhVpkbD6kDRLnJcnie4FaOQo7++gv0/FZrJHSE4JW+X1tpWnZqUk2aAOJpH9/pIihI3V4bSmcEneWU1rRKsP7djPIYQQQghRO9OwtJNDpJ861KmcjzlwG0tudznjL7QLhFukv4g5m3sxR7vxSNA4fVje/yE6xyFPI8kGvcZkopSmo4hWim5KqLMQ+953EZ3iJIQQQgjR8wQncXuaYAcyFVsFqMqBu4yJ94n0YZekHcQ2zn4JS2dK4sPe1mkl61g1zWzQi7wfC6iHsE3gaStz99NdAaEQQgghRGkEJ/GquhXJyR1U78DdQ7YN1Uksxmaqy14laRdl2KDXOI/uDAiFEEIIIUrjLswhKnI6Th2sw/Q9teJ+pmGpR/tpfgJUEtOxWe1H6N40l1Zt0GusxALCG9IEhRBCCCF6mT7sDoVBOv80mVMwB+70NvU3C3Og7ypQ91HgYewEoW6mFRv0EnOxFKcb61ZECCH+H16XFwj6p10eAAAAAElFTkSuQmCC" style="display: block; margin: 0.5em auto;"/>
+<p data-bid="b397">Math equations are automatically cached for performance and work in both themes!</p>
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;"/>
+<div class="slide" data-idx="19" id="slide-19">
+<h1 data-bid="b398">📈 Figures Demo</h1>
+<p data-bid="b399">Bar chart (80% width):</p>
+<img alt="" data-bid="b400" data-caption="Sample bar chart demonstrating data visualization with proper scaling" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/assets/chart_bar.png" data-scale-type="x" data-scale-x="0.8" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAZAAAAEsCAIAAABi1XKVAAAETUlEQVR4nO3WsUlEARBFUVd+agtWYCEmYrrYhZFgAYKRXcimYmIhVmALFvANzUTXYLi75zQwL7rMZl3XE4CC0+kBAL8lWECGYAEZggVkCBaQIVhAhmABGYIFZAgWkCFYQIZgARmCBWQIFpAhWECGYAEZggVkCBaQIVhAhmABGYIFZAgWkCFYQIZgARmCBWQIFpAhWECGYAEZggVkCBaQIVhAhmABGYIFZAgWkCFYQIZgARmCBWQIFpAhWECGYAEZggVkCBaQIVhAhmABGYIFZAgWkCFYQIZgARmCBWQIFpAhWECGYAEZggVkCBaQIVhAhmABGYIFZAgWkCFYQIZgARmCBWQIFpAhWECGYAEZggVkCBaQIVhAhmABGYIFZAgWkLFMD+AwfWxvpifs43z3PD2Bn/iwgAzBAjIEC8gQLCBDsIAMwQIyBAvIECwgQ7CADMECMgQLyBAsIEOwgAzBAjIEC8gQLCBDsIAMwQIyBAvIECwgQ7CADMECMgQLyBAsIEOwgAzBAjIEC8gQLCBDsIAMwQIyBAvIECwgQ7CADMECMgQLyBAsIEOwgAzBAjIEC8gQLCBDsIAMwQIyBAvIECwgQ7CADMECMgQLyBAsIEOwgAzBAjIEC8gQLCBDsIAMwQIyBAvIECwgQ7CADMECMgQLyFimBxyLz6eL6Qn7OLt9n54A33xYQIZgARmCBWQIFpAhWECGYAEZggVkCBaQIVhAhmABGYIFZAgWkCFYQIZgARmCBWQIFpAhWECGYAEZggVkCBaQIVhAhmABGYIFZAgWkCFYQIZgARmCBWQIFpAhWEDGMj0ADsHd2+v0hH08Xl5NT/gbHxaQIVhAhmABGYIFZAgWkCFYQIZgARmCBWQIFpAhWECGYAEZggVkCBaQIVhAhmABGYIFZAgWkCFYQIZgARmCBWQIFpAhWECGYAEZggVkCBaQIVhAhmABGYIFZAgWkLFMHb6+302d/o+Xh+30BDhePiwgQ7CADMECMgQLyBAsIEOwgAzBAjIEC8gQLCBDsIAMwQIyBAvIECwgQ7CADMECMgQLyBAsIEOwgAzBAjIEC8gQLCBDsIAMwQIyBAvIECwgQ7CADMECMgQLyBAsIEOwgAzBAjIEC8gQLCBDsIAMwQIyBAvIECwgQ7CADMECMgQLyBAsIEOwgAzBAjIEC8gQLCBDsIAMwQIyBAvIECwgQ7CADMECMgQLyBAsIEOwgAzBAjIEC8gQLCBDsIAMwQIyBAvI2KzrOr0B4Fd8WECGYAEZggVkCBaQIVhAhmABGYIFZAgWkCFYQIZgARmCBWQIFpAhWECGYAEZggVkCBaQIVhAhmABGYIFZAgWkCFYQIZgARmCBWQIFpAhWECGYAEZggVkCBaQIVhAhmABGYIFZAgWkCFYQIZgARmCBWQIFpAhWECGYAEZggVkCBaQIVhAhmABGYIFZAgWkCFYQIZgARmCBWQIFpDxBcg4FFludMYsAAAAAElFTkSuQmCC"/>
+<p class="figure-caption" data-bid="b401">Sample bar chart demonstrating data visualization with proper scaling</p>
+<p data-bid="b402">Pie chart (60% height):</p>
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;"/>
+<div class="slide" data-idx="20" id="slide-20">
+<img alt="" data-bid="b403" data-caption="Distribution chart showing proportional data representation" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/assets/chart_pie.png" data-scale-type="y" data-scale-y="0.6" src="data:image/png;base64,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"/>
+<p class="figure-caption" data-bid="b404">Distribution chart showing proportional data representation</p>
+<h2 data-bid="b405">Advanced Jinja2 Template Examples</h2>
+<p data-bid="b406">You can also use the new template syntax for dynamic figures:
+{% figure "bar_chart" width=0.7 caption="Generated using Jinja2 template syntax" %}</p>
+<h1 data-bid="b407">Two-column slide: table on left, <span class="wavy blue" data-bid="b408">text on right</span></h1>
+<div class="columns" data-bid="b409">
+<div class="column" data-bid="b410" data-column-width="default" style="flex:1 1 0;">
+<h3 data-bid="b411">📋 Project Status Table</h3>
+<table data-bid="b412">
+<thead data-bid="b413">
+<tr data-bid="b414">
+<th data-bid="b415">Task</th>
+<th data-bid="b416">Owner</th>
+<th data-bid="b417">Progress</th>
+</tr>
+</thead>
+<tbody data-bid="b418">
+<tr data-bid="b419">
+<td data-bid="b420">Authentication</td>
+<td data-bid="b421">Alice</td>
+<td data-bid="b422"><span class="red" data-bid="b423">100%</span></td>
+</tr>
+<tr data-bid="b424">
+<td data-bid="b425">Database</td>
+<td data-bid="b426">Bob</td>
+<td data-bid="b427"><span class="green" data-bid="b428">80%</span></td>
+</tr>
+<tr data-bid="b429">
+<td data-bid="b430">API Docs</td>
+<td data-bid="b431">Carol</td>
+<td data-bid="b432"><span class="green underline" data-bid="b433">100%</span></td>
+</tr>
+<tr data-bid="b434">
+<td data-bid="b435">Analytics</td>
+<td data-bid="b436">Dave</td>
+<td data-bid="b437">60%</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="column" data-bid="b438" data-column-width="default" style="flex:1 1 0;">
+<h3 data-bid="b439">✍️ Notes</h3>
+<p data-bid="b440">All core features are either complete or in final testing.
+<span class="bold blue" data-bid="b441">Performance</span> metrics are excellent.</p>
+</div>
+</div>
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;"/>
+<div class="slide" data-idx="21" id="slide-21">
+<h1 data-bid="b442">📈 Figures Demo (Columns)</h1>
+<div class="columns" data-bid="b443">
+<div class="column" data-bid="b444" data-column-width="60%" style="flex:0 0 60%;">
+<img alt="" data-bid="b445" data-caption="Task completion progress visualization" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/assets/chart_bar.png" data-in-column="true" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAZAAAAEsCAIAAABi1XKVAAAETUlEQVR4nO3WsUlEARBFUVd+agtWYCEmYrrYhZFgAYKRXcimYmIhVmALFvANzUTXYLi75zQwL7rMZl3XE4CC0+kBAL8lWECGYAEZggVkCBaQIVhAhmABGYIFZAgWkCFYQIZgARmCBWQIFpAhWECGYAEZggVkCBaQIVhAhmABGYIFZAgWkCFYQIZgARmCBWQIFpAhWECGYAEZggVkCBaQIVhAhmABGYIFZAgWkCFYQIZgARmCBWQIFpAhWECGYAEZggVkCBaQIVhAhmABGYIFZAgWkCFYQIZgARmCBWQIFpAhWECGYAEZggVkCBaQIVhAhmABGYIFZAgWkCFYQIZgARmCBWQIFpAhWECGYAEZggVkCBaQIVhAhmABGYIFZAgWkLFMD+AwfWxvpifs43z3PD2Bn/iwgAzBAjIEC8gQLCBDsIAMwQIyBAvIECwgQ7CADMECMgQLyBAsIEOwgAzBAjIEC8gQLCBDsIAMwQIyBAvIECwgQ7CADMECMgQLyBAsIEOwgAzBAjIEC8gQLCBDsIAMwQIyBAvIECwgQ7CADMECMgQLyBAsIEOwgAzBAjIEC8gQLCBDsIAMwQIyBAvIECwgQ7CADMECMgQLyBAsIEOwgAzBAjIEC8gQLCBDsIAMwQIyBAvIECwgQ7CADMECMgQLyFimBxyLz6eL6Qn7OLt9n54A33xYQIZgARmCBWQIFpAhWECGYAEZggVkCBaQIVhAhmABGYIFZAgWkCFYQIZgARmCBWQIFpAhWECGYAEZggVkCBaQIVhAhmABGYIFZAgWkCFYQIZgARmCBWQIFpAhWEDGMj0ADsHd2+v0hH08Xl5NT/gbHxaQIVhAhmABGYIFZAgWkCFYQIZgARmCBWQIFpAhWECGYAEZggVkCBaQIVhAhmABGYIFZAgWkCFYQIZgARmCBWQIFpAhWECGYAEZggVkCBaQIVhAhmABGYIFZAgWkLFMHb6+302d/o+Xh+30BDhePiwgQ7CADMECMgQLyBAsIEOwgAzBAjIEC8gQLCBDsIAMwQIyBAvIECwgQ7CADMECMgQLyBAsIEOwgAzBAjIEC8gQLCBDsIAMwQIyBAvIECwgQ7CADMECMgQLyBAsIEOwgAzBAjIEC8gQLCBDsIAMwQIyBAvIECwgQ7CADMECMgQLyBAsIEOwgAzBAjIEC8gQLCBDsIAMwQIyBAvIECwgQ7CADMECMgQLyBAsIEOwgAzBAjIEC8gQLCBDsIAMwQIyBAvI2KzrOr0B4Fd8WECGYAEZggVkCBaQIVhAhmABGYIFZAgWkCFYQIZgARmCBWQIFpAhWECGYAEZggVkCBaQIVhAhmABGYIFZAgWkCFYQIZgARmCBWQIFpAhWECGYAEZggVkCBaQIVhAhmABGYIFZAgWkCFYQIZgARmCBWQIFpAhWECGYAEZggVkCBaQIVhAhmABGYIFZAgWkCFYQIZgARmCBWQIFpDxBcg4FFludMYsAAAAAElFTkSuQmCC"/><p class="figure-caption" data-bid="b446">Task completion progress visualization</p></div>
+<div class="column" data-bid="b447" data-column-width="default" style="flex:1 1 0;">
+<p data-bid="b448">The bar chart shows relative task completion percentages. Authentication and API docs are finished; analytics is lagging.</p>
+</div>
+</div>
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;"/>
+<div class="slide" data-idx="22" id="slide-22">
+<h1 data-bid="b449">🖼️ Figure + Table Demo</h1>
+<div class="columns" data-bid="b450">
+<div class="column" data-bid="b451" data-column-width="default" style="flex:1 1 0;">
+<img alt="Pie Chart" data-bid="b452" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/assets/chart_pie.png" data-in-column="true" src="data:image/png;base64,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"/></div>
+<div class="column" data-bid="b453" data-column-width="default" style="flex:1 1 0;">
+<table data-bid="b454">
+<thead data-bid="b455">
+<tr data-bid="b456">
+<th data-bid="b457">Segment</th>
+<th data-bid="b458">%</th>
+</tr>
+</thead>
+<tbody data-bid="b459">
+<tr data-bid="b460">
+<td data-bid="b461">Complete</td>
+<td data-bid="b462">55</td>
+</tr>
+<tr data-bid="b463">
+<td data-bid="b464">In-Progress</td>
+<td data-bid="b465">35</td>
+</tr>
+<tr data-bid="b466">
+<td data-bid="b467">Blocked</td>
+<td data-bid="b468">10</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;"/>
+<div class="slide" data-idx="23" id="slide-23">
+<h1 data-bid="b469">Two-column slide (60% / 40%)</h1>
+<div class="columns" data-bid="b470">
+<div class="column" data-bid="b471" data-column-width="60%" style="flex:0 0 60%;">
+<h3 data-bid="b472">📋 Project Status Table</h3>
+<table data-bid="b473">
+<thead data-bid="b474">
+<tr data-bid="b475">
+<th data-bid="b476">Task</th>
+<th data-bid="b477">Owner</th>
+<th data-bid="b478">Progress</th>
+</tr>
+</thead>
+<tbody data-bid="b479">
+<tr data-bid="b480">
+<td data-bid="b481">Authentication</td>
+<td data-bid="b482">Alice</td>
+<td data-bid="b483">100%</td>
+</tr>
+<tr data-bid="b484">
+<td data-bid="b485">Database</td>
+<td data-bid="b486">Bob</td>
+<td data-bid="b487">80%</td>
+</tr>
+<tr data-bid="b488">
+<td data-bid="b489">API Docs</td>
+<td data-bid="b490">Carol</td>
+<td data-bid="b491">100%</td>
+</tr>
+<tr data-bid="b492">
+<td data-bid="b493">Analytics</td>
+<td data-bid="b494">Dave</td>
+<td data-bid="b495">60%</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="column" data-bid="b496" data-column-width="40%" style="flex:0 0 40%;">
+<h3 data-bid="b497">✍️ Notes</h3>
+<p data-bid="b498">All core features are either complete or in progress. Remaining items are performance tuning and UX polish.</p>
+</div>
+</div>
+</div>
+<hr style="border:2px dashed #999;margin:40px 0;"/>
+<div class="slide" data-idx="24" id="slide-24">
+<h1 data-bid="b499">Two-column slide (Auto + default)</h1>
+<div class="columns" data-bid="b500">
+<div class="column" data-bid="b501" data-column-width="auto" style="flex:0 0 auto;">
+<h3 data-bid="b502">📋 Project Status Table</h3>
+<table data-bid="b503">
+<thead data-bid="b504">
+<tr data-bid="b505">
+<th data-bid="b506">Task</th>
+<th data-bid="b507">Owner</th>
+<th data-bid="b508">Progress</th>
+</tr>
+</thead>
+<tbody data-bid="b509">
+<tr data-bid="b510">
+<td data-bid="b511">Authentication</td>
+<td data-bid="b512">Alice</td>
+<td data-bid="b513">100%</td>
+</tr>
+<tr data-bid="b514">
+<td data-bid="b515">Database</td>
+<td data-bid="b516">Bob</td>
+<td data-bid="b517">80%</td>
+</tr>
+<tr data-bid="b518">
+<td data-bid="b519">API Docs</td>
+<td data-bid="b520">Carol</td>
+<td data-bid="b521">100%</td>
+</tr>
+<tr data-bid="b522">
+<td data-bid="b523">Analytics</td>
+<td data-bid="b524">Dave</td>
+<td data-bid="b525">60%</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="column" data-bid="b526" data-column-width="default" style="flex:1 1 0;">
+<h3 data-bid="b527">✍️ Notes</h3>
+<p data-bid="b528">All core features are either complete or in progress. Remaining items are performance tuning and UX polish.</p>
+</div>
+</div>
+</div>
+<style>.dbg-list{display:block;text-indent:-1em;padding-left:1em;margin-left:20px;margin-top:0;margin-bottom:0;line-height:inherit;}</style>
+</body>
+</html>
