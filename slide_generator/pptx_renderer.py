@@ -11,6 +11,7 @@ from pptx import Presentation
 from pptx.util import Inches, Pt
 from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN, MSO_AUTO_SIZE, MSO_UNDERLINE
+from pptx.enum.dml import MSO_THEME_COLOR
 from pptx.enum.shapes import MSO_AUTO_SHAPE_TYPE
 from pptx.oxml.ns import qn, nsdecls
 from pptx.oxml import parse_xml
@@ -152,13 +153,14 @@ class PPTXRenderer:
             return (0, 0, 0)  # Default to black
         return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
     
-    def render(self, pages: List[List[Block]], output_path: str):
+    def render(self, pages: List[List[Block]], output_path: str, page_speaker_notes: Dict[int, List[str]] = None):
         """
         Render pages of Block objects to a PowerPoint presentation.
         
         Args:
             pages: List of pages, where each page is a list of Block objects
             output_path: Path where the PPTX file should be saved
+            page_speaker_notes: Optional dict mapping page index (0-based) to list of speaker note contents
         """
         # Create a new presentation
         prs = Presentation()
@@ -211,6 +213,11 @@ class PPTXRenderer:
 
                 # Increase cumulative offset for subsequent blocks
                 self._page_offset_px += extra_height_px
+            
+            # Add speaker notes to this slide if provided
+            if page_speaker_notes and page_idx in page_speaker_notes:
+                notes_content = '\n\n'.join(page_speaker_notes[page_idx])
+                self._add_speaker_notes_to_slide(slide, notes_content)
         
         # Handle the case where no pages were generated
         if not pages:
@@ -641,10 +648,9 @@ class PPTXRenderer:
             self._add_math_only_block(slide, block, x_scale, y_scale)
             return  # Avoid default text processing
 
-        # Skip layout-only divs (both columns wrapper and individual column divs)
-        if block.tag == 'div' and block.className and (
-                'columns' in block.className or 'column' in block.className):
-            return
+        # Skip layout-only divs ONLY for columns wrapper, not individual column content
+        if block.tag == 'div' and block.className and 'columns' in block.className:
+            return  # Skip only the wrapper div, not individual column content
         
         # Debug: Show all div blocks with className
         if self.debug and block.tag == 'div' and block.className:
@@ -1520,4 +1526,98 @@ class PPTXRenderer:
         
         if self.debug:
             logger.info(f"🔲 Applied enhanced table borders: w=12700 EMUs, color=#{color_hex}")
-            logger.info(f"   Added headEnd/tailEnd for reliable line width application") 
+            logger.info(f"   Added headEnd/tailEnd for reliable line width application")
+
+    def _add_speaker_notes_to_slide(self, slide, notes_content: str):
+        """Add speaker notes to a PowerPoint slide with markdown formatting support."""
+        try:
+            # Access the notes slide for this slide
+            notes_slide = slide.notes_slide
+            
+            # Get the notes text frame
+            notes_text_frame = notes_slide.notes_text_frame
+            
+            # Clear any existing notes
+            notes_text_frame.clear()
+            
+            # Parse and format the speaker notes content with markdown support
+            self._parse_speaker_notes_markdown(notes_text_frame, notes_content)
+            
+            if self.debug:
+                logger.info(f"Added formatted speaker notes to slide: {notes_content[:50]}...")
+                
+        except Exception as e:
+            if self.debug:
+                logger.warning(f"Failed to add speaker notes: {e}")
+                
+    def _parse_speaker_notes_markdown(self, text_frame, content):
+        """Parse speaker notes content with markdown formatting into runs."""
+        # Split content into paragraphs
+        paragraphs = [p.strip() for p in content.split('\n\n') if p.strip()]
+        
+        if not paragraphs:
+            # If no paragraphs, treat as single paragraph
+            paragraphs = [content.strip()]
+        
+        for i, para_text in enumerate(paragraphs):
+            if not para_text:
+                continue
+                
+            # Add new paragraph if not the first one
+            if i > 0:
+                text_frame.add_paragraph()
+            
+            # Get or create current paragraph
+            para = text_frame.paragraphs[-1] if text_frame.paragraphs else text_frame.add_paragraph()
+            para.clear()
+            
+            # FIXED: Convert markdown to HTML first, then use _add_formatted_text
+            # This is the missing step - speaker notes are raw markdown, not HTML
+            html_content = self._convert_markdown_to_html_for_speaker_notes(para_text)
+            
+            # Create a temporary Block object with the HTML content
+            from .models import Block
+            temp_block = Block(
+                tag='p',
+                x=0, y=0, w=100, h=20,  # Dummy dimensions
+                content=html_content
+            )
+            
+            # Now _add_formatted_text can properly process the HTML content
+            self._add_formatted_text(para, temp_block)
+    
+    def _convert_markdown_to_html_for_speaker_notes(self, markdown_text: str) -> str:
+        """Convert markdown text to HTML for speaker notes processing."""
+        import re
+        
+        # Convert basic markdown syntax to HTML
+        html = markdown_text
+        
+        # Convert ==highlight== to HTML <mark> tags
+        html = re.sub(r'==(.*?)==', r'<mark>\1</mark>', html)
+        
+        # Convert [text]{.class} to HTML <span class="class">
+        html = re.sub(r'\[([^\]]+)\]\{\.([^}]+)\}', r'<span class="\2">\1</span>', html)
+        
+        # Convert ++underline++ to HTML <u>
+        html = re.sub(r'\+\+(.*?)\+\+', r'<u>\1</u>', html)
+        
+        # Convert ^^wavy underline^^ to HTML <u class="wavy">
+        html = re.sub(r'\^\^(.*?)\^\^', r'<u class="wavy">\1</u>', html)
+        
+        # Convert ~~strikethrough~~ to HTML <del>
+        html = re.sub(r'~~(.*?)~~', r'<del>\1</del>', html)
+        
+        # Convert **bold** to HTML <strong> (must come after other processing)
+        html = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', html)
+        
+        # Convert *italic* to HTML <em> (must come after bold)
+        html = re.sub(r'(?<!\*)\*([^*]+?)\*(?!\*)', r'<em>\1</em>', html)
+        
+        # Convert `code` to HTML <code>
+        html = re.sub(r'`(.+?)`', r'<code>\1</code>', html)
+        
+        # Convert [text](url) to HTML <a href="url">
+        html = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'<a href="\2">\1</a>', html)
+        
+        return html

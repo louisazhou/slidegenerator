@@ -7,20 +7,25 @@ import os
 from pathlib import Path
 
 from .paths import resolve_asset
+from .models import SpeakerNote
 
 class MarkdownParser:
     """
     Enhanced markdown parser with page break support using markdown-it-py.
     """
     
-    def __init__(self, base_dir: Path):
+    def __init__(self, base_dir: Path, extract_speaker_notes: bool = True):
         """
         Initialize the markdown parser.
         
         Args:
             base_dir: Base directory for resolving relative image paths. Required.
+            extract_speaker_notes: Whether to extract speaker notes during processing
         """
         self.base_dir = base_dir
+        self.extract_speaker_notes = extract_speaker_notes
+        # Storage for extracted speaker notes
+        self.speaker_notes: List[SpeakerNote] = []
         
         # markdown-it-py doesn't use the same extension system as the old markdown library
         # but it has most features built-in by default
@@ -192,9 +197,16 @@ class MarkdownParser:
 
         import re
         
+        # Extract speaker notes FIRST, before any other processing
+        # Only extract notes if this is NOT individual slide processing
+        if self.extract_speaker_notes:
+            processed = self._extract_and_store_speaker_notes(markdown_text)
+        else:
+            processed = markdown_text
+        
         # Convert ==highlight== to HTML <mark> tags
         # This needs to be done before markdown processing to avoid conflicts
-        processed = re.sub(r'==(.*?)==', r'<mark>\1</mark>', markdown_text)
+        processed = re.sub(r'==(.*?)==', r'<mark>\1</mark>', processed)
         
         # Convert ++underline++ (single) and ^^wavy^^ underline first
         processed = re.sub(r'\+\+(.*?)\+\+', r'<u>\1</u>', processed)
@@ -617,6 +629,124 @@ class MarkdownParser:
         # If there are page breaks, slide count is page breaks + 1
         # If no page breaks, it's just 1 slide
         return page_breaks + 1
+
+    def _extract_and_store_speaker_notes(self, markdown_text: str) -> str:
+        """
+        Extract speaker notes from markdown and store them, returning clean markdown.
+        
+        Notes have the syntax: <!-- NOTE: content --> (can span multiple lines)
+        
+        Args:
+            markdown_text: Original markdown content
+            
+        Returns:
+            Markdown with speaker notes removed
+        """
+        import re
+        
+        # Don't clear existing notes - accumulate them across multiple parse calls
+        # self.speaker_notes.clear()
+        
+        # First, find all speaker notes (including multi-line ones) using a global regex
+        note_pattern = r'<!--\s*NOTE:\s*(.*?)\s*-->'
+        note_matches = list(re.finditer(note_pattern, markdown_text, re.IGNORECASE | re.DOTALL))
+        
+        # Process notes in reverse order to avoid position shifting during removal
+        clean_text = markdown_text
+        for match in reversed(note_matches):
+            note_content = match.group(1).strip()
+            
+            # Process the note content through the same markdown pipeline as main content
+            processed_note_content = self._process_note_content(note_content)
+            
+            # Find the line number where this note starts
+            text_before_note = markdown_text[:match.start()]
+            note_line = text_before_note.count('\n') + 1
+            
+            # Collect preceding content for page association (last 5 lines before the note)
+            lines_before = text_before_note.split('\n')
+            preceding_content = '\n'.join(lines_before[-5:]) if len(lines_before) >= 5 else '\n'.join(lines_before)
+            
+            # Store the processed note
+            speaker_note = SpeakerNote(
+                content=processed_note_content,
+                original_line=note_line,
+                preceding_content=preceding_content
+            )
+            self.speaker_notes.append(speaker_note)
+            
+            # Remove the note from the markdown
+            clean_text = clean_text[:match.start()] + clean_text[match.end():]
+        
+        # Reverse the notes list to maintain original order (since we processed in reverse)
+        self.speaker_notes.reverse()
+        
+        return clean_text
+    
+    def _process_note_content(self, note_content: str) -> str:
+        """
+        Process speaker note content through the same markdown pipeline as main content.
+        
+        Args:
+            note_content: Raw note content
+            
+        Returns:
+            Processed note content (HTML converted to plain text with formatting indicators)
+        """
+        import re
+        from html import unescape
+        
+        # Apply the same custom syntax preprocessing as main content
+        processed = note_content
+        
+        # Convert ==highlight== to HTML <mark> tags
+        processed = re.sub(r'==(.*?)==', r'<mark>\1</mark>', processed)
+        
+        # Convert ++underline++ (single) and ^^wavy^^ underline first
+        processed = re.sub(r'\+\+(.*?)\+\+', r'<u>\1</u>', processed)
+        processed = re.sub(r'\^\^(.*?)\^\^', r'<u class="wavy">\1</u>', processed)
+
+        # Convert ~~strikethrough~~ to <del>
+        processed = re.sub(r'~~(.*?)~~', r'<del>\1</del>', processed)
+        
+        # Process through markdown renderer
+        html_content = self.markdown_processor.render(processed)
+        
+        # Convert HTML back to plain text for PowerPoint notes, preserving formatting indicators
+        plain_text = html_content
+        
+        # Replace HTML tags with text equivalents that show the formatting
+        plain_text = re.sub(r'<strong[^>]*>(.*?)</strong>', r'**\1**', plain_text, flags=re.DOTALL)
+        plain_text = re.sub(r'<b[^>]*>(.*?)</b>', r'**\1**', plain_text, flags=re.DOTALL)
+        plain_text = re.sub(r'<em[^>]*>(.*?)</em>', r'*\1*', plain_text, flags=re.DOTALL)
+        plain_text = re.sub(r'<i[^>]*>(.*?)</i>', r'*\1*', plain_text, flags=re.DOTALL)
+        plain_text = re.sub(r'<code[^>]*>(.*?)</code>', r'`\1`', plain_text, flags=re.DOTALL)
+        plain_text = re.sub(r'<mark[^>]*>(.*?)</mark>', r'==\1==', plain_text, flags=re.DOTALL)
+        plain_text = re.sub(r'<u[^>]*>(.*?)</u>', r'+++\1+++', plain_text, flags=re.DOTALL)
+        plain_text = re.sub(r'<del[^>]*>(.*?)</del>', r'~~~\1~~~', plain_text, flags=re.DOTALL)
+        
+        # Handle links - convert to readable format
+        plain_text = re.sub(r'<a[^>]*href="([^"]*)"[^>]*>(.*?)</a>', r'\2 (\1)', plain_text, flags=re.DOTALL)
+        
+        # Remove remaining HTML tags
+        plain_text = re.sub(r'<[^>]+>', '', plain_text)
+        
+        # Decode HTML entities
+        plain_text = unescape(plain_text)
+        
+        # Clean up whitespace
+        plain_text = re.sub(r'\n\s*\n', '\n\n', plain_text)  # Normalize line breaks
+        plain_text = plain_text.strip()
+        
+        return plain_text
+
+    def get_speaker_notes(self) -> List[SpeakerNote]:
+        """Get the speaker notes extracted during the last parse."""
+        return self.speaker_notes.copy()
+    
+    def clear_speaker_notes(self) -> None:
+        """Clear all stored speaker notes. Call this before processing a new document."""
+        self.speaker_notes.clear()
 
 
 def parse_markdown(markdown_text: str, extensions: Optional[List[str]] = None) -> str:

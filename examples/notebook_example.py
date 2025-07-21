@@ -469,7 +469,35 @@ This slide tests various inline formatting options:
 - ==Highlighted text== for important notes
 
 All formatting should render correctly in both HTML and PowerPoint.
+
+<!-- NOTE: This slide demonstrates comprehensive inline formatting capabilities. Key points to cover: **bold**/_italic_ basics, [color customization]{.red}, various ++underline styles++, and ==highlighting== for emphasis. -->
 """)
+notebook.preview_slide()
+
+# %%
+# Speaker notes demo with template variables
+notebook.new_slide("""
+# {{title}} - Speaker Notes Demo
+
+This demonstrates **{{feature_name}}** with *various styling* and template integration.
+
+Key features to highlight:
+- ==Template variables== work with speaker notes: {{success_rate | pct}}
+- **Bold emphasis** for important points
+- Links to [documentation]({{doc_url}}) for reference
+
+The {{company_name}} team has achieved excellent results this quarter.
+
+<!-- NOTE: Template variables in speaker notes also work: {{success_rate | pct}} success rate.
+Remember to emphasize the {{feature_name}} capabilities and mention the {{company_name}} achievements.
+This slide showcases both speaker notes and template variable parsing working together seamlessly. -->
+""", template_vars={
+    'title': '🎤 Advanced Demo',
+    'feature_name': 'speaker notes functionality',
+    'success_rate': 0.95,
+    'doc_url': 'https://docs.example.com',
+    'company_name': 'TechCorp Solutions'
+})
 notebook.preview_slide()
 
 # %%

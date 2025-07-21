@@ -8,7 +8,7 @@ from PIL import Image
 from html import unescape
 from bs4 import BeautifulSoup
 import base64, mimetypes
-from .models import Block
+from .models import Block, SpeakerNote
 from .markdown_parser import MarkdownParser
 from .theme_loader import get_css
 
@@ -443,6 +443,10 @@ class LayoutEngine:
         self.css_parser = CSSParser(theme)
         self._default_tmp_dir = tmp_dir  # may be None; used if caller passes explicit tmp
         self.image_scaler = ImageScaler(self.css_parser, debug)
+        
+        # Storage for speaker notes and their page associations
+        self.speaker_notes: List[SpeakerNote] = []
+        self.page_speaker_notes: Dict[int, List[str]] = {}  # page_number -> list of note contents
     
     def convert_markdown_to_html(self, markdown_text):
         """Convert markdown to HTML with layout CSS."""
@@ -450,9 +454,14 @@ class LayoutEngine:
         if not markdown_text or not markdown_text.strip():
             return ""
         
-        # Use the new markdown parser
-        parser = MarkdownParser(base_dir=self.base_dir)
-        html_slides = parser.parse_with_page_breaks(markdown_text)
+        # Use the new markdown parser and store it to access speaker notes
+        self._markdown_parser = MarkdownParser(base_dir=self.base_dir)
+        # Clear any existing speaker notes before processing new document
+        self._markdown_parser.clear_speaker_notes()
+        html_slides = self._markdown_parser.parse_with_page_breaks(markdown_text)
+        
+        # Extract speaker notes from the parser
+        self.speaker_notes = self._markdown_parser.get_speaker_notes()
         
         # If no content slides, return empty string
         if not html_slides:
@@ -655,7 +664,57 @@ class LayoutEngine:
                     oversized_flag = " [OVERSIZED]" if hasattr(block, 'oversized') and block.oversized else ""
                     logger.info(f"    Block {j+1}: {block.tag} ({block.height}px) - '{block.content[:30]}...'{oversized_flag}")
 
+        # Associate speaker notes with pages before returning
+        self._associate_speaker_notes_with_pages(pages)
+
         return pages
+
+    def _associate_speaker_notes_with_pages(self, pages: List[List[Block]]) -> None:
+        """
+        Associate extracted speaker notes with the correct pages based on content matching.
+        
+        Args:
+            pages: List of paginated blocks
+        """
+        # Clear any existing associations
+        self.page_speaker_notes.clear()
+        
+        if not self.speaker_notes:
+            return
+        
+        # For each speaker note, find the page that contains content most similar to its preceding content
+        for note in self.speaker_notes:
+            best_page = 0  # Default to first page if no match found
+            best_match_score = 0
+            
+            # Check each page for content similarity
+            for page_idx, page_blocks in enumerate(pages):
+                # Combine all text content from this page
+                page_text = ' '.join(block.content for block in page_blocks if hasattr(block, 'content') and block.content)
+                
+                # Simple similarity check: count common words
+                note_words = set(note.preceding_content.lower().split())
+                page_words = set(page_text.lower().split())
+                
+                if note_words and page_words:
+                    common_words = note_words.intersection(page_words)
+                    match_score = len(common_words) / len(note_words) if note_words else 0
+                    
+                    if match_score > best_match_score:
+                        best_match_score = match_score
+                        best_page = page_idx
+            
+            # Associate the note with the best matching page
+            if best_page not in self.page_speaker_notes:
+                self.page_speaker_notes[best_page] = []
+            self.page_speaker_notes[best_page].append(note.content)
+            
+            if self.debug:
+                logger.info(f"Associated speaker note '{note.content[:30]}...' with page {best_page + 1} (score: {best_match_score:.2f})")
+
+    def get_page_speaker_notes(self, page_index: int) -> List[str]:
+        """Get speaker notes for a specific page (0-indexed)."""
+        return self.page_speaker_notes.get(page_index, [])
 
     def _preprocess_html_for_measurement(self, html_content):
         """
@@ -1071,6 +1130,48 @@ class LayoutEngine:
         
         return blocks
 
+    def _generate_notes_pill_html(self, notes_content: str) -> str:
+        """Generate HTML for speaker notes pill with hover functionality."""
+        import html
+        
+        # Escape the notes content for safe HTML inclusion
+        escaped_content = html.escape(notes_content)
+        
+        # Create the notes pill with inline styling (as per user requirement)
+        pill_html = f'''
+<div class="notes-pill" style="
+    position: absolute; 
+    top: 10px; 
+    right: 10px; 
+    padding: 8px 12px; 
+    border-radius: 20px; 
+    font-weight: bold; 
+    cursor: pointer; 
+    z-index: 1000;
+    display: inline-block;
+">
+    📝 Notes
+    <div class="notes-tooltip" style="
+        display: none; 
+        position: absolute; 
+        top: 100%; 
+        right: 0; 
+        margin-top: 5px; 
+        padding: 10px; 
+        background: rgba(0,0,0,0.9); 
+        color: white; 
+        border-radius: 8px; 
+        white-space: pre-wrap; 
+        max-width: 300px; 
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        z-index: 1001;
+    ">
+        {escaped_content}
+    </div>
+</div>'''
+        
+        return pill_html
+
     def _generate_paginated_debug_html(self, pages: List[List[Block]], processed_html: str, temp_dir: str) -> str:
         """Generate HTML showing content split across actual slide pages."""
         
@@ -1088,6 +1189,10 @@ class LayoutEngine:
             "/* list bullet helper for debug view will be injected later */",
             ".slide{margin-bottom:40px;border:3px solid red;position:relative;}",
             ".slide:before{position:absolute;top:-26px;left:0;background:red;color:#fff;padding:4px 8px;font-weight:bold;content:attr(data-idx);}",
+            "/* Speaker notes pill styling */",
+            ".notes-pill { background: #007acc; color: white; }",
+            ".dark .notes-pill { background: #0078d4; }",
+            ".notes-pill:hover .notes-tooltip { display: block !important; }",
             "</style>",
             "</head>",
             "<body>"
@@ -1144,6 +1249,14 @@ class LayoutEngine:
                 pass
 
             html_parts.append(page_html)
+            
+            # Add speaker notes pill if this page has notes
+            page_notes = self.get_page_speaker_notes(page_idx - 1)  # page_idx is 1-based, our storage is 0-based
+            if page_notes:
+                notes_content = '\n\n'.join(page_notes)
+                notes_html = self._generate_notes_pill_html(notes_content)
+                html_parts.append(notes_html)
+            
             html_parts.append('</div>')  # close .slide
 
         # Small CSS for debug bullets

@@ -2,8 +2,15 @@
 Data models for the slide generator.
 """
 from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import List, Optional, Dict, Any
+import re
 
+@dataclass
+class SpeakerNote:
+    """A speaker note extracted from markdown with position information."""
+    content: str  # The actual note content
+    original_line: int  # Line number in original markdown where note was found
+    preceding_content: str  # Content that appeared before this note (for page association)
 
 @dataclass
 class Block:

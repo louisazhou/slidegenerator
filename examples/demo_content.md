@@ -374,6 +374,36 @@ generator.generate(markdown_content, "dark_presentation.pptx")
 
 ---
 
+# 📝 Speaker Notes Demo
+
+This slide demonstrates **speaker notes functionality** with *various styling elements*.
+
+You can add ==highlighted text== and `inline code` to make your content more engaging.
+
+Visit our [official website](https://example.com) for more information.
+
+<!-- NOTE: This is the first speaker note example. It contains important details for the presenter about the slide content and should appear in PowerPoint's speaker notes section. -->
+
+---
+
+# 🎤 Advanced Speaker Notes
+
+This is the **second example** slide showing more *complex formatting* with speaker notes.
+
+Key points to remember:
+- ==Important information== should be highlighted
+- Use `code blocks` for technical terms
+- Link to [external resources](https://docs.example.com) when needed
+
+The speaker notes below contain additional context and talking points.
+
+<!-- NOTE: This is the second speaker note with multiple lines.
+It demonstrates that speaker notes can span multiple lines and contain rich information.
+Presenters can include bullet points, additional context, or reminders here.
+These notes will appear in PowerPoint's speaker notes view but won't affect the slide layout. -->
+
+---
+
 # 🧮 Math Equations Support
 
 The slide generator now supports LaTeX math equations using KaTeX rendering.

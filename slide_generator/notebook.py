@@ -471,8 +471,11 @@ class SlideNotebook:
         # Initialize counter for slide progress tracking
         self.counter = Counter()
         
-        # Initialize MarkdownIt renderer with same plugins as production
-        self._md_renderer = MarkdownParser(base_dir=self.base_dir)
+        # SINGLE-PASS ARCHITECTURE: Store speaker notes separately from markdown processing
+        self.accumulated_speaker_notes = []  # Store all speaker notes with slide association
+        
+        # Initialize MarkdownIt renderer - this one WILL extract speaker notes for final processing
+        self._md_renderer = MarkdownParser(base_dir=self.base_dir, extract_speaker_notes=True)
         
         # ── Jinja2 Setup ───────────────────────────────────────────
         # Each notebook instance gets its own env (thread-safe, theme-aware)
@@ -605,7 +608,10 @@ class SlideNotebook:
             'id': slide_id,
             'markdown': processed_markdown,
             'temp_dir': slide_temp_dir,
-            'original_markdown': markdown_content  # Store original for debugging
+            'original_markdown': markdown_content,  # Store original for debugging
+            'figure_functions': final_figure_functions,  # Store context for re-processing
+            'dataframes': final_dataframes,
+            'template_vars': template_vars or {}
         }
         
         self.slides.append(slide_data)
@@ -741,6 +747,9 @@ class SlideNotebook:
         Returns:
             Processed markdown with templates rendered, actual image paths and table markdown
         """
+        # FIXED ARCHITECTURE: Extract speaker notes AFTER Jinja2 processing to preserve template variables
+        # First process Jinja2 templates on the raw markdown (including speaker notes)
+        
         # Prepare template context with registries and variables
         context = {
             **template_vars,
@@ -748,18 +757,37 @@ class SlideNotebook:
             'table_registry': dataframes,
             'slide_temp_dir': slide_temp_dir,
             'slide_id': slide_id,
-            'tmp_dir': self.temp_dir
+            'tmp_dir': self.temp_dir,
+            'counter': self.counter,  # IMPORTANT: Use the same counter instance
+            'counter_next': self.counter.next  # Ensure counter function is available
         }
         
         try:
-            # Create template from markdown content and render
+            # Create template from RAW markdown content (including speaker notes) and render
             template = self.jinja_env.from_string(markdown_content)
-            processed = template.render(context)
+            processed_with_notes = template.render(context)
+            
+            # NOW extract speaker notes from the Jinja2-processed content
+            temp_parser = MarkdownParser(base_dir=self.base_dir, extract_speaker_notes=True)
+            clean_markdown = temp_parser._extract_and_store_speaker_notes(processed_with_notes)
+            speaker_notes_for_slide = temp_parser.get_speaker_notes()
+            
+            # Store speaker notes with slide association for later use
+            for note in speaker_notes_for_slide:
+                self.accumulated_speaker_notes.append({
+                    'content': note.content,
+                    'slide_id': slide_id,
+                    'slide_index': len(self.slides),  # Current slide index
+                    'original_line': note.original_line,
+                    'preceding_content': note.preceding_content
+                })
             
             if self.debug:
                 logger.info(f"Processed slide content with Jinja2 template system")
+                if speaker_notes_for_slide:
+                    logger.info(f"Extracted {len(speaker_notes_for_slide)} speaker notes from slide")
             
-            return processed
+            return clean_markdown
             
         except Exception as e:
             logger.error(f"Error processing Jinja2 template: {e}")
@@ -795,19 +823,37 @@ class SlideNotebook:
         if not self.slides:
             raise ValueError("No slides have been created. Use new_slide() to create slides.")
         
-        # Combine all slide markdown
+        # SINGLE-PASS APPROACH: Use the already-processed markdown directly
+        # No re-processing needed - counter state is preserved from original processing
         all_markdown = []
         for i, slide in enumerate(self.slides):
             if i > 0:
                 # Ensure proper separation with newlines before the page break
                 all_markdown.append("\n\n<!-- slide -->\n\n")
-            all_markdown.append(slide['markdown'])
+            
+            # Use the processed markdown which has correct counters and resolved Jinja2 templates
+            slide_markdown = slide['markdown']
+            
+            # Re-inject speaker notes for this slide back into the markdown
+            # This allows LayoutEngine to extract them properly during final processing
+            slide_speaker_notes = [note for note in self.accumulated_speaker_notes if note['slide_index'] == i]
+            
+            if slide_speaker_notes:
+                # Append speaker notes to the end of the slide
+                for note in slide_speaker_notes:
+                    slide_markdown += f"\n\n<!-- NOTE: {note['content']} -->"
+                
+                if self.debug:
+                    logger.info(f"Re-injected {len(slide_speaker_notes)} speaker notes into slide {i}")
+            
+            all_markdown.append(slide_markdown)
         
         combined_markdown = "".join(all_markdown)
         
         if self.debug:
             logger.info(f"Combined markdown from {len(self.slides)} slides")
             logger.info(f"Total markdown length: {len(combined_markdown)} characters")
+            logger.info(f"Total speaker notes preserved: {len(self.accumulated_speaker_notes)}")
         
         # Use the existing SlideGenerator to create the presentation
         generator = SlideGenerator(
@@ -855,7 +901,7 @@ class SlideNotebook:
     def preview_slide(self, index: int = -1):
         """Render **one** slide as HTML (default: the last one) – useful
         when authoring page-by-page in a notebook.
-        Works only when ``debug=True`` and IPython is available.
+        Works only when debug=True and IPython is available.
         """
         if not self.debug or not self.slides:
             return
@@ -878,88 +924,3 @@ class SlideNotebook:
         <div class='slide-preview'>{html_body}</div>
         """
         display(HTML(styled_html))
-    
-    def preview(self):
-        """
-        Display combined markdown as HTML inline for Jupyter notebooks.
-        Only works when debug=True and IPython is available.
-        """
-        if not self.debug:
-            if logger.isEnabledFor(logging.INFO):
-                logger.info("Preview only available when debug=True")
-            return
-        
-        try:
-            from IPython.display import HTML, display
-            from .theme_loader import get_css
-            theme_css = get_css(self.theme)
-            
-            # Get properly processed HTML using the markdown parser
-            html_body = self._md_renderer.parse(self.preview_markdown())
-
-            # Embed any <img> whose src points into tmp_dir so notebook is self-contained
-            from bs4 import BeautifulSoup
-            import base64, mimetypes, os
-
-            soup_nb = BeautifulSoup(html_body, "html.parser")
-            for img in soup_nb.find_all("img"):
-                src = img.get("src", "")
-                if src.startswith("data:"):
-                    continue
-                if src.startswith("file://"):
-                    path = src[7:]
-                else:
-                    path = src
-                if not os.path.exists(path):
-                    continue
-                try:
-                    mime,_ = mimetypes.guess_type(path)
-                    if not mime:
-                        mime = "image/png"
-                    with open(path, "rb") as fh:
-                        b64 = base64.b64encode(fh.read()).decode()
-                    img["src"] = f"data:{mime};base64,{b64}"
-                except Exception:
-                    continue
-
-            html_body = str(soup_nb)
-
-            # Create styled HTML for inline display with math support
-            styled_html = f"""
-            <style>
-            {theme_css}
-            /* Jupyter-specific styling adjustments */
-            body {{ font-family: inherit; }}
-            .slide {{ border: 1px solid #ddd; margin-bottom: 20px; padding: 10px; }}
-            
-            /* Math rendering for Jupyter preview */
-            .math-html {{ display: inline; }}
-            .math-html.display {{ display: block; text-align: center; margin: 0.5em auto; }}
-            
-            /* Hide any math images that should only appear in PPTX */
-            .math-image {{ display: none; }}
-            </style>
-            {html_body}
-            """
-            display(HTML(styled_html))
-            
-        except ImportError:
-            if self.debug:
-                logger.info("IPython not available, skipping inline preview")
-    
-    def __len__(self) -> int:
-        """Return the number of slides."""
-        return len(self.slides)
-    
-    def __getitem__(self, index: int) -> Dict:
-        """Get a slide by index."""
-        return self.slides[index]
-    
-    def __del__(self):
-        """Clean up temp directory when notebook is destroyed."""
-        try:
-            import shutil
-            if hasattr(self, 'temp_dir') and os.path.exists(self.temp_dir):
-                shutil.rmtree(self.temp_dir)
-        except:
-            pass  # Ignore cleanup errors 
