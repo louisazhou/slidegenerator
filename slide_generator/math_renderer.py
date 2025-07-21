@@ -23,16 +23,16 @@ class MathRenderer:
     Provides caching to avoid re-rendering identical equations.
     """
     
-    def __init__(self, cache_dir: Optional[str] = None, debug: bool = False):
+    def __init__(self, cache_dir: str, debug: bool = False):
         """
         Initialize the math renderer.
         
         Args:
-            cache_dir: Directory to cache rendered SVG files (default: temp dir)
+            cache_dir: Directory to cache rendered SVG files (required)
             debug: Enable debug output
         """
         self.debug = debug
-        self.cache_dir = Path(cache_dir) if cache_dir else Path.cwd() / "output" / "math_cache"
+        self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
         # Text colour for rendering PNGs (hex string like '#ffffff') – can be
@@ -380,8 +380,10 @@ class MathRenderer:
         import tempfile
         import os
         
-        # Create a temporary HTML file with the KaTeX output
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False) as f:
+        # Create a temporary HTML file in the cache directory
+        import uuid
+        temp_html_path = self.cache_dir / f"math_render_{uuid.uuid4().hex[:8]}.html"
+        with open(temp_html_path, 'w', encoding='utf-8') as f:
             # Include KaTeX CSS for proper rendering with transparent background
             text_color = self.png_text_color
 
@@ -414,14 +416,13 @@ class MathRenderer:
 </body>
 </html>'''
             f.write(html_template)
-            temp_html_path = f.name
         
         try:
             # Render the HTML file to PNG
-            png_data, dimensions = await self._render_html_to_png(temp_html_path)
+            png_data, dimensions = await self._render_html_to_png(str(temp_html_path))
         finally:
             # Clean up the temporary file
-            os.unlink(temp_html_path)
+            temp_html_path.unlink(missing_ok=True)
             
         return png_data, dimensions
     

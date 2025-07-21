@@ -251,6 +251,33 @@ class MarkdownParser:
                         i += 2  # Skip the '=' and value
                 i += 1
             
+            # Check for special numeric formatting classes
+            formatted_text = text
+            numeric_classes = {'dollar', 'percent', 'order'}
+            
+            if any(cls in classes for cls in numeric_classes):
+                try:
+                    # Try to parse as number for formatting
+                    if 'dollar' in classes:
+                        # Format as currency: 1234567 → $1.23M
+                        value = float(formatted_text.replace(',', '').replace('$', ''))
+                        formatted_text = self._format_currency(value)
+                    elif 'percent' in classes:
+                        # Format as percentage: 0.15 → 15.0% or 15 → 15.0%
+                        value = float(formatted_text.replace('%', ''))
+                        # Auto-detect if it's decimal (0.15) or whole number (15)
+                        if value <= 1.0 and '.' in formatted_text:
+                            formatted_text = f"{value * 100:.1f}%"
+                        else:
+                            formatted_text = f"{value:.1f}%"
+                    elif 'order' in classes:
+                        # Format as ordinal: 1 → 1st, 2 → 2nd, etc.
+                        value = int(float(formatted_text))
+                        formatted_text = self._format_ordinal(value)
+                except (ValueError, TypeError):
+                    # If parsing fails, keep original text
+                    pass
+            
             # Build the span tag
             span_attrs = []
             if classes:
@@ -258,7 +285,7 @@ class MarkdownParser:
             span_attrs.extend(attributes)
             
             attr_str = ' '.join(span_attrs)
-            return f'<span {attr_str}>{text}</span>' if attr_str else f'<span>{text}</span>'
+            return f'<span {attr_str}>{formatted_text}</span>' if attr_str else f'<span>{formatted_text}</span>'
         
         # Apply the conversion
         processed = re.sub(r'\[([^\]]+)\]\{([^}]+)\}', convert_attrs, processed)
@@ -433,6 +460,21 @@ class MarkdownParser:
         processed = mark_column_images(processed)
         
         return processed
+    
+    def _format_currency(self, value: float) -> str:
+        """Format number as currency: 1234567 → $1.23M"""
+        sign = "-" if value < 0 else ""
+        abs_value = abs(value)
+        
+        for div, unit in ((1e9, "B"), (1e6, "M"), (1e3, "K")):
+            if abs_value >= div:
+                return f"{sign}${abs_value/div:,.2f}{unit}"
+        return f"{sign}${abs_value:,.0f}"
+    
+    def _format_ordinal(self, n: int) -> str:
+        """Format number as ordinal: 1 → 1st, 2 → 2nd, etc."""
+        suffix = 'th' if 10 <= n % 100 <= 20 else {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')
+        return f"{n}{suffix}"
     
     def parse_with_page_breaks(self, markdown_text: str) -> List[str]:
         """

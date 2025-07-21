@@ -35,6 +35,14 @@ notebook = SlideNotebook(
 )
 
 # %%
+# ═══ Counter Setup for Progress Tracking ═══
+
+# Set up counters for different sections
+notebook.counter.set_total("Business Overview", 4)  # Title + Executive + Sales + Market
+notebook.counter.set_total("Data Analysis", 3)      # Regional + Advanced Table + Growth  
+notebook.counter.set_total("Conclusion", 2)         # Multi-column + Action Items
+
+# %%
 # ═══ Data Setup ═══
 
 # Sample DataFrames for tables (will be auto-detected)
@@ -103,7 +111,8 @@ def create_growth_trend():
 
 # Title slide
 notebook.new_slide("""
-# 📊 Advanced Business Analytics
+{% set page = counter_next("Business Overview") -%}
+# 📊 Advanced Business Analytics ({{page}})
 ## Quarterly Performance Review
 
 Presented by: **Analytics Team**  
@@ -118,7 +127,8 @@ notebook.preview_slide()
 # %%
 # Overview with template variables
 notebook.new_slide("""
-# Executive Summary
+{% set page = counter_next("Business Overview") -%}
+# Executive Summary ({{page}})
 
 ## Key Achievements This Quarter
 
@@ -179,16 +189,18 @@ notebook.preview_slide()
 # %%
 # Regional performance with auto-detected table
 notebook.new_slide("""
-# Regional Performance Analysis
+{% set page = counter_next("Data Analysis") -%}
+# Regional Performance Analysis ({{page}})
 
 ## Performance by Region
 
 {% table "regional_data" 
    order_by="Revenue" desc=true
+   rules=[
+       ["Growth < 0", {"class": ["red", "bold"]}],
+       ["Revenue > 1000000", {"class": ["green"]}]
+   ]
    highlight={
-       (0, "Revenue"): ["green", "bold"],
-       (0, "Growth"): ["green", "bold"],
-       (3, "Growth"): ["red", "underline"],
        (2, "Satisfaction"): ["blue", "bold"]
    } %}
 
@@ -202,6 +214,146 @@ notebook.new_slide("""
     'best_revenue': 1200000,
     'east_growth': 15.2
 })
+notebook.preview_slide()
+
+# %%
+# Numeric styling test with table  
+financial_data = pd.DataFrame({
+    'Metric': ['Revenue', 'Profit', 'Growth Rate', 'Market Rank'],
+    'Q1': [2150000, 320000, 0.125, 3],
+    'Q2': [2840000, 445000, 0.087, 2], 
+    'Q3': [3120000, 512000, 0.156, 1],
+    'Q4': [3750000, 680000, 0.203, 1]
+})
+
+# Demonstration slide 1: Basic numeric styling
+notebook.new_slide("""
+{% set page = counter_next("Data Analysis", "dots") -%}
+# Advanced Table Styling ({{page}})
+
+## Financial Performance with Row Styling
+
+{% table "financial_data" style=row_style %}
+
+## Key Features Demonstrated
+
+- **Row styling**: Revenue row (index 0) automatically formatted as {{style('currency', 'dollar', 'green')}}
+- Clean numeric formatting without conflicts
+- Green styling applied to entire revenue row
+
+This demonstrates basic row-based numeric styling.
+""", template_vars={
+    'row_style': {'rows': {0: ['dollar', 'green']}}
+})
+notebook.preview_slide()
+
+# %%
+# Set up financial_data with proper index for better row access
+financial_data_indexed = pd.DataFrame({
+    'Q1': [2150000, 320000, 0.125, 3],
+    'Q2': [2840000, 445000, 0.087, 2], 
+    'Q3': [3120000, 512000, 0.156, 1],
+    'Q4': [3750000, 680000, 0.203, 1]
+}, index=['Revenue', 'Profit', 'Growth Rate', 'Market Rank'])
+
+# Demonstration slide 2: Column styling with proper column names
+notebook.new_slide("""
+{% set page = counter_next("Data Analysis", "dots") -%}
+# Advanced Table Styling ({{page}})
+
+## Financial Performance with Column Styling
+
+{% table "financial_data_indexed" style=column_style index=true %}
+
+## Key Features Demonstrated
+
+- **Column styling**: Q1 column as {{style('percentages', 'percent', 'blue')}} and Q4 as {{style('currency', 'dollar', 'purple')}}
+- Index displayed to show meaningful row labels (Revenue, Profit, etc.)
+- Column-specific formatting applied correctly
+
+This demonstrates column-based styling with visible index.
+""", template_vars={
+    'column_style': {'columns': {'Q1': ['percent', 'blue'], 'Q4': ['dollar', 'purple']}}
+})
+notebook.preview_slide()
+
+# %%
+# Demonstration slide 3: Lambda rules only
+notebook.new_slide("""
+{% set page = counter_next("Data Analysis", "dots") -%}
+# Advanced Table Styling ({{page}})
+
+## Financial Performance with Conditional Rules
+
+{% table "financial_data" rules=conditional_rules %}
+
+## Key Features Demonstrated
+
+- **Lambda rules**: Rows where Q4 > Q3 get {{style('green bold', 'green', 'bold')}} formatting
+- Conditional styling based on row data comparisons
+- Clean rule application without style conflicts
+
+This demonstrates string-based conditional formatting rules.
+""", template_vars={
+    'conditional_rules': [["Q4 > Q3", {"class": ["green", "bold"]}]]
+})
+notebook.preview_slide()
+
+# %%
+# Demonstration slide 4: Highlighting only  
+notebook.new_slide("""
+{% set page = counter_next("Data Analysis", "dots") -%}
+# Advanced Table Styling ({{page}})
+
+## Financial Performance with Cell Highlighting
+
+{% table "financial_data" 
+   highlight={
+       (1, "Q4"): ["bold", "blue"],
+       (2, "Q1"): ["red", "italic"]
+   } %}
+
+## Key Features Demonstrated
+
+- **Cell highlighting**: Specific cells get targeted styling
+- Profit Q4 (row 1, Q4 column): {{style('bold blue', 'bold', 'blue')}}
+- Growth Rate Q1 (row 2, Q1 column): {{style('red italic', 'red', 'italic')}}
+- Precise cell-level control
+
+This demonstrates precise cell-level highlighting.
+""", template_vars={})
+notebook.preview_slide()
+
+# %%
+# Demonstration slide 5: Smart index auto-detection
+smart_metrics_data = pd.DataFrame({
+    'Metric': ['Revenue', 'Profit', 'Growth Rate', 'Market Rank'],
+    'Q1': [2150000, 320000, 0.125, 3],
+    'Q4': [3750000, 680000, 0.203, 1]
+})
+
+notebook.new_slide("""
+{% set page = counter_next("Data Analysis", "dots") -%}
+# Advanced Table Styling ({{page}})
+
+## Smart Index Auto-Detection
+
+{% table "smart_metrics_data" 
+   highlight={
+       ("Revenue", "Q4"): ["green", "bold"],
+       ("Market Rank", "Q1"): ["red", "italic"]
+   } %}
+
+## Key Features Demonstrated
+
+- **Smart index**: Automatically detected 'Metric' column as meaningful index
+- **String-based highlighting**: Reference rows by name, not position
+- Revenue Q4: {{style('green bold', 'green', 'bold')}}
+- Market Rank Q1: {{style('red italic', 'red', 'italic')}}
+- No need to manually set_index() or worry about dropindex
+
+This demonstrates automatic index detection for better user experience.
+""", template_vars={})
 notebook.preview_slide()
 
 # %%
@@ -230,7 +382,8 @@ notebook.preview_slide()
 # %%
 # Multi-column layout with auto-detected figure and table
 notebook.new_slide("""
-# Comprehensive Overview
+{% set page = counter_next("Conclusion") -%}
+# Comprehensive Overview ({{page}})
 
 :::columns
 :::column {width=60%}
@@ -267,7 +420,8 @@ notebook.preview_slide()
 # %%
 # Action items and next steps
 notebook.new_slide("""
-# Action Items & Next Steps
+{% set page = counter_next("Conclusion", "dots") -%}
+# Action Items & Next Steps ({{page}})
 
 ## Immediate Actions
 

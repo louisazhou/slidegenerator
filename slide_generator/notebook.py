@@ -7,7 +7,6 @@ along with figure generation functions and pandas DataFrames for tables.
 """
 
 import os
-import tempfile
 import uuid
 import re
 import logging
@@ -15,6 +14,7 @@ from typing import List, Callable, Any, Optional, Union, Dict
 import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend
+import pandas as pd
 
 from jinja2 import Environment, DictLoader, pass_context, nodes
 from jinja2.ext import Extension
@@ -26,6 +26,66 @@ from .generator import SlideGenerator
 from .markdown_parser import MarkdownParser
 
 logger = logging.getLogger(__name__)
+
+
+class Counter:
+    """
+    Progress counter for tracking slides within sections.
+    
+    Supports both numeric (1/4) and visual dot (●●○○) styles for displaying progress.
+    """
+    
+    def __init__(self):
+        self.totals = {}  # section_name → [done, total]
+    
+    def set_total(self, section: str, total: int):
+        """Set the total count for a section."""
+        if section not in self.totals:
+            self.totals[section] = [0, total]
+        else:
+            self.totals[section][1] = total
+    
+    @pass_context
+    def next(self, ctx, section: str, style: str = "numeric") -> str:
+        """
+        Get the next counter value for a section and increment.
+        
+        Args:
+            ctx: Jinja2 context (automatically passed)
+            section: Section name (e.g., "Conversion Rate", "Revenue Analysis")  
+            style: Display style - "numeric" (1/4) or "dots" (●●○○)
+            
+        Returns:
+            Formatted counter string
+        """
+        if section not in self.totals:
+            # Initialize with 0 total if not set
+            self.totals[section] = [0, 0]
+        
+        done, total = self.totals[section]
+        done += 1
+        self.totals[section][0] = done
+        
+        if style == "dots":
+            return "●" * done + "○" * (total - done)
+        else:  # numeric (default)
+            return f"{done}/{total}"
+    
+    def bump_total(self, section: str, k: int = 1):
+        """Increase the total count for a section (for real-time pagination)."""
+        if section not in self.totals:
+            self.totals[section] = [0, k]
+        else:
+            self.totals[section][1] += k
+    
+    def reset(self, section: str):
+        """Reset the done count for a section to 0."""
+        if section in self.totals:
+            self.totals[section][0] = 0
+    
+    def status(self, section: str) -> tuple:
+        """Get the current (done, total) status for a section."""
+        return tuple(self.totals.get(section, [0, 0]))
 
 
 class FigureTag(Extension):
@@ -69,10 +129,13 @@ class FigureTag(Extension):
             spec = f"|{kw['width']}x"
         elif "height" in kw:
             spec = f"|{kw['height']}y"
-        caption_prefix = ""
+        # Build the image markdown consistently with our caption syntax
+        alt_parts = []
         if "caption" in kw:
-            caption_prefix = f"Caption: {kw['caption']}|"
-        return f"![{caption_prefix}{key}{spec}]({path})"
+            alt_parts.append(f"Caption: {kw['caption']}")
+        # Don't include the function name in alt text to avoid confusion
+        alt_text = "|".join(alt_parts) if alt_parts else ""
+        return f"![{alt_text}{spec}]({path})"
 
     def _resolve_path(self, desc, key, gen_kw, ctx):
         fig_kw = {k: v for k, v in gen_kw.items() if k not in ("caption", "_ctx", "width", "height")}
@@ -85,7 +148,8 @@ class FigureTag(Extension):
             return str(desc)
         temp_dir = ctx.get("slide_temp_dir") or ctx.get("tmp_dir")
         if not temp_dir:
-            temp_dir = tempfile.gettempdir()
+            # This should not happen since we always set tmp_dir in context
+            raise RuntimeError("No temporary directory available in template context")
 
         # deterministic & readable filename: slide_<id>_<key>.png
         slug = f"slide_{ctx.get('slide_id', '0000')}_{key}.png"
@@ -127,20 +191,249 @@ class TableTag(Extension):
         if key not in table_registry:
             return f"<!-- Table '{key}' not found -->"
         df = table_registry[key].copy()
+        
+        # Smart index handling: automatically detect if index should be meaningful
+        df = self._handle_smart_index(df, kw)
+        
         if "order_by" in kw:
             ascending = not kw.get("desc", False)
             col = kw["order_by"]
             if col in df.columns:
                 df = df.sort_values(col, ascending=ascending)
+        
+        # Apply numeric styling before highlights
+        if "style" in kw:
+            df = self._apply_numeric_styles(df, kw["style"])
+        
+        # Apply lambda-based conditional styling rules
+        if "rules" in kw:
+            df = self._apply_lambda_rules(df, kw["rules"])
+        
         if "highlight" in kw:
             df = self._apply_highlights(df, kw["highlight"])
-        return df.to_markdown(index=False)
+        
+        # Make index inclusion configurable, with smart default
+        include_index = kw.get("index", self._should_show_index(df))
+        return df.to_markdown(index=include_index)
 
-    def _apply_highlights(self, df, rules):
+    def _handle_smart_index(self, df, kw):
+        """
+        Smart index handling: detect if first column should be the index.
+        
+        This addresses the common DataFrame workflow issue where users:
+        1. Create a DataFrame with meaningful row identifiers in the first column
+        2. Want to reference rows by these identifiers in styling rules
+        3. But forget to set_index(), leaving the default numeric index
+        
+        Args:
+            df: DataFrame to analyze
+            kw: Table keyword arguments
+            
+        Returns:
+            DataFrame with potentially adjusted index
+        """
+        # Skip if user explicitly controls the index  
+        if "index" in kw or "dropindex" in kw:
+            return df
+        
+        # Skip if index is already meaningful (not default RangeIndex)
+        if not isinstance(df.index, pd.RangeIndex):
+            return df
+            
+        # Skip if DataFrame is too simple (< 2 columns or < 2 rows)
+        if len(df.columns) < 2 or len(df) < 2:
+            return df
+        
+        # Check if first column looks like meaningful row identifiers
+        first_col = df.iloc[:, 0]
+        
+        # Heuristics for meaningful identifiers:
+        # 1. All values are strings
+        # 2. All values are unique  
+        # 3. Values look like labels (contain letters)
+        if (first_col.dtype == 'object' and  # String-like
+            first_col.nunique() == len(first_col) and  # All unique
+            all(isinstance(val, str) and any(c.isalpha() for c in val) for val in first_col)):
+            
+            # Move first column to index
+            new_df = df.set_index(df.columns[0])
+            return new_df
+        
+        return df
+    
+    def _should_show_index(self, df):
+        """
+        Determine if index should be shown by default.
+        
+        Args:
+            df: DataFrame to analyze
+            
+        Returns:
+            bool: True if index should be shown
+        """
+        # Show index if it's not a simple RangeIndex (0, 1, 2, ...)
+        if not isinstance(df.index, pd.RangeIndex):
+            return True
+        
+        # Hide default numeric index
+        return False
+
+    def _apply_numeric_styles(self, df, style_rules):
+        """Apply numeric formatting styles to DataFrame rows or columns.
+        
+        Args:
+            df: DataFrame to style
+            style_rules: Dict with 'rows' and/or 'columns' keys
+                        rows: {row_index: ['dollar', 'red']} - applies to entire row excluding index
+                              row_index can be numeric (0,1,2) or string ("Revenue", "Profit")
+                        columns: {column_name: ['percent', 'blue']} - applies to entire column
+        
+        Example:
+            style={'rows': {0: ['dollar', 'green']}, 'columns': {'Growth': ['percent', 'blue']}}
+        """
         df = df.copy()
-        for (row, col), classes in rules.items():
-            if row < len(df) and col in df.columns:
-                df.at[row, col] = f"[{df.at[row, col]}]{{{''.join(f' .{c}' for c in classes)}}}"
+        
+        # Apply row styles (excluding index column)
+        if 'rows' in style_rules:
+            for row_ref, style_classes in style_rules['rows'].items():
+                try:
+                    # Handle both numeric and string-based row references
+                    if isinstance(row_ref, str):
+                        # String-based row reference (for meaningful indices)
+                        if row_ref in df.index:
+                            for col in df.columns:
+                                current_value = df.at[row_ref, col]
+                                class_str = ''.join(f' .{c}' for c in style_classes)
+                                df.at[row_ref, col] = f"[{current_value}]{{{class_str}}}"
+                    else:
+                        # Numeric row reference (traditional positional)
+                        if row_ref < len(df):
+                            for col in df.columns:
+                                # Use iloc for positional access when dealing with non-numeric indices
+                                current_value = df.iloc[row_ref, df.columns.get_loc(col)]
+                                class_str = ''.join(f' .{c}' for c in style_classes)
+                                df.iloc[row_ref, df.columns.get_loc(col)] = f"[{current_value}]{{{class_str}}}"
+                except (KeyError, IndexError, TypeError):
+                    # Skip invalid row references
+                    continue
+        
+        # Apply column styles  
+        if 'columns' in style_rules:
+            for col_name, style_classes in style_rules['columns'].items():
+                if col_name in df.columns:
+                    # Apply to all rows in this column
+                    for row_idx in range(len(df)):
+                        try:
+                            # Use iloc for positional access when dealing with non-numeric indices
+                            current_value = df.iloc[row_idx, df.columns.get_loc(col_name)]
+                            class_str = ''.join(f' .{c}' for c in style_classes)
+                            df.iloc[row_idx, df.columns.get_loc(col_name)] = f"[{current_value}]{{{class_str}}}"
+                        except (KeyError, IndexError, TypeError):
+                            # Skip invalid row/column combinations
+                            continue
+        
+        return df
+    
+    def _apply_lambda_rules(self, df, rules):
+        """Apply conditional styling rules to DataFrame using string expressions.
+        
+        Args:
+            df: DataFrame to style
+            rules: List of [condition_string, {"class": ["red", "bold"]}] pairs
+                   Condition string supports row access like 'Growth < 0' or 'Revenue > 1000000'
+        
+        Example:
+            rules=[
+                ['Growth < 0', {"class": ["red", "bold"]}],              # Row-wise: red if Growth < 0
+                ['Revenue > 1000000', {"class": ["green"]}],             # Row-wise: green if Revenue > 1M
+                ['Q4 > Q3', {"class": ["green", "bold"]}]                # Row-wise: green if Q4 > Q3
+            ]
+        """
+        df = df.copy()
+        
+        for rule in rules:
+            if not isinstance(rule, (list, tuple)) or len(rule) != 2:
+                continue
+                
+            condition_str, style_config = rule
+            if not isinstance(condition_str, str) or not isinstance(style_config, dict):
+                continue
+            
+            classes = style_config.get("class", [])
+            if not isinstance(classes, list):
+                classes = [classes]
+            
+            class_str = ''.join(f' .{c}' for c in classes)
+            
+            # Apply condition row-wise
+            try:
+                for row_idx in range(len(df)):
+                    # Create evaluation context with row values
+                    row_context = {}
+                    for col in df.columns:
+                        # Safe column name for evaluation (replace spaces with underscores)
+                        safe_col = col.replace(' ', '_').replace('(', '').replace(')', '')
+                        row_context[safe_col] = df.at[row_idx, col]
+                        # Also add original column name if it's a valid identifier
+                        if col.isidentifier():
+                            row_context[col] = df.at[row_idx, col]
+                    
+                    # Safely evaluate the condition
+                    try:
+                        # Replace column names in condition for safe evaluation
+                        eval_condition = condition_str
+                        for col in df.columns:
+                            safe_col = col.replace(' ', '_').replace('(', '').replace(')', '')
+                            eval_condition = eval_condition.replace(col, safe_col)
+                        
+                        if eval(eval_condition, {"__builtins__": {}}, row_context):
+                            # Apply to entire row
+                            for col in df.columns:
+                                current_value = df.at[row_idx, col]
+                                df.at[row_idx, col] = f"[{current_value}]{{{class_str}}}"
+                    except Exception:
+                        # Skip this row if evaluation fails
+                        continue
+            except Exception:
+                # Skip this rule if it fails completely
+                continue
+        
+        return df
+    
+    def _apply_highlights(self, df, rules):
+        """
+        Apply highlighting to specific cells in the DataFrame.
+        
+        Args:
+            df: DataFrame to style
+            rules: Dict mapping (row_ref, col_name) to style classes
+                   row_ref can be numeric index or row label (if meaningful index)
+                   
+        Example:
+            highlight={
+                (1, "Q4"): ["bold", "blue"],           # Row index 1, column Q4  
+                ("Profit", "Q1"): ["red", "italic"]   # Row labeled "Profit", column Q1
+            }
+        """
+        df = df.copy()
+        for (row_ref, col), classes in rules.items():
+            try:
+                # Handle both numeric indices and string-based row labels
+                if isinstance(row_ref, str):
+                    # String-based row reference (for meaningful indices)
+                    if row_ref in df.index and col in df.columns:
+                        current_value = df.at[row_ref, col]
+                        class_str = ''.join(f' .{c}' for c in classes)
+                        df.at[row_ref, col] = f"[{current_value}]{{{class_str}}}"
+                else:
+                    # Numeric row reference (traditional positional)
+                    if row_ref < len(df) and col in df.columns:
+                        current_value = df.iloc[row_ref, df.columns.get_loc(col)]
+                        class_str = ''.join(f' .{c}' for c in classes)
+                        df.iloc[row_ref, df.columns.get_loc(col)] = f"[{current_value}]{{{class_str}}}"
+            except (KeyError, IndexError, TypeError):
+                # Skip invalid row/column references
+                continue
         return df
 
 
@@ -175,6 +468,9 @@ class SlideNotebook:
 
         self.slides = []
         
+        # Initialize counter for slide progress tracking
+        self.counter = Counter()
+        
         # Initialize MarkdownIt renderer with same plugins as production
         self._md_renderer = MarkdownParser(base_dir=self.base_dir)
         
@@ -195,6 +491,12 @@ class SlideNotebook:
         self.jinja_env.globals["render_log"] = []  # for {% do %}
         # Expose tmp_dir to templates so FigureTag can use it
         self.jinja_env.globals["tmp_dir"] = self.temp_dir
+        # Expose counter for slide progress tracking
+        self.jinja_env.globals["counter"] = self.counter
+        # Register counter.next as a Jinja2 function  
+        self.jinja_env.globals["counter_next"] = self.counter.next
+        # Expose debug flag to templates
+        self.jinja_env.globals["debug_mode"] = self.debug
         
         if self.debug:
             logger.info("Initialized Jinja2 environment with custom filters and globals")
@@ -207,6 +509,8 @@ class SlideNotebook:
             if v >= div:
                 return f"{sign}${v/div:,.2f}{unit}"
         return f"{sign}${v:,.0f}"
+    
+
 
     def new_slide(self, 
                   markdown_content: str,
@@ -461,6 +765,8 @@ class SlideNotebook:
             logger.error(f"Error processing Jinja2 template: {e}")
             if self.debug:
                 logger.error(f"Template content: {markdown_content}")
+                import traceback
+                logger.error(f"Full traceback: {traceback.format_exc()}")
             # Return original content on error
             return markdown_content
     
@@ -522,17 +828,28 @@ class SlideNotebook:
     # ------------------------------------------------------------------
     def save_sync(self, output_path: str) -> str:
         """Save presentation but work in *both* scripts and Jupyter cells.
-        If an event-loop is already running (Jupyter) we *await* the coroutine
-        on that loop.  Otherwise we start a fresh loop with ``asyncio.run``.
+        If an event-loop is already running (Jupyter) we create a task.
+        Otherwise we start a fresh loop with ``asyncio.run``.
         """
         import asyncio
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
             loop = None
+        
         if loop and loop.is_running():
-            return loop.run_until_complete(self.save(output_path))
+            # We're in a running event loop (like Jupyter), create a task
+            import concurrent.futures
+            
+            # Create a new thread to run the async function
+            def run_in_thread():
+                return asyncio.run(self.save(output_path))
+            
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(run_in_thread)
+                return future.result()
         else:
+            # No event loop running, we can use asyncio.run
             return asyncio.run(self.save(output_path))
 
     def preview_slide(self, index: int = -1):

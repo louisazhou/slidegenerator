@@ -4,7 +4,6 @@
 :root {
     --slide-width: 960px;
     --slide-height: 540px;
-    --slide-aspect-ratio: 16/9;  /* 16:9 aspect ratio */
     --slide-padding: 19px;       /* Configurable slide padding in pixels */
     --slide-font-family: 'Arial'; /* Font family that matches PowerPoint exactly */
     --column-gap: 15px;          /* Gap between columns */

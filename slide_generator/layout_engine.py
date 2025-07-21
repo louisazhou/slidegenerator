@@ -1,7 +1,8 @@
+#!/usr/bin/env python3
 """Layout engine for measuring HTML elements and pagination."""
 import re, os
 import logging
-from typing import List, Optional, Callable
+from typing import List, Optional, Callable, Dict, Tuple
 from pathlib import Path
 from PIL import Image
 from html import unescape
@@ -13,9 +14,43 @@ from .theme_loader import get_css
 
 logger = logging.getLogger(__name__)
 
-
 # Use centralized CSS parsing
 from .css_utils import CSSParser
+
+
+class ImageDimensionCache:
+    """Cache for image dimensions to avoid repeated PIL Image.open calls."""
+    
+    def __init__(self, debug: bool = False):
+        self.cache: Dict[str, Tuple[int, int]] = {}
+        self.debug = debug
+    
+    def get_dimensions(self, image_path: str) -> Tuple[Optional[int], Optional[int]]:
+        """
+        Get image dimensions, using cache if available.
+        
+        Args:
+            image_path: Path to the image file
+            
+        Returns:
+            Tuple of (width, height) or (None, None) if failed
+        """
+        if image_path in self.cache:
+            if self.debug:
+                logger.debug(f"📦 Using cached dimensions for {image_path}: {self.cache[image_path]}")
+            return self.cache[image_path]
+        
+        try:
+            with Image.open(image_path) as img:
+                dimensions = img.size
+                self.cache[image_path] = dimensions
+                if self.debug:
+                    logger.debug(f"📷 Cached new image dimensions for {image_path}: {dimensions}")
+                return dimensions
+        except Exception as e:
+            if self.debug:
+                logger.warning(f"⚠️ Could not read image dimensions for {image_path}: {e}")
+            return None, None
 
 
 class ImageScaler:
@@ -24,6 +59,7 @@ class ImageScaler:
     def __init__(self, css_parser: CSSParser, debug: bool = False):
         self.css_parser = css_parser
         self.debug = debug
+        self.image_cache = ImageDimensionCache(debug)
         
         # Cache frequently used values
         self.viewport_width = css_parser.get_px_value('slide-width')
@@ -52,15 +88,12 @@ class ImageScaler:
         Returns:
             Tuple of (target_width, target_height)
         """
-        try:
-            # Get original image dimensions
-            with Image.open(image_path) as img:
-                original_width, original_height = img.size
-                aspect_ratio = original_width / original_height
-        except Exception as e:
-            if self.debug:
-                logger.warning(f"Could not read image dimensions for {image_path}: {e}")
+        # Use cached dimensions
+        original_width, original_height = self.image_cache.get_dimensions(image_path)
+        if original_width is None or original_height is None:
             return None, None
+        
+        aspect_ratio = original_width / original_height
         
         # Determine base dimensions
         if in_column:
@@ -468,14 +501,14 @@ class LayoutEngine:
             return html_content
         
         if temp_dir is None:
-            import tempfile
-            temp_dir = tempfile.mkdtemp()
+            # Use the engine's configured temp directory instead of system temp
+            temp_dir = str(self.tmp_dir)
         
         try:
             # Import math renderer
             from .math_renderer import get_math_renderer
             
-            # Use temp_dir as cache directory for math images
+            # Use temp_dir for math rendering (no persistent cache)
             math_renderer = get_math_renderer(cache_dir=temp_dir, debug=self.debug)
             
             # Process math elements 
@@ -947,26 +980,24 @@ class LayoutEngine:
                         
                         if initial_height > max_reasonable_height:
                             # STEP 5: Apply height-constrained scaling
-                            from PIL import Image
-                            try:
-                                with Image.open(block.src) as img:
-                                    original_width, original_height = img.size
-                                    aspect_ratio = original_width / original_height
-                                    
-                                    # Use 70% of slide height as maximum, not available height
-                                    final_height = max_reasonable_height
-                                    final_width = final_height * aspect_ratio
-                                    
-                                    if self.debug:
-                                        original_scale = float(scale_x) if scale_x else float(scale_y)
-                                        new_scale = final_width / (self.image_scaler.content_width * (1 if not in_column else 0.5))
-                                        logger.info(f"📐 Height-constrained scaling for {block.src}:")
-                                        logger.info(f"   Original request: {original_scale*100}% -> {initial_width:.0f}x{initial_height:.0f}")
-                                        logger.info(f"   Max reasonable height: {max_reasonable_height:.0f}px")
-                                        logger.info(f"   Adjusted to: {new_scale*100:.1f}% -> {final_width:.0f}x{final_height:.0f}")
-                            except Exception as e:
+                            original_width, original_height = self.image_scaler.image_cache.get_dimensions(block.src)
+                            if original_width and original_height:
+                                aspect_ratio = original_width / original_height
+                                
+                                # Use 70% of slide height as maximum, not available height
+                                final_height = max_reasonable_height
+                                final_width = final_height * aspect_ratio
+                                
                                 if self.debug:
-                                    logger.warning(f"⚠️ Could not load image {block.src} for aspect ratio: {e}")
+                                    original_scale = float(scale_x) if scale_x else float(scale_y)
+                                    new_scale = final_width / (self.image_scaler.content_width * (1 if not in_column else 0.5))
+                                    logger.info(f"📐 Height-constrained scaling for {block.src}:")
+                                    logger.info(f"   Original request: {original_scale*100}% -> {initial_width:.0f}x{initial_height:.0f}")
+                                    logger.info(f"   Max reasonable height: {max_reasonable_height:.0f}px")
+                                    logger.info(f"   Adjusted to: {new_scale*100:.1f}% -> {final_width:.0f}x{final_height:.0f}")
+                            else:
+                                if self.debug:
+                                    logger.warning(f"⚠️ Could not load image {block.src} for aspect ratio")
                                 # Fallback: use requested size but warn about potential overflow
                                 final_width = initial_width
                                 final_height = initial_height
@@ -1004,13 +1035,10 @@ class LayoutEngine:
                     content_above_height = sum(b.height for b in blocks[page_start_idx:i])
                     available_h = max(0, usable_height - content_above_height) * 0.95
 
-                    try:
-                        from PIL import Image
-                        with Image.open(block.src) as img:
-                            original_w, original_h = img.size
-                    except Exception as e:
+                    original_w, original_h = self.image_scaler.image_cache.get_dimensions(block.src)
+                    if original_w is None or original_h is None:
                         if self.debug:
-                            logger.warning(f"⚠️ Auto-fit failed to read image size for {block.src}: {e}")
+                            logger.warning(f"⚠️ Auto-fit failed to read image size for {block.src}")
                         continue
                     
                     # If image already fits, no scaling needed
