@@ -527,6 +527,14 @@ class PPTXRenderer:
                                 elif cls in ['italic', 'em']:
                                     format_stack.append('em')
 
+                        # --------------------------------------
+                        # Handle span tags for pandoc-style attributes
+                        # --------------------------------------
+                        elif tag_name == 'span':
+                            # For span tags, we already processed classes above
+                            # No additional action needed here since classes are handled generically
+                            pass
+
             elif text:
                 # Handle text content - preserve spaces but unescape HTML entities
                 text = unescape(text)
