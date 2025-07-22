@@ -1007,8 +1007,37 @@ class LayoutEngine:
                         
                         # STEP 6: Update block dimensions with final calculated values
                         old_dims = f"{block.width}x{block.height}"
+                        # --- NEW: track original height before resizing ---
+                        original_height_px = block.height
                         block.w = int(final_width)
                         block.h = int(final_height)
+
+                        # --- NEW: shift subsequent blocks on the same logical slide ---
+                        height_delta = block.h - original_height_px  # positive: image became taller, negative: smaller
+                        if height_delta != 0:
+                            # Determine the column context of the current image (None if not in a column)
+                            current_parent_col_w = getattr(block, 'parentColumnWidth', None)
+                            current_col_x = block.x
+
+                            for k in range(i + 1, len(blocks)):
+                                next_block = blocks[k]
+                                if next_block.is_page_break():
+                                    break  # new slide, stop adjusting
+
+                                # Apply the shift ONLY to blocks that share the same column context.
+                                if (getattr(next_block, 'parentColumnWidth', None) == current_parent_col_w and
+                                    abs(next_block.x - current_col_x) <= 5):
+                                    next_block.y += height_delta
+
+                        # --- NEW: ensure debug HTML reflects the new dimensions ---
+                        if hasattr(self, '_original_soup') and hasattr(block, 'bid'):
+                            try:
+                                node = self._original_soup.select_one(f'[data-bid="{block.bid}"]')
+                                if node and node.name == 'img':
+                                    node['width'] = str(block.w)
+                                    node['height'] = str(block.h)
+                            except Exception:
+                                pass
                         
                         context = "column" if in_column else "full-width"
                         constraint_type = "height-constrained" if initial_height > max_reasonable_height else "original-scale"
@@ -1051,10 +1080,25 @@ class LayoutEngine:
                     ratio = min(ratio_w, ratio_h, 1) # Use min to guarantee fit, cap at 1 (no enlarging)
 
                     # 4. Apply final dimensions to block
+                    # Track original height before resizing so we can shift following blocks
+                    original_height_px = block.h
                     block.w = int(original_w * ratio)
                     block.h = int(original_h * ratio)
 
-                    # Update corresponding <img> in _original_soup so debug HTML shows correct size
+                    # Shift subsequent blocks to compensate for the change in image height
+                    height_delta = block.h - original_height_px
+                    if height_delta != 0:
+                        current_parent_col_w = getattr(block, 'parentColumnWidth', None)
+                        current_col_x = block.x
+                        for k in range(i + 1, len(blocks)):
+                            next_block = blocks[k]
+                            if next_block.is_page_break():
+                                break
+                            if (getattr(next_block, 'parentColumnWidth', None) == current_parent_col_w and
+                                abs(next_block.x - current_col_x) <= 5):
+                                next_block.y += height_delta
+
+                    # Ensure the corresponding <img> in the debug HTML reflects new size
                     if hasattr(self, '_original_soup') and hasattr(block, 'bid'):
                         try:
                             node = self._original_soup.select_one(f'[data-bid="{block.bid}"]')

@@ -197,14 +197,26 @@ class PPTXRenderer:
                 # bullet leading that the browser never reported.  Empirically
                 # that overhead is ~2 px per list item plus a small constant.
 
-                list_like = (block.is_list() or (block.tag == 'p' and 'data-list-levels' in block.content))
-                if list_like:
-                    items = block.content.count('<br') + 1  # how many bullets
-                    extra_height_px = 4 + 2.3 * items  # 4-px headroom, then 2.3 px per bullet
-                elif block.is_paragraph() or block.is_heading():
-                    extra_height_px = 2
+                # Skip the global safety cushion for blocks that are rendered
+                # inside a dedicated column.  Each column is laid out
+                # independently in HTML, so padding applied to the left column
+                # should not influence the flow in the right column.
+                in_column_container = (
+                    getattr(block, 'parentClassName', None) is not None and
+                    'column' in getattr(block, 'parentClassName', '')
+                )
+
+                if in_column_container:
+                    extra_height_px = 0  # keep padding local to the column
                 else:
-                    extra_height_px = 0
+                    list_like = (block.is_list() or (block.tag == 'p' and 'data-list-levels' in block.content))
+                    if list_like:
+                        items = block.content.count('<br') + 1  # how many bullets
+                        extra_height_px = 4 + 2.3 * items  # 4-px headroom + per-bullet lead
+                    elif block.is_paragraph() or block.is_heading():
+                        extra_height_px = 2
+                    else:
+                        extra_height_px = 0
 
                 # Render the block at its adjusted position
                 self._add_element_to_slide(slide, block, adjusted_top_px=block._adjusted_top_px, extra_padding_px=extra_height_px)
@@ -231,7 +243,35 @@ class PPTXRenderer:
     def _add_formatted_text(self, paragraph, block: Block):
         """Add formatted text to a paragraph, handling HTML inline formatting."""
         
-        # Get the raw content and preprocess for highlighting
+        # Special-case code blocks: we want to preserve *all* newline characters
+        # and indentation exactly as they appear in the HTML <pre> element.
+        # The regular paragraph path collapses stray "\n" to spaces – fine for
+        # normal text but wrong for code.
+
+        if block.is_code_block():
+            from html import unescape as _html_unescape
+
+            content_raw = block.content or ""
+
+            # 1) Convert explicit <br> tags back to real line breaks
+            content_raw = re.sub(r'<br\s*/?>', '\n', content_raw, flags=re.IGNORECASE)
+
+            # 2) Strip all remaining HTML tags (<pre>, <code>, <span>, …) but
+            #    keep the literal text including spaces & newlines.
+            content_plain = re.sub(r'<[^>]+>', '', content_raw)
+
+            # 3) Unescape HTML entities so &lt; becomes < etc.
+            content_plain = _html_unescape(content_plain)
+
+            # Clear the paragraph and insert the verbatim text.
+            paragraph.clear()
+            paragraph.add_run().text = content_plain
+
+            # Done – formatting (font family, size, background) will be applied
+            # by the caller after we return.
+            return
+
+        # Get the raw content and preprocess for highlighting (regular text)
         content = block.content
         
         # ------------------------------------------------------------------
@@ -715,13 +755,9 @@ class PPTXRenderer:
                 placeholder.text_frame.text = f"[Missing {'math ' if is_math_image else ''}image: {os.path.basename(image_path) if image_path else 'No src'}]"
             return
         
-        # Skip elements that have no textual content
-        if not block.content.strip():
+        # Skip elements that have no textual content (except images which are visual)
+        if not block.content.strip() and not block.is_image():
             return
-        
-        # Handle both inline and block math (both HTML and image formats) before processing text content
-        if any(s in block.content for s in ['math-html', 'math-image', 'data-latex']):
-            self._extract_and_handle_math(slide, block, x_scale, y_scale)
         
         # Ensure minimum dimensions for text boxes
         if width < Inches(0.5):
