@@ -838,16 +838,23 @@ class SlideNotebook:
             loop = None
         
         if loop and loop.is_running():
-            # We're in a running event loop (like Jupyter), create a task
-            import concurrent.futures
-            
-            # Create a new thread to run the async function
-            def run_in_thread():
-                return asyncio.run(self.save(output_path))
-            
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(run_in_thread)
-                return future.result()
+            # Running inside an event loop (e.g. Jupyter). Use nest_asyncio so we
+            # can safely call asyncio.run() *again* on the same loop without
+            # dead-locking, and run everything in the **main** thread to avoid
+            # "signal only works in main thread" issues.
+
+            try:
+                import nest_asyncio  # lightweight dependency; installed in most notebook envs
+                nest_asyncio.apply()
+            except ImportError:
+                raise RuntimeError(
+                    "save_sync detected a running event loop (likely Jupyter) but the"
+                    " 'nest_asyncio' package is not available. Install it with\n"
+                    "    pip install nest_asyncio\n"
+                    "or call await notebook.save(...) instead."
+                )
+
+            return asyncio.run(self.save(output_path))
         else:
             # No event loop running, we can use asyncio.run
             return asyncio.run(self.save(output_path))
