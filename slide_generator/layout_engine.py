@@ -546,7 +546,7 @@ class LayoutEngine:
         html_raw = self.convert_markdown_to_html(markdown_text)
 
         # Create two versions:
-        # 1. HTML version with beautiful KaTeX for browser preview
+                    # 1. HTML version with text fallbacks for browser preview
         # 2. PowerPoint version with PNG images for display math, text for inline math
         try:
             from .math_renderer import get_math_renderer
@@ -559,7 +559,7 @@ class LayoutEngine:
             theme_text_color = m.group(1).strip() if m else '#000000'
             math_renderer.png_text_color = theme_text_color
             
-            # For HTML debug output - beautiful KaTeX rendering
+                            # For HTML debug output - text fallback rendering
             preview_html = await math_renderer.render_math_html(html_raw, str(self.tmp_dir), mode="html")
 
             # For PowerPoint processing - display math as images, inline as text
@@ -634,7 +634,7 @@ class LayoutEngine:
 
         # Generate paginated debug HTML to show actual slide structure
         if self.debug:
-            # Use the already-rendered preview HTML (beautiful KaTeX)
+            # Use the already-rendered preview HTML (text fallbacks)
             debug_html = preview_html
 
             paginated_html = self._generate_paginated_debug_html(pages, debug_html, temp_dir)

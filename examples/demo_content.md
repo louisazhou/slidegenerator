@@ -374,51 +374,31 @@ generator.generate(markdown_content, "dark_presentation.pptx")
 
 ---
 
-# 🧮 Math Equations Support
+# 📝 Text Formatting Features
 
-The slide generator now supports LaTeX math equations using KaTeX rendering.
+This version has **enhanced text formatting** capabilities for company server compatibility.
 
-## Inline Math
+## Rich Text Support
 
-You can include inline math like $E=mc^2$ or $\alpha + \beta = \gamma$ directly in your text.
+You can use **bold text**, *italic text*, and `inline code` formatting.
 
-The quadratic formula is $x = \frac{-b \pm \sqrt{b^2-4ac}}{2a}$.
+The slide generator supports:
+- **Bold** and *italic* text
+- `Inline code formatting`
+- Lists and nested content
+- Tables and structured data
 
-## Block Math
+## Advanced Typography
 
-For display math, use double dollar signs:
+For mathematical expressions, this version shows them as formatted text:
 
-$$
-\int_a^b f'(x) dx = f(b) - f(a)
-$$
+- Einstein's equation: E=mc²
+- Quadratic formula: x = (-b ± √(b²-4ac))/2a
+- Fundamental theorem: ∫[a to b] f'(x)dx = f(b) - f(a)
 
-Euler's famous identity:
+> **Note:** Full LaTeX math rendering with KaTeX is available in the `feature/katex-math` branch for environments that support it.
 
-$$
-e^{i\pi} + 1 = 0
-$$
-
-## Complex Equations
-
-More complex equations like matrices are also supported:
-
-$$
-\begin{pmatrix}
-a & b \\
-c & d
-\end{pmatrix}
-\begin{pmatrix}
-x \\
-y
-\end{pmatrix}
-=
-\begin{pmatrix}
-ax + by \\
-cx + dy
-\end{pmatrix}
-$$
-
-Math equations are automatically cached for performance and work in both themes!
+Text formatting works consistently across all themes and output formats!
 
 ---
 

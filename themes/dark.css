@@ -280,7 +280,19 @@ mark {
 .admonition.failure > .admonition-title::before { content:"❌"; }
 .admonition.attention > .admonition-title::before { content:"👀"; }
 
-/* Math equation styling */
+/* Math equation styling - BASIC FALLBACK ONLY */
+/* Full KaTeX math rendering available in feature/katex-math branch */
+
+.math-fallback {
+    font-family: 'Courier New', monospace;
+    background-color: #2d2d2d;
+    color: #e0e0e0;
+    padding: 2px 4px;
+    border-radius: 3px;
+    border: 1px solid #555;
+    font-size: 0.9em;
+}
+
 .math-image {
     max-width: 100%;
     height: auto;
@@ -296,37 +308,13 @@ mark {
     margin: 0.5em auto;
 }
 
-/* KaTeX HTML math styling */
+/* Fallback for when math HTML elements exist but KaTeX is disabled */
 .math-html {
-    max-width: 100%;
-}
-
-.math-html.inline {
-    display: inline;
-}
-
-.math-html.display {
-    display: block;
-    text-align: center;
-    margin: 0.5em auto;
-}
-
-/* Hide MathML (accessibility) and show only visual HTML rendering */
-.katex-mathml {
-    display: none !important;
-}
-
-.katex-html {
-    display: inline !important;
-}
-
-/* Fix KaTeX SVG sizing issues */
-.katex svg {
-    max-width: 100% !important;
-    height: auto !important;
-}
-
-.katex .hide-tail {
-    max-width: 100% !important;
-    overflow: hidden !important;
+    font-family: 'Courier New', monospace;
+    background-color: #2d2d2d;
+    color: #e0e0e0;
+    padding: 2px 4px;
+    border-radius: 3px;
+    border: 1px solid #555;
+    font-size: 0.9em;
 } 

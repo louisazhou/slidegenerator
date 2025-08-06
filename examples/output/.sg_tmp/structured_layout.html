@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Slide Content</title>
+<style>
+/* Dark theme for slide generation */
+
+/* Slide dimensions and aspect ratio configuration */
+:root {
+    --slide-width: 960px;
+    --slide-height: 540px;
+    --slide-padding: 19px;       /* Configurable slide padding in pixels */
+    --slide-font-family: 'Arial'; /* Font family that matches PowerPoint exactly */
+    --column-gap: 15px;          /* Gap between columns */
+    --column-padding: 5px;       /* Padding inside each column */
+    
+    /* Table styling deltas */
+    --table-font-delta: -2pt;    /* Table font size = body - 2pt */
+    --table-width-safety: 1.10;  /* 10% safety buffer for table width (1.10 = 110%) */
+    /* NOTE: --table-border-width removed - python-pptx limitation
+     * PowerPoint ignores border thickness in XML even when valid
+     * Only border COLOR can be controlled via python-pptx
+     * For custom thickness: use PPTX templates or VBA/Aspose.Slides */
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    font-family: var(--slide-font-family), sans-serif;
+    background-color: #1a1a1a;
+    color: #e0e0e0;
+}
+
+.slide {
+    width: var(--slide-width);
+    min-height: var(--slide-height); /* Allow content to extend beyond slide for debugging */
+    padding: var(--slide-padding);
+    box-sizing: border-box;
+    position: relative;
+    page-break-after: always;
+    background-color: #1a1a1a;
+    color: #e0e0e0;
+    overflow: visible; /* Show all content in HTML for debugging */
+    border: 2px dashed #444; /* Visual indicator of slide boundaries */
+}
+
+h1 {
+    font-size: 16px;
+    line-height: 1;
+    margin-top: 0;
+    margin-bottom: 20px;
+    width: fit-content;
+    color: #e0e0e0;
+}
+
+h2 {
+    font-size: 13px;
+    line-height: 1.2;
+    margin-top: 0;
+    margin-bottom: 15px;
+    width: fit-content;
+    color: #e0e0e0;
+}
+
+h3 {
+    font-size: 11px;
+    line-height: 1.2;
+    margin-top: 0;
+    margin-bottom: 12px;
+    width: fit-content;
+    color: #e0e0e0;
+}
+
+p {
+    font-size: 10px;
+    line-height: 1.2;
+    margin-bottom: 0px;
+    width: fit-content;
+    max-width: 100%;
+    color: #e0e0e0;
+}
+
+ul, ol {
+    font-size: 10px;
+    line-height: 1.2;
+    margin-left: 20px;
+    margin-bottom: 0px;
+    width: fit-content;
+    max-width: calc(100% - 20px);
+    color: #e0e0e0;
+}
+
+li {
+    line-height: 1.2;
+    margin-bottom: 0;
+    width: fit-content;
+    max-width: 100%;
+}
+
+/* Code blocks - separate styling for pre and inline code */
+pre {
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    line-height: 1.2;
+    background-color: #2d2d2d;
+    color: #ffffff;
+    padding: 10px;
+    border-radius: 4px;
+    margin-bottom: 15px;
+    width: auto;
+    max-width: 100%; /* Ensure code blocks fit within slide boundaries */
+    overflow-x: auto; /* Add horizontal scrolling if needed */
+    white-space: pre-wrap; /* Allow text wrapping in code blocks */
+    word-wrap: break-word; /* Break long words if necessary */
+    box-sizing: border-box; /* Include padding in width calculation */
+    display: block; /* Ensure block display */
+}
+
+pre code {
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+    background-color: transparent; /* Don't double-apply background */
+    color: inherit;
+    padding: 0; /* Don't double-apply padding */
+    border-radius: 0;
+    margin: 0;
+    white-space: inherit;
+    word-wrap: inherit;
+    box-sizing: border-box;
+}
+
+code {
+    font-family: 'Courier New', monospace;
+    font-size: 10px;
+    background-color: #2d2d2d;
+    color: #ffffff;
+    padding: 2px 4px;
+    border-radius: 2px;
+}
+
+table {
+    border-collapse: collapse;
+    width: fit-content;
+    max-width: 100%; /* Prevent overflow but allow natural width */
+    margin-bottom: 15px;
+    table-layout: auto; /* Allow intelligent column sizing */
+    word-wrap: break-word; /* Break long words if necessary */
+}
+
+th, td {
+    border: 1px solid #ffffff;
+    padding: 8px;
+    text-align: left;
+    background-color: transparent;
+    color: #ffffff;
+    line-height: 1.4;
+    font-size: 10px; /* Match paragraph size so browser measurement matches PPT */
+    word-wrap: break-word; /* Break long words in table cells */
+    max-width: 200px; /* Prevent individual cells from getting too wide */
+    overflow-wrap: break-word; /* Modern CSS property for word breaking */
+}
+
+th {
+    font-weight: bold;
+    color: #ffffff;
+}
+
+.page-break {
+    display: none;  /* Hidden in CSS but will be detected by JavaScript */
+}
+
+/* Two-column layout support */
+.columns {
+  display: flex;
+  gap: var(--column-gap);
+  align-items: flex-start; /* Keep columns aligned to top */
+  break-inside: avoid; /* Prevent page breaks inside column container */
+  page-break-inside: avoid;
+}
+
+.column {
+  flex: 1 1 0;
+  padding: 0 var(--column-padding);
+  min-width: 0; /* Prevent columns from overflowing */
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+/* Ensure tables inside columns fill the available column width */
+.column table {
+  width: max-content;
+  max-width: 100%;
+}
+
+/* Column width flex rules */
+.column[data-column-width="auto"] { flex: 0 0 auto; }
+.column[data-column-width="default"] { flex: 1 1 0; }
+
+/* Highlighted inline text */
+mark {
+    color: #ffcc00; /* Golden highlight on dark bg */
+    background-color: transparent;
+}
+
+/* Inline color utility classes generated to match COLOR_MAP in renderer */
+.red { color: rgb(255,0,0); }
+.blue { color: rgb(0,102,204); }
+.green { color: rgb(0,153,0); }
+.orange { color: rgb(255,128,0); }
+.purple { color: rgb(153,0,153); }
+.gray { color: rgb(128,128,128); }
+.black { color: rgb(255,255,255); }
+.white { color: rgb(255,255,255); }
+.yellow { color: rgb(255,255,0); }
+.dodgerblue { color: rgb(30,144,255); } 
+
+/* Inline formatting utility classes for attribute syntax */
+.bold { font-weight: bold; }
+.italic { font-style: italic; }
+.underline { text-decoration: underline; }
+.strike { text-decoration: line-through; }
+
+/* Wavy underline utility */
+.wavy { text-decoration: underline; text-decoration-style: wavy; text-decoration-color: inherit; }
+
+/* Figure caption styling */
+.figure-caption {
+    font-style: italic;
+    color: #cccccc;
+    font-size: 10px;
+    margin-top: 5px;
+    text-align: center;
+}
+
+/* Divider slide styling - centered content with larger fonts */
+.slide.divider {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    min-height: calc(var(--slide-height) - 2 * var(--slide-padding));
+}
+
+.slide.divider h1 {
+    font-size: calc(var(--h1-font-size) + 2px);
+    margin-bottom: 0.5em;
+}
+
+.slide.divider h2 {
+    font-size: calc(var(--h2-font-size) + 2px);
+    margin-bottom: 0.3em;
+}
+
+.slide.divider h3 {
+    font-size: calc(var(--h3-font-size) + 2px);
+    margin-bottom: 0.3em;
+}
+
+/* Admonition blocks */
+.admonition { padding: 8px 12px; margin: 10px 0; border-left: 4px solid #2196F3; background-color: #424242; color:#e0e0e0; }
+.admonition-title { font-weight:bold;margin-top:0;margin-bottom:4px;font-size:10px; }
+
+.admonition.note,.admonition.summary { border-color:#42A5F5; background:#37474F; }
+.admonition.info { border-color:#29B6F6; background:#35525C; }
+.admonition.tip { border-color:#66BB6A; background:#2E3E2E; }
+.admonition.warning,.admonition.caution { border-color:#FFA726; background:#4A3D1B; }
+.admonition.danger,.admonition.error,.admonition.failure { border-color:#EF5350; background:#4C2626; }
+.admonition.attention { border-color:#FFB300; background:#4A3F14; } 
+
+/* ------------------------------------------------------------------
+   Minimal icon support (same mapping as default theme) so that browser
+   and PPTX have consistent sizing.
+-------------------------------------------------------------------*/
+.admonition-title::before { margin-right:4px; }
+.admonition.note > .admonition-title::before,
+.admonition.summary > .admonition-title::before { content:"📝"; }
+.admonition.info > .admonition-title::before { content:"ℹ️"; }
+.admonition.tip > .admonition-title::before { content:"💡"; }
+.admonition.warning > .admonition-title::before,
+.admonition.caution > .admonition-title::before { content:"⚠️"; }
+.admonition.danger > .admonition-title::before { content:"🚫"; }
+.admonition.error > .admonition-title::before,
+.admonition.failure > .admonition-title::before { content:"❌"; }
+.admonition.attention > .admonition-title::before { content:"👀"; }
+
+/* Math equation styling */
+.math-image {
+    max-width: 100%;
+    height: auto;
+}
+
+.math-image.inline {
+    display: inline;
+    vertical-align: baseline;
+}
+
+.math-image.display {
+    display: block;
+    margin: 0.5em auto;
+}
+
+/* KaTeX HTML math styling */
+.math-html {
+    max-width: 100%;
+}
+
+.math-html.inline {
+    display: inline;
+}
+
+.math-html.display {
+    display: block;
+    text-align: center;
+    margin: 0.5em auto;
+}
+
+/* Hide MathML (accessibility) and show only visual HTML rendering */
+.katex-mathml {
+    display: none !important;
+}
+
+.katex-html {
+    display: inline !important;
+}
+
+/* Fix KaTeX SVG sizing issues */
+.katex svg {
+    max-width: 100% !important;
+    height: auto !important;
+}
+
+.katex .hide-tail {
+    max-width: 100% !important;
+    overflow: hidden !important;
+} 
+</style>
+</head>
+<body>
+<div class="slide" id="slide-0">
+<h1 data-bid="b0">📊 Advanced Business Analytics (1/4)</h1>
+<h2 data-bid="b1">Quarterly Performance Review</h2>
+<p data-bid="b2">Presented by: <strong data-bid="b3">Analytics Team</strong><br data-bid="b4"/>
+Date: December 2024<br data-bid="b5"/>
+Quarter: Q4</p>
+</div>
+<div class="page-break"><!-- slide --></div>
+<div class="slide" id="slide-1">
+<h1 data-bid="b6">Executive Summary (2/4)</h1>
+<h2 data-bid="b7">Key Achievements This Quarter</h2>
+<p data-bid="b8" data-list-levels="0,0,0,0" data-list-type="ul"><strong data-bid="b9">Revenue Growth</strong>: 15.2% increase<br data-bid="b10"/><strong data-bid="b11">Market Position</strong>: 2nd in industry<br data-bid="b12"/><strong data-bid="b13">Customer Satisfaction</strong>: 91.2%<br data-bid="b14"/><strong data-bid="b15">Target Achievement</strong>: 108.0%</p>
+<blockquote data-bid="b16">
+<p data-bid="b17"><em data-bid="b18">TechCorp Solutions</em> continues to lead in innovation and customer satisfaction.</p>
+</blockquote>
+</div>
+<div class="page-break"><!-- slide --></div>
+<div class="slide" id="slide-2">
+<h1 data-bid="b19">Sales Performance Analysis</h1>
+<p data-bid="b20">Our quarterly sales performance shows consistent improvement:</p>
+<img alt="" data-bid="b21" data-caption="Quarterly sales performance vs targets showing steady improvement" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/output/.sg_tmp/slide_8742a85f/slide_8742a85f_create_sales_chart.png" data-scale-type="x" data-scale-x="0.8" src="file:///Users/louisazhou/Downloads/Slide_generate/examples/output/.sg_tmp/slide_8742a85f/slide_8742a85f_create_sales_chart.png"/><p class="figure-caption" data-bid="b22">Quarterly sales performance vs targets showing steady improvement</p>
+<h2 data-bid="b23">Key Insights</h2>
+<p data-bid="b24" data-list-levels="0,0,0" data-list-type="ul"><span class="green bold" data-bid="b25">Q4 exceeded targets</span> by 5.6%<br data-bid="b26"/>Average performance: 87.5%<br data-bid="b27"/><span class="blue italic" data-bid="b28">Trend is positive</span> across all quarters</p>
+</div>
+<div class="page-break"><!-- slide --></div>
+<div class="slide" id="slide-3">
+<h1 data-bid="b29">Market Position</h1>
+<p data-bid="b30">Our market share remains strong in the competitive landscape:</p>
+<img alt="" data-bid="b31" data-caption="Current market share distribution showing our leadership position" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/output/.sg_tmp/slide_fb67b5a0/slide_fb67b5a0_create_market_share.png" data-scale-type="y" data-scale-y="0.6" src="file:///Users/louisazhou/Downloads/Slide_generate/examples/output/.sg_tmp/slide_fb67b5a0/slide_fb67b5a0_create_market_share.png"/><p class="figure-caption" data-bid="b32">Current market share distribution showing our leadership position</p>
+<h3 data-bid="b33">Strategic Advantages</h3>
+<p data-bid="b34" data-list-levels="0,0,0" data-list-type="ol"><span class="green bold" data-bid="b35">Market Leader</span>: 35% market share<br data-bid="b36"/>Strong brand recognition<br data-bid="b37"/>Customer loyalty: 84.7%</p>
+</div>
+<div class="page-break"><!-- slide --></div>
+<div class="slide" id="slide-4">
+<h1 data-bid="b38">Regional Performance Analysis (1/3)</h1>
+<h2 data-bid="b39">Performance by Region</h2>
+<table data-bid="b40">
+<thead data-bid="b41">
+<tr data-bid="b42">
+<th data-bid="b43" style="text-align:left">Region</th>
+<th data-bid="b44" style="text-align:right">Revenue</th>
+<th data-bid="b45" style="text-align:right">Growth</th>
+<th data-bid="b46" style="text-align:left">Satisfaction</th>
+</tr>
+</thead>
+<tbody data-bid="b47">
+<tr data-bid="b48">
+<td data-bid="b49" style="text-align:left">North</td>
+<td data-bid="b50" style="text-align:right">1200000</td>
+<td data-bid="b51" style="text-align:right">12.5</td>
+<td data-bid="b52" style="text-align:left">4.2</td>
+</tr>
+<tr data-bid="b53">
+<td data-bid="b54" style="text-align:left">East</td>
+<td data-bid="b55" style="text-align:right">1100000</td>
+<td data-bid="b56" style="text-align:right">15.2</td>
+<td data-bid="b57" style="text-align:left">4.5</td>
+</tr>
+<tr data-bid="b58">
+<td data-bid="b59" style="text-align:left">South</td>
+<td data-bid="b60" style="text-align:right">950000</td>
+<td data-bid="b61" style="text-align:right">8.3</td>
+<td data-bid="b62" style="text-align:left"><span class="blue bold" data-bid="b63">3.8</span></td>
+</tr>
+<tr data-bid="b64">
+<td data-bid="b65" style="text-align:left">West</td>
+<td data-bid="b66" style="text-align:right">800000</td>
+<td data-bid="b67" style="text-align:right">6.7</td>
+<td data-bid="b68" style="text-align:left">3.6</td>
+</tr>
+</tbody>
+</table>
+<h3 data-bid="b69">Regional Insights</h3>
+<p data-bid="b70" data-list-levels="0,0,0" data-list-type="ul"><strong data-bid="b71">North</strong> leads in revenue with $1.20M<br data-bid="b72"/><strong data-bid="b73">East</strong> shows highest growth at 15.2%<br data-bid="b74"/>West region requires attention for growth improvement</p>
+</div>
+<div class="page-break"><!-- slide --></div>
+<div class="slide" id="slide-5">
+<h1 data-bid="b75">Advanced Table Styling (●●○)</h1>
+<h2 data-bid="b76">Financial Performance with Row Styling</h2>
+<table data-bid="b77">
+<thead data-bid="b78">
+<tr data-bid="b79">
+<th data-bid="b80" style="text-align:left">Metric</th>
+<th data-bid="b81" style="text-align:left">Q1</th>
+<th data-bid="b82" style="text-align:left">Q2</th>
+<th data-bid="b83" style="text-align:left">Q3</th>
+<th data-bid="b84" style="text-align:left">Q4</th>
+</tr>
+</thead>
+<tbody data-bid="b85">
+<tr data-bid="b86">
+<td data-bid="b87" style="text-align:left">Revenue</td>
+<td data-bid="b88" style="text-align:left"><span class="dollar green" data-bid="b89">$2.15M</span></td>
+<td data-bid="b90" style="text-align:left"><span class="dollar green" data-bid="b91">$2.84M</span></td>
+<td data-bid="b92" style="text-align:left"><span class="dollar green" data-bid="b93">$3.12M</span></td>
+<td data-bid="b94" style="text-align:left"><span class="dollar green" data-bid="b95">$3.75M</span></td>
+</tr>
+<tr data-bid="b96">
+<td data-bid="b97" style="text-align:left">Profit</td>
+<td data-bid="b98" style="text-align:left">320000.0</td>
+<td data-bid="b99" style="text-align:left">445000.0</td>
+<td data-bid="b100" style="text-align:left">512000.0</td>
+<td data-bid="b101" style="text-align:left">680000.0</td>
+</tr>
+<tr data-bid="b102">
+<td data-bid="b103" style="text-align:left">Growth Rate</td>
+<td data-bid="b104" style="text-align:left">0.125</td>
+<td data-bid="b105" style="text-align:left">0.087</td>
+<td data-bid="b106" style="text-align:left">0.156</td>
+<td data-bid="b107" style="text-align:left">0.203</td>
+</tr>
+<tr data-bid="b108">
+<td data-bid="b109" style="text-align:left">Market Rank</td>
+<td data-bid="b110" style="text-align:left">3.0</td>
+<td data-bid="b111" style="text-align:left">2.0</td>
+<td data-bid="b112" style="text-align:left">1.0</td>
+<td data-bid="b113" style="text-align:left">1.0</td>
+</tr>
+</tbody>
+</table>
+<h2 data-bid="b114">Key Features Demonstrated</h2>
+<p data-bid="b115" data-list-levels="0,0,0" data-list-type="ul"><strong data-bid="b116">Row styling</strong>: Revenue row (index 0) automatically formatted as <span class="dollar green" data-bid="b117">currency</span><br data-bid="b118"/>Clean numeric formatting without conflicts<br data-bid="b119"/>Green styling applied to entire revenue row</p>
+<p data-bid="b120">This demonstrates basic row-based numeric styling.</p>
+</div>
+<div class="page-break"><!-- slide --></div>
+<div class="slide" id="slide-6">
+<h1 data-bid="b121">Advanced Table Styling (●●●)</h1>
+<h2 data-bid="b122">Financial Performance with Column Styling</h2>
+<table data-bid="b123">
+<thead data-bid="b124">
+<tr data-bid="b125">
+<th data-bid="b126" style="text-align:left"></th>
+<th data-bid="b127" style="text-align:left">Q1</th>
+<th data-bid="b128" style="text-align:right">Q2</th>
+<th data-bid="b129" style="text-align:right">Q3</th>
+<th data-bid="b130" style="text-align:left">Q4</th>
+</tr>
+</thead>
+<tbody data-bid="b131">
+<tr data-bid="b132">
+<td data-bid="b133" style="text-align:left">Revenue</td>
+<td data-bid="b134" style="text-align:left"><span class="percent blue" data-bid="b135">2150000.0%</span></td>
+<td data-bid="b136" style="text-align:right">2.84e+06</td>
+<td data-bid="b137" style="text-align:right">3.12e+06</td>
+<td data-bid="b138" style="text-align:left"><span class="dollar purple" data-bid="b139">$3.75M</span></td>
+</tr>
+<tr data-bid="b140">
+<td data-bid="b141" style="text-align:left">Profit</td>
+<td data-bid="b142" style="text-align:left"><span class="percent blue" data-bid="b143">320000.0%</span></td>
+<td data-bid="b144" style="text-align:right">445000</td>
+<td data-bid="b145" style="text-align:right">512000</td>
+<td data-bid="b146" style="text-align:left"><span class="dollar purple" data-bid="b147">$680.00K</span></td>
+</tr>
+<tr data-bid="b148">
+<td data-bid="b149" style="text-align:left">Growth Rate</td>
+<td data-bid="b150" style="text-align:left"><span class="percent blue" data-bid="b151">12.5%</span></td>
+<td data-bid="b152" style="text-align:right">0.087</td>
+<td data-bid="b153" style="text-align:right">0.156</td>
+<td data-bid="b154" style="text-align:left"><span class="dollar purple" data-bid="b155">$0</span></td>
+</tr>
+<tr data-bid="b156">
+<td data-bid="b157" style="text-align:left">Market Rank</td>
+<td data-bid="b158" style="text-align:left"><span class="percent blue" data-bid="b159">3.0%</span></td>
+<td data-bid="b160" style="text-align:right">2</td>
+<td data-bid="b161" style="text-align:right">1</td>
+<td data-bid="b162" style="text-align:left"><span class="dollar purple" data-bid="b163">$1</span></td>
+</tr>
+</tbody>
+</table>
+<h2 data-bid="b164">Key Features Demonstrated</h2>
+<p data-bid="b165" data-list-levels="0,0,0" data-list-type="ul"><strong data-bid="b166">Column styling</strong>: Q1 column as <span class="percent blue" data-bid="b167">percentages</span> and Q4 as <span class="dollar purple" data-bid="b168">currency</span><br data-bid="b169"/>Index displayed to show meaningful row labels (Revenue, Profit, etc.)<br data-bid="b170"/>Column-specific formatting applied correctly</p>
+<p data-bid="b171">This demonstrates column-based styling with visible index.</p>
+</div>
+<div class="page-break"><!-- slide --></div>
+<div class="slide" id="slide-7">
+<h1 data-bid="b172">Advanced Table Styling (●●●●)</h1>
+<h2 data-bid="b173">Financial Performance with Conditional Rules</h2>
+<table data-bid="b174">
+<thead data-bid="b175">
+<tr data-bid="b176">
+<th data-bid="b177" style="text-align:left">Metric</th>
+<th data-bid="b178" style="text-align:right">Q1</th>
+<th data-bid="b179" style="text-align:right">Q2</th>
+<th data-bid="b180" style="text-align:right">Q3</th>
+<th data-bid="b181" style="text-align:right">Q4</th>
+</tr>
+</thead>
+<tbody data-bid="b182">
+<tr data-bid="b183">
+<td data-bid="b184" style="text-align:left">Revenue</td>
+<td data-bid="b185" style="text-align:right">2.15e+06</td>
+<td data-bid="b186" style="text-align:right">2.84e+06</td>
+<td data-bid="b187" style="text-align:right">3.12e+06</td>
+<td data-bid="b188" style="text-align:right">3.75e+06</td>
+</tr>
+<tr data-bid="b189">
+<td data-bid="b190" style="text-align:left">Profit</td>
+<td data-bid="b191" style="text-align:right">320000</td>
+<td data-bid="b192" style="text-align:right">445000</td>
+<td data-bid="b193" style="text-align:right">512000</td>
+<td data-bid="b194" style="text-align:right">680000</td>
+</tr>
+<tr data-bid="b195">
+<td data-bid="b196" style="text-align:left">Growth Rate</td>
+<td data-bid="b197" style="text-align:right">0.125</td>
+<td data-bid="b198" style="text-align:right">0.087</td>
+<td data-bid="b199" style="text-align:right">0.156</td>
+<td data-bid="b200" style="text-align:right">0.203</td>
+</tr>
+<tr data-bid="b201">
+<td data-bid="b202" style="text-align:left">Market Rank</td>
+<td data-bid="b203" style="text-align:right">3</td>
+<td data-bid="b204" style="text-align:right">2</td>
+<td data-bid="b205" style="text-align:right">1</td>
+<td data-bid="b206" style="text-align:right">1</td>
+</tr>
+</tbody>
+</table>
+<h2 data-bid="b207">Key Features Demonstrated</h2>
+<p data-bid="b208" data-list-levels="0,0,0" data-list-type="ul"><strong data-bid="b209">Lambda rules</strong>: Rows where Q4 &gt; Q3 get <span class="green bold" data-bid="b210">green bold</span> formatting<br data-bid="b211"/>Conditional styling based on row data comparisons<br data-bid="b212"/>Clean rule application without style conflicts</p>
+<p data-bid="b213">This demonstrates string-based conditional formatting rules.</p>
+</div>
+<div class="page-break"><!-- slide --></div>
+<div class="slide" id="slide-8">
+<h1 data-bid="b214">Advanced Table Styling (●●●●●)</h1>
+<h2 data-bid="b215">Financial Performance with Cell Highlighting</h2>
+<table data-bid="b216">
+<thead data-bid="b217">
+<tr data-bid="b218">
+<th data-bid="b219" style="text-align:left">Metric</th>
+<th data-bid="b220" style="text-align:left">Q1</th>
+<th data-bid="b221" style="text-align:right">Q2</th>
+<th data-bid="b222" style="text-align:right">Q3</th>
+<th data-bid="b223" style="text-align:left">Q4</th>
+</tr>
+</thead>
+<tbody data-bid="b224">
+<tr data-bid="b225">
+<td data-bid="b226" style="text-align:left">Revenue</td>
+<td data-bid="b227" style="text-align:left">2150000.0</td>
+<td data-bid="b228" style="text-align:right">2.84e+06</td>
+<td data-bid="b229" style="text-align:right">3.12e+06</td>
+<td data-bid="b230" style="text-align:left">3750000.0</td>
+</tr>
+<tr data-bid="b231">
+<td data-bid="b232" style="text-align:left">Profit</td>
+<td data-bid="b233" style="text-align:left">320000.0</td>
+<td data-bid="b234" style="text-align:right">445000</td>
+<td data-bid="b235" style="text-align:right">512000</td>
+<td data-bid="b236" style="text-align:left"><span class="bold blue" data-bid="b237">680000.0</span></td>
+</tr>
+<tr data-bid="b238">
+<td data-bid="b239" style="text-align:left">Growth Rate</td>
+<td data-bid="b240" style="text-align:left"><span class="red italic" data-bid="b241">0.125</span></td>
+<td data-bid="b242" style="text-align:right">0.087</td>
+<td data-bid="b243" style="text-align:right">0.156</td>
+<td data-bid="b244" style="text-align:left">0.203</td>
+</tr>
+<tr data-bid="b245">
+<td data-bid="b246" style="text-align:left">Market Rank</td>
+<td data-bid="b247" style="text-align:left">3.0</td>
+<td data-bid="b248" style="text-align:right">2</td>
+<td data-bid="b249" style="text-align:right">1</td>
+<td data-bid="b250" style="text-align:left">1.0</td>
+</tr>
+</tbody>
+</table>
+<h2 data-bid="b251">Key Features Demonstrated</h2>
+<p data-bid="b252" data-list-levels="0,0,0,0" data-list-type="ul"><strong data-bid="b253">Cell highlighting</strong>: Specific cells get targeted styling<br data-bid="b254"/>Profit Q4 (row 1, Q4 column): <span class="bold blue" data-bid="b255">bold blue</span><br data-bid="b256"/>Growth Rate Q1 (row 2, Q1 column): <span class="red italic" data-bid="b257">red italic</span><br data-bid="b258"/>Precise cell-level control</p>
+<p data-bid="b259">This demonstrates precise cell-level highlighting.</p>
+</div>
+<div class="page-break"><!-- slide --></div>
+<div class="slide" id="slide-9">
+<h1 data-bid="b260">Advanced Table Styling (●●●●●●)</h1>
+<h2 data-bid="b261">Smart Index Auto-Detection</h2>
+<table data-bid="b262">
+<thead data-bid="b263">
+<tr data-bid="b264">
+<th data-bid="b265" style="text-align:left">Metric</th>
+<th data-bid="b266" style="text-align:left">Q1</th>
+<th data-bid="b267" style="text-align:left">Q4</th>
+</tr>
+</thead>
+<tbody data-bid="b268">
+<tr data-bid="b269">
+<td data-bid="b270" style="text-align:left">Revenue</td>
+<td data-bid="b271" style="text-align:left">2150000.0</td>
+<td data-bid="b272" style="text-align:left"><span class="green bold" data-bid="b273">3750000.0</span></td>
+</tr>
+<tr data-bid="b274">
+<td data-bid="b275" style="text-align:left">Profit</td>
+<td data-bid="b276" style="text-align:left">320000.0</td>
+<td data-bid="b277" style="text-align:left">680000.0</td>
+</tr>
+<tr data-bid="b278">
+<td data-bid="b279" style="text-align:left">Growth Rate</td>
+<td data-bid="b280" style="text-align:left">0.125</td>
+<td data-bid="b281" style="text-align:left">0.203</td>
+</tr>
+<tr data-bid="b282">
+<td data-bid="b283" style="text-align:left">Market Rank</td>
+<td data-bid="b284" style="text-align:left"><span class="red italic" data-bid="b285">3.0</span></td>
+<td data-bid="b286" style="text-align:left">1.0</td>
+</tr>
+</tbody>
+</table>
+<h2 data-bid="b287">Key Features Demonstrated</h2>
+<p data-bid="b288" data-list-levels="0,0,0,0,0" data-list-type="ul"><strong data-bid="b289">Smart index</strong>: Automatically detected 'Metric' column as meaningful index<br data-bid="b290"/><strong data-bid="b291">String-based highlighting</strong>: Reference rows by name, not position<br data-bid="b292"/>Revenue Q4: <span class="green bold" data-bid="b293">green bold</span><br data-bid="b294"/>Market Rank Q1: <span class="red italic" data-bid="b295">red italic</span><br data-bid="b296"/>No need to manually set_index() or worry about dropindex</p>
+<p data-bid="b297">This demonstrates automatic index detection for better user experience.</p>
+</div>
+<div class="page-break"><!-- slide --></div>
+<div class="slide" id="slide-10">
+<h1 data-bid="b298">Growth Trajectory</h1>
+<h2 data-bid="b299">Monthly Growth Analysis</h2>
+<img alt="" data-bid="b300" data-caption="Monthly growth rate showing accelerating trend throughout the year" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/output/.sg_tmp/slide_41289bc7/slide_41289bc7_create_growth_trend.png" data-scale-type="x" data-scale-x="0.9" src="file:///Users/louisazhou/Downloads/Slide_generate/examples/output/.sg_tmp/slide_41289bc7/slide_41289bc7_create_growth_trend.png"/><p class="figure-caption" data-bid="b301">Monthly growth rate showing accelerating trend throughout the year</p>
+<h3 data-bid="b302">Growth Drivers</h3>
+<p data-bid="b303" data-list-levels="0,0,0" data-list-type="ul"><strong data-bid="b304">Product Innovation</strong>: 32.0% impact<br data-bid="b305"/><strong data-bid="b306">Market Expansion</strong>: 28.0% contribution<br data-bid="b307"/><strong data-bid="b308">Customer Acquisition</strong>: 15.0% new customers</p>
+<p data-bid="b309"><span class="green bold italic" data-bid="b310">Sustained growth expected into next quarter</span></p>
+</div>
+<div class="page-break"><!-- slide --></div>
+<div class="slide" id="slide-11">
+<h1 data-bid="b311">Comprehensive Overview (1/2)</h1>
+<div class="columns" data-bid="b312">
+<div class="column" data-bid="b313" data-column-width="60%" style="flex:0 0 60%;">
+<h3 data-bid="b314">Performance Metrics</h3>
+<img alt="" data-bid="b315" data-caption="Performance overview" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/output/.sg_tmp/slide_ca6dadf3/slide_ca6dadf3_create_sales_chart.png" data-in-column="true" data-scale-type="x" data-scale-x="1.0" src="file:///Users/louisazhou/Downloads/Slide_generate/examples/output/.sg_tmp/slide_ca6dadf3/slide_ca6dadf3_create_sales_chart.png"/><p class="figure-caption" data-bid="b316">Performance overview</p>
+<p data-bid="b317"><strong data-bid="b318">Key Highlights:</strong></p>
+<p data-bid="b319" data-list-levels="0,0" data-list-type="ul">Revenue: $4.05M<br data-bid="b320"/>Growth: 12.6%</p>
+</div>
+<div class="column" data-bid="b321" data-column-width="40%" style="flex:0 0 40%;">
+<h3 data-bid="b322">Quarterly Summary</h3>
+<table data-bid="b323">
+<thead data-bid="b324">
+<tr data-bid="b325">
+<th data-bid="b326" style="text-align:left">Quarter</th>
+<th data-bid="b327" style="text-align:right">Sales</th>
+<th data-bid="b328" style="text-align:right">Target</th>
+<th data-bid="b329" style="text-align:left">Performance</th>
+</tr>
+</thead>
+<tbody data-bid="b330">
+<tr data-bid="b331">
+<td data-bid="b332" style="text-align:left">Q1</td>
+<td data-bid="b333" style="text-align:right">85</td>
+<td data-bid="b334" style="text-align:right">80</td>
+<td data-bid="b335" style="text-align:left">Good</td>
+</tr>
+<tr data-bid="b336">
+<td data-bid="b337" style="text-align:left">Q2</td>
+<td data-bid="b338" style="text-align:right">92</td>
+<td data-bid="b339" style="text-align:right">85</td>
+<td data-bid="b340" style="text-align:left">Excellent</td>
+</tr>
+<tr data-bid="b341">
+<td data-bid="b342" style="text-align:left">Q3</td>
+<td data-bid="b343" style="text-align:right">78</td>
+<td data-bid="b344" style="text-align:right">85</td>
+<td data-bid="b345" style="text-align:left">Fair</td>
+</tr>
+<tr data-bid="b346">
+<td data-bid="b347" style="text-align:left">Q4</td>
+<td data-bid="b348" style="text-align:right">95</td>
+<td data-bid="b349" style="text-align:right">90</td>
+<td data-bid="b350" style="text-align:left"><span class="green bold" data-bid="b351">Excellent</span></td>
+</tr>
+</tbody>
+</table>
+<p data-bid="b352"><strong data-bid="b353">Status:</strong> <span class="green bold" data-bid="b354">On Track</span></p>
+</div>
+</div>
+</div>
+<div class="page-break"><!-- slide --></div>
+<div class="slide" id="slide-12">
+<h1 data-bid="b355">Action Items &amp; Next Steps (●●)</h1>
+<h2 data-bid="b356">Immediate Actions</h2>
+<p data-bid="b357" data-list-levels="0,0" data-list-type="ol">Implement growth strategy<br data-bid="b358"/>Target: 10.0% improvement</p>
+<h2 data-bid="b359">Success Metrics</h2>
+<p data-bid="b360" data-list-levels="0,0,0" data-list-type="ul">Overall growth target: 18.0%<br data-bid="b361"/>Customer satisfaction: 95.0%<br data-bid="b362"/>Market share goal: 38%</p>
+</div>
+<div class="page-break"><!-- slide --></div>
+<div class="slide" id="slide-13">
+<h1 data-bid="b363">Inline Formatting Test</h1>
+<p data-bid="b364">This slide tests various inline formatting options:</p>
+<p data-bid="b365" data-list-levels="0,0,0,0,0,0" data-list-type="ul"><strong data-bid="b366">Bold text</strong> and <em data-bid="b367">italic text</em><br data-bid="b368"/><span class="red" data-bid="b369">Red text</span> and <span class="blue bold" data-bid="b370">Blue text</span><br data-bid="b371"/>Regular underline with <u data-bid="b372">underline</u><br data-bid="b373"/><u class="wavy" data-bid="b374">Wavy underlined text</u> using double caret for <u class="wavy" data-bid="b375">emphasized information</u><br data-bid="b376"/><del data-bid="b377">Strikethrough text</del> for deleted content<br data-bid="b378"/><mark data-bid="b379">Highlighted text</mark> for important notes</p>
+<p data-bid="b380">All formatting should render correctly in both HTML and PowerPoint.</p>
+</div>
+</body></html>
