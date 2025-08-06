@@ -560,10 +560,10 @@ class LayoutEngine:
             math_renderer.png_text_color = theme_text_color
             
                             # For HTML debug output - text fallback rendering
-            preview_html = await math_renderer.render_math_html(html_raw, str(self.tmp_dir), mode="html")
+            preview_html = math_renderer.render_math_html(html_raw, str(self.tmp_dir), mode="html")
 
             # For PowerPoint processing - display math as images, inline as text
-            measurement_html = await math_renderer.render_math_html(html_raw, str(self.tmp_dir), mode="mixed")
+            measurement_html = math_renderer.render_math_html(html_raw, str(self.tmp_dir), mode="mixed")
             
         except Exception as e:
             if self.debug:
