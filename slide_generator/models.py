@@ -29,6 +29,7 @@ class Block:
     columnMode: Optional[str] = None  # 'auto', 'default', or percentage token
     parentClassName: Optional[str] = None  # class of the direct parent element
     bid: Optional[str] = None  # unique block id for WYSIWYG slicing
+    source_slide: Optional[int] = None  # originating markdown slide index
     
     @property
     def width(self):
@@ -106,5 +107,6 @@ class Block:
             parentColumnWidth=element.get('parentColumnWidth'),
             columnMode=element.get('columnMode'),
             parentClassName=element.get('parentClassName'),
-            bid=element.get('bid')
-        ) 
+            bid=element.get('bid'),
+            source_slide=element.get('source_slide')
+        )

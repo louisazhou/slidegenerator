@@ -337,6 +337,7 @@ def paginate(blocks: List[Block], max_height_px: int = 540, padding_px: int = 19
     pages = []
     current_page = []
     page_start_y = None  # Track where the current page starts
+    _source_slide_idx = 0  # Track originating markdown slide index
     
     # Simple pagination with lookahead grouping
     processed_block_indices = set()  # Track which blocks have been processed as part of groups
@@ -345,13 +346,20 @@ def paginate(blocks: List[Block], max_height_px: int = 540, padding_px: int = 19
         # Skip blocks that were already processed as part of a group
         if i in processed_block_indices:
             continue
+
+        # Annotate block with its originating markdown slide index
+        try:
+            block.source_slide = _source_slide_idx
+        except Exception:
+            pass
         # Handle explicit page breaks
         if block.is_page_break():
-            # Only add non-empty pages
+            # Encountered explicit page break – finish current page and advance logical slide index
             if current_page:
                 pages.append(current_page)
             current_page = []
             page_start_y = None
+            _source_slide_idx += 1  # next blocks belong to following markdown slide
             continue
         
         # Get the height of the block
@@ -453,6 +461,8 @@ class LayoutEngine:
         # Use the new markdown parser
         parser = MarkdownParser(base_dir=self.base_dir)
         html_slides = parser.parse_with_page_breaks(markdown_text)
+        # Expose speaker notes collected by the parser so that upstream callers (e.g. SlideGenerator) can access them
+        self.slide_notes = parser.slide_notes
         
         # If no content slides, return empty string
         if not html_slides:

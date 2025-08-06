@@ -118,6 +118,9 @@ notebook.new_slide("""
 Presented by: **Analytics Team**  
 Date: {{date}}  
 Quarter: {{quarter}}
+                   
+??? [Speaker note]{.red} for ==slide 2== – keep _eye-contact_ with the [audience](www.google.com).
+??? Mention the live ~~demo~~ coming right after this.
 """, template_vars={
     'date': 'December 2024',
     'quarter': 'Q4'
@@ -137,7 +140,7 @@ notebook.new_slide("""
 - **Customer Satisfaction**: {{satisfaction | pct}}
 - **Target Achievement**: {{target_achievement | pct}}
 
-> *{{company}}* continues to lead in innovation and customer satisfaction.
+*{{company}}* continues to lead in innovation and customer satisfaction.
 """, template_vars={
     'revenue_growth': 15.2,
     'market_position': 2,

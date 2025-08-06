@@ -152,7 +152,7 @@ class PPTXRenderer:
             return (0, 0, 0)  # Default to black
         return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
     
-    def render(self, pages: List[List[Block]], output_path: str):
+    def render(self, pages: List[List[Block]], output_path: str, page_speaker_notes: Optional[List[str]] = None):
         """
         Render pages of Block objects to a PowerPoint presentation.
         
@@ -173,6 +173,11 @@ class PPTXRenderer:
             slide = prs.slides.add_slide(prs.slide_layouts[6]) # Blank layout
             # Reset cached image width for each new slide
             self._last_image_block_width = None
+            # Attach speaker notes mapped via originating markdown slide index
+            if page_speaker_notes and page_blocks:
+                src_idx = getattr(page_blocks[0], 'source_slide', None)
+                if src_idx is not None and 0 <= src_idx < len(page_speaker_notes):
+                    self._add_speaker_notes_to_slide(slide, page_speaker_notes[src_idx])
 
             # Track cumulative height for element positioning
             # Start with top padding
@@ -477,7 +482,8 @@ class PPTXRenderer:
                             # Pop any attributes added by a span (color, underline, strike, bold/italic)
                             while format_stack and (
                                 format_stack[-1].startswith('color:') or
-                                format_stack[-1] in ['u', 'u_wavy', 'del', 'strong', 'b', 'em', 'i', 'mark']):
+                                format_stack[-1] in ['u', 'u_wavy', 'del', 'strong', 'b', 'em', 'i', 'mark'] or
+                                (isinstance(format_stack[-1], tuple) and len(format_stack[-1])==3)):
                                 format_stack.pop()
                 else:
                     open_match = re.match(r'<\s*([a-z0-9]+)', tag_lower)
@@ -528,6 +534,31 @@ class PPTXRenderer:
                                     format_stack.append('em')
 
                         # --------------------------------------
+                        # Inline style="color:" handling (works for slides & notes)
+                        # --------------------------------------
+                        style_match = re.search(r'style\s*=\s*"([^"]+)"', tag_lower)
+                        if style_match:
+                            style_content = style_match.group(1)
+                            color_match = re.search(r'color\s*:\s*([^;]+)', style_content)
+                            if color_match:
+                                col_val = color_match.group(1).strip()
+                                rgb = None
+                                if col_val.startswith('#'):
+                                    hexval = col_val.lstrip('#')
+                                    if len(hexval) == 3:
+                                        hexval = ''.join(c*2 for c in hexval)
+                                    try:
+                                        rgb = tuple(int(hexval[i:i+2], 16) for i in (0,2,4))
+                                    except ValueError:
+                                        rgb = None
+                                else:
+                                    m = re.match(r'rgb\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)', col_val)
+                                    if m:
+                                        rgb = tuple(int(m.group(i)) for i in range(1,4))
+                                if rgb:
+                                    format_stack.append(rgb)
+
+                        # (inline style="color: …" is handled separately for speaker notes)
                         # Handle span tags for pandoc-style attributes
                         # --------------------------------------
                         elif tag_name == 'span':
@@ -1561,7 +1592,43 @@ class PPTXRenderer:
                         ln.append(parse_xml('<a:round/>'))
                         ln.append(parse_xml('<a:headEnd type="none" w="med" len="med"/>'))
                         ln.append(parse_xml('<a:tailEnd type="none" w="med" len="med"/>'))
-        
+
         if self.debug:
             logger.info(f"🔲 Applied enhanced table borders: w=12700 EMUs, color=#{color_hex}")
-            logger.info(f"   Added headEnd/tailEnd for reliable line width application") 
+            logger.info("   Added headEnd/tailEnd for reliable line width application")
+
+    # ------------------------------------------------------------------
+    # Speaker notes helpers
+    # ------------------------------------------------------------------
+    def _add_speaker_notes_to_slide(self, slide, note_html: str):
+        """Attach speaker notes (HTML) to a PowerPoint slide."""
+        if not note_html:
+            return
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(note_html, "html.parser")
+
+        notes_slide = slide.notes_slide  # Auto-creates if missing
+        tf = notes_slide.notes_text_frame
+        tf.clear()
+
+        # Iterate over <p> blocks; if none, treat whole as one paragraph
+        paragraphs = soup.find_all("p") or [soup]
+        first_para = tf.paragraphs[0]
+
+        for idx, p in enumerate(paragraphs):
+            para = first_para if idx == 0 else tf.add_paragraph()
+            para.clear()  # remove default empty run
+            html_snippet = p.decode_contents()
+            # Parse runs (inline style colours handled generically by _parse_html_to_runs)
+            self._parse_html_to_runs(para, html_snippet)
+
+        # Ensure default font family/size on runs missing those attrs
+        default_size = self.theme_config["font_sizes"].get("p", 12)
+        for para in tf.paragraphs:
+            for run in para.runs:
+                if not run.font.name:
+                    run.font.name = self.theme_config["font_family"]
+                if not run.font.size:
+                    from pptx.util import Pt
+                    run.font.size = Pt(default_size)
+ 

@@ -3,7 +3,6 @@ Enhanced markdown parser with support for multiple page break formats.
 """
 from typing import List, Optional
 from markdown_it import MarkdownIt
-import os
 from pathlib import Path
 
 from .paths import resolve_asset
@@ -21,6 +20,8 @@ class MarkdownParser:
             base_dir: Base directory for resolving relative image paths. Required.
         """
         self.base_dir = base_dir
+        # Store per-slide speaker notes extracted during parsing
+        self.slide_notes: List[str] = []
         
         # markdown-it-py doesn't use the same extension system as the old markdown library
         # but it has most features built-in by default
@@ -52,9 +53,10 @@ class MarkdownParser:
         from mdit_py_plugins.container import container_plugin
         from mdit_py_plugins.dollarmath import dollarmath_plugin
         from mdit_py_plugins.front_matter import front_matter_plugin
-        from mdit_py_plugins.tasklists import tasklists_plugin
-        from mdit_py_plugins.deflist import deflist_plugin
-        from mdit_py_plugins.admon import admon_plugin  # ✅ NEW – admonition support
+        # from mdit_py_plugins.tasklists import tasklists_plugin
+        # from mdit_py_plugins.deflist import deflist_plugin
+        from mdit_py_plugins.admon import admon_plugin 
+        from .markdown_plugins.speaker_notes import speaker_notes_plugin
 
         # ------------------------------------------------------------------
         # Plugin registration chain
@@ -79,6 +81,7 @@ class MarkdownParser:
                 # .use(container_plugin, 'columns')   # see note above
                 # .use(container_plugin, 'column')    # see note above
                 .use(container_plugin, 'note')         # admonition / call-out boxes
+                .use(speaker_notes_plugin)
                 .use(dollarmath_plugin,
                      allow_space=False,                # Don't allow spaces after/before $
                      allow_digits=False,               # Don't allow digits before/after $
@@ -192,9 +195,17 @@ class MarkdownParser:
 
         import re
         
+        # Strip out speaker-note lines (those starting with "???"). Actual
+        # extraction happens later in `parse_with_page_breaks`, so here we just
+        # remove them to keep the main markdown clean.
+        cleaned_markdown = re.sub(r'^\?\?\?.*$', '', markdown_text, flags=re.MULTILINE)
+        processed = cleaned_markdown
+        
+
+        
         # Convert ==highlight== to HTML <mark> tags
         # This needs to be done before markdown processing to avoid conflicts
-        processed = re.sub(r'==(.*?)==', r'<mark>\1</mark>', markdown_text)
+        processed = re.sub(r'==(.*?)==', r'<mark>\1</mark>', processed)
         
         # Convert ++underline++ (single) and ^^wavy^^ underline first
         processed = re.sub(r'\+\+(.*?)\+\+', r'<u>\1</u>', processed)
@@ -499,11 +510,17 @@ class MarkdownParser:
         # Process page breaks in markdown
         slides_md = []
         current_slide = []
+        slide_notes: List[str] = []
+        current_notes: List[str] = []
         
         lines = markdown_text.strip().split('\n')
         
         for line in lines:
             line_stripped = line.strip()
+            # Speaker notes: lines beginning with '???' are collected as notes for the current slide
+            if line_stripped.startswith('???'):
+                current_notes.append(line_stripped[3:].lstrip())
+                continue
             
             # Check for various page break formats
             is_page_break = False
@@ -537,31 +554,43 @@ class MarkdownParser:
                 is_page_break = True
             
             if is_page_break:
-                # Add current slide content if it exists
-                if current_slide:
+                # Finalise the current slide content and its notes
+                if current_slide or current_notes:
                     slides_md.append('\n'.join(current_slide))
-                # Start a new slide after a page break
+                    slide_notes.append('\n'.join(current_notes))
+                # Start a new slide context
                 current_slide = []
+                current_notes = []
             else:
                 current_slide.append(line)
                 
-        # Add the last slide if it has content
-        if current_slide:
+        # Add the last slide (and notes) if any content exists
+        if current_slide or current_notes:
             slides_md.append('\n'.join(current_slide))
+            slide_notes.append('\n'.join(current_notes))
         
         # If no page breaks were found, treat the whole content as one slide
         if not slides_md:
             slides_md = [markdown_text]
         
-        # Convert each slide to HTML
-        html_slides = []
-        for slide_md in slides_md:
-            if not slide_md.strip():
-                # Skip completely empty slides
+        # Convert slides and their notes to HTML
+        html_slides: List[str] = []
+        html_notes: List[str] = []
+        for idx, slide_md in enumerate(slides_md):
+            if not slide_md.strip() and (idx >= len(slide_notes) or not slide_notes[idx].strip()):
+                # Skip completely empty slides that also have no notes
                 continue
-            
+
             html = self.parse(slide_md)
             html_slides.append(html)
+
+            # Render notes (if any) using the same markdown pipeline for rich formatting
+            note_md = slide_notes[idx] if idx < len(slide_notes) else ""
+            note_html = self.parse(note_md) if note_md.strip() else ""
+            html_notes.append(note_html)
+        
+        # Expose notes to callers (e.g. LayoutEngine & PPTXRenderer)
+        self.slide_notes = html_notes
         
         return html_slides
     
@@ -617,6 +646,11 @@ class MarkdownParser:
         # If there are page breaks, slide count is page breaks + 1
         # If no page breaks, it's just 1 slide
         return page_breaks + 1
+
+
+def get_slide_notes(self) -> List[str]:
+        """Return HTML-formatted speaker notes collected during the last parse."""
+        return self.slide_notes
 
 
 def parse_markdown(markdown_text: str, extensions: Optional[List[str]] = None) -> str:

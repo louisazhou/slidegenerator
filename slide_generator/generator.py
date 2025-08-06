@@ -94,7 +94,7 @@ class SlideGenerator:
         )
         
         # Step 2: PPTX renderer converts pages to PowerPoint presentation
-        self.pptx_renderer.render(pages, output_path)
+        self.pptx_renderer.render(pages, output_path, self.layout_engine.slide_notes)
         
         if self.debug:
             logger.info(f"Generated presentation saved to: {output_path}")

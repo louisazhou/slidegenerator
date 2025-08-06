@@ -374,6 +374,24 @@ generator.generate(markdown_content, "dark_presentation.pptx")
 
 ---
 
+# 📒 Speaker Notes Demo
+
+This slide demonstrates the new *speaker-notes* feature.  The lines below beginning with three question marks will **not** show up on the slide itself but should appear in the PPTX speaker-notes pane.
+
+??? Remember to emphasise the core takeaway during the talk.
+??? [Secondary reminder]{.underline}: timebox this section to **two minutes**.
+
+---
+
+# 📒 Speaker Notes Demo 2
+
+[A second slide]{.red} to ensure notes mapping is robust.
+
+??? [Speaker note]{.red} for ==slide 2== – keep _eye-contact_ with the [audience](www.google.com).
+??? Mention the live ~~demo~~ coming right after this.
+
+---
+
 # 📝 Text Formatting Features
 
 This version has **enhanced text formatting** capabilities for company server compatibility.
