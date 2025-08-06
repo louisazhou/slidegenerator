@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
-Math renderer stub - KaTeX functionality disabled for company server compatibility.
-Full math rendering capabilities are available in the feature/katex-math branch.
+Math renderer - simplified to show raw LaTeX text without KaTeX dependencies.
 """
 
 import hashlib
@@ -16,20 +15,15 @@ logger = logging.getLogger(__name__)
 
 class MathRenderer:
     """
-    No-op math renderer for company server compatibility.
-    
-    This stub version provides the same interface as the full math renderer
-    but simply returns fallback text instead of rendered equations.
-    
-    For full KaTeX math rendering, use the feature/katex-math branch.
+    Simplified math renderer that shows raw LaTeX text instead of rendered equations.
     """
     
     def __init__(self, cache_dir: str, debug: bool = False):
         """
-        Initialize the no-op math renderer.
+        Initialize the simplified math renderer.
         
         Args:
-            cache_dir: Directory that would cache rendered SVG files (unused in stub)
+            cache_dir: Directory for compatibility (unused)
             debug: Enable debug output
         """
         self.debug = debug
@@ -40,12 +34,11 @@ class MathRenderer:
         self.png_text_color = "#000000"
         
         if self.debug:
-            logger.info("Math renderer STUB active - equations will show as text (cache dir: %s)", self.cache_dir)
-            logger.info("For full math rendering, use the feature/katex-math branch")
+            logger.info("Math renderer: showing raw LaTeX text instead of rendered equations")
     
     def render_to_svg(self, latex: str, display_mode: bool = False) -> Tuple[str, Dict]:
         """
-        Stub method - returns fallback text instead of SVG.
+        Returns the LaTeX text as-is.
         
         Args:
             latex: LaTeX math expression
@@ -55,7 +48,7 @@ class MathRenderer:
             Tuple of (placeholder_path, metadata)
         """
         if self.debug:
-            logger.info("Math rendering disabled - showing text fallback for: %s", latex[:50])
+            logger.info("Showing raw LaTeX: %s", latex[:50])
         
         # Create a placeholder file with the LaTeX text
         cache_key = hashlib.md5(latex.encode('utf-8')).hexdigest()
@@ -67,7 +60,7 @@ class MathRenderer:
         
         # Return minimal metadata
         metadata = {
-            'width': 100,
+            'width': len(latex) * 8,  # Rough estimate based on text length
             'height': 20,
             'baseline': 10,
             'type': 'text_fallback'
@@ -77,7 +70,7 @@ class MathRenderer:
     
     async def render_to_png(self, latex: str, display_mode: bool = False) -> Tuple[str, Dict]:
         """
-        Stub method - returns fallback text instead of PNG.
+        Returns the LaTeX text as-is.
         
         Args:
             latex: LaTeX math expression
@@ -86,45 +79,41 @@ class MathRenderer:
         Returns:
             Tuple of (placeholder_path, metadata)
         """
-        if self.debug:
-            logger.info("Math rendering disabled - PNG fallback for: %s", latex[:50])
-        
-        # Just return the SVG path (text file) as a fallback
         return self.render_to_svg(latex, display_mode)
     
     def render_math_html(self, html_content: str, temp_dir: str, mode: str = "mixed") -> str:
         """
-        Stub method - replaces math elements with text fallbacks.
+        Replaces math elements with their raw LaTeX content.
         
         Args:
             html_content: HTML content with math elements
-            temp_dir: Temporary directory (unused in stub)
-            mode: Rendering mode (unused in stub)
+            temp_dir: Temporary directory (unused)
+            mode: Rendering mode (unused)
             
         Returns:
-            HTML with math elements replaced by text
+            HTML with math elements replaced by raw LaTeX text
         """
         if self.debug:
-            logger.info("Processing HTML with math fallbacks (mode: %s)", mode)
+            logger.info("Converting math elements to raw LaTeX text")
         
         soup = BeautifulSoup(html_content, 'html.parser')
         
-        # Find math elements and replace with text
+        # Find math elements and replace with their LaTeX content
         math_elements = soup.find_all(class_=re.compile(r'\bmath\b'))
         
         for element in math_elements:
             # Extract LaTeX content from the element
-            latex = element.get_text()
+            latex = element.get_text().strip()
             
-            # Create a simple text fallback
-            fallback = soup.new_tag('span', class_='math-fallback')
-            fallback.string = f"[Math: {latex}]"
+            # Create a simple text span with the raw LaTeX
+            fallback = soup.new_tag('span', class_='math-text')
+            fallback.string = latex
             
             # Replace the math element
             element.replace_with(fallback)
             
             if self.debug:
-                logger.info("Replaced math element with text: %s", latex[:30])
+                logger.info("Replaced math with raw text: %s", latex[:30])
         
         return str(soup)
 
@@ -134,14 +123,14 @@ _math_renderer = None
 
 def get_math_renderer(cache_dir: str = None, debug: bool = False) -> MathRenderer:
     """
-    Get a global math renderer instance (stub version).
+    Get a global math renderer instance.
     
     Args:
         cache_dir: Directory to cache rendered files
         debug: Enable debug output
         
     Returns:
-        MathRenderer stub instance
+        MathRenderer instance
     """
     global _math_renderer
     

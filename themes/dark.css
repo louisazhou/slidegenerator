@@ -280,17 +280,11 @@ mark {
 .admonition.failure > .admonition-title::before { content:"❌"; }
 .admonition.attention > .admonition-title::before { content:"👀"; }
 
-/* Math equation styling - BASIC FALLBACK ONLY */
-/* Full KaTeX math rendering available in feature/katex-math branch */
-
-.math-fallback {
+/* Math text styling - shows raw LaTeX */
+.math-text {
     font-family: 'Courier New', monospace;
-    background-color: #2d2d2d;
-    color: #e0e0e0;
-    padding: 2px 4px;
-    border-radius: 3px;
-    border: 1px solid #555;
-    font-size: 0.9em;
+    color: #ff6b9d;
+    font-weight: 500;
 }
 
 .math-image {
@@ -306,15 +300,4 @@ mark {
 .math-image.display {
     display: block;
     margin: 0.5em auto;
-}
-
-/* Fallback for when math HTML elements exist but KaTeX is disabled */
-.math-html {
-    font-family: 'Courier New', monospace;
-    background-color: #2d2d2d;
-    color: #e0e0e0;
-    padding: 2px 4px;
-    border-radius: 3px;
-    border: 1px solid #555;
-    font-size: 0.9em;
 } 

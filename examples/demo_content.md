@@ -388,15 +388,28 @@ The slide generator supports:
 - Lists and nested content
 - Tables and structured data
 
-## Advanced Typography
+## Math Expression Support
 
-For mathematical expressions, this version shows them as formatted text:
+Mathematical expressions are displayed as raw LaTeX text:
 
-- Einstein's equation: E=mc²
-- Quadratic formula: x = (-b ± √(b²-4ac))/2a
-- Fundamental theorem: ∫[a to b] f'(x)dx = f(b) - f(a)
+- Einstein's equation: $E=mc^2$
+- Quadratic formula: $x = \frac{-b \pm \sqrt{b^2-4ac}}{2a}$
+- Integration by parts: $\int u \, dv = uv - \int v \, du$
 
-> **Note:** Full LaTeX math rendering with KaTeX is available in the `feature/katex-math` branch for environments that support it.
+For display math, use double dollar signs:
+
+$$
+\sum_{n=1}^{\infty} \frac{1}{n^2} = \frac{\pi^2}{6}
+$$
+
+$$
+\begin{matrix}
+a & b \\
+c & d
+\end{matrix}
+$$
+
+The raw LaTeX is shown directly without rendering for maximum compatibility.
 
 Text formatting works consistently across all themes and output formats!
 

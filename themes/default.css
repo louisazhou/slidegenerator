@@ -283,16 +283,11 @@ mark {
 .admonition.failure > .admonition-title::before { content:"❌"; }
 .admonition.attention > .admonition-title::before { content:"👀"; }
 
-/* Math equation styling - BASIC FALLBACK ONLY */
-/* Full KaTeX math rendering available in feature/katex-math branch */
-
-.math-fallback {
+/* Math text styling - shows raw LaTeX */
+.math-text {
     font-family: 'Courier New', monospace;
-    background-color: #f5f5f5;
-    padding: 2px 4px;
-    border-radius: 3px;
-    border: 1px solid #ddd;
-    font-size: 0.9em;
+    color: #d63384;
+    font-weight: 500;
 }
 
 .math-image {
@@ -308,14 +303,4 @@ mark {
 .math-image.display {
     display: block;
     margin: 0.5em auto;
-}
-
-/* Fallback for when math HTML elements exist but KaTeX is disabled */
-.math-html {
-    font-family: 'Courier New', monospace;
-    background-color: #f5f5f5;
-    padding: 2px 4px;
-    border-radius: 3px;
-    border: 1px solid #ddd;
-    font-size: 0.9em;
 } 

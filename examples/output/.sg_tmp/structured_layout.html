@@ -288,7 +288,19 @@ mark {
 .admonition.failure > .admonition-title::before { content:"❌"; }
 .admonition.attention > .admonition-title::before { content:"👀"; }
 
-/* Math equation styling */
+/* Math equation styling - BASIC FALLBACK ONLY */
+/* Full KaTeX math rendering available in feature/katex-math branch */
+
+.math-fallback {
+    font-family: 'Courier New', monospace;
+    background-color: #2d2d2d;
+    color: #e0e0e0;
+    padding: 2px 4px;
+    border-radius: 3px;
+    border: 1px solid #555;
+    font-size: 0.9em;
+}
+
 .math-image {
     max-width: 100%;
     height: auto;
@@ -304,39 +316,15 @@ mark {
     margin: 0.5em auto;
 }
 
-/* KaTeX HTML math styling */
+/* Fallback for when math HTML elements exist but KaTeX is disabled */
 .math-html {
-    max-width: 100%;
-}
-
-.math-html.inline {
-    display: inline;
-}
-
-.math-html.display {
-    display: block;
-    text-align: center;
-    margin: 0.5em auto;
-}
-
-/* Hide MathML (accessibility) and show only visual HTML rendering */
-.katex-mathml {
-    display: none !important;
-}
-
-.katex-html {
-    display: inline !important;
-}
-
-/* Fix KaTeX SVG sizing issues */
-.katex svg {
-    max-width: 100% !important;
-    height: auto !important;
-}
-
-.katex .hide-tail {
-    max-width: 100% !important;
-    overflow: hidden !important;
+    font-family: 'Courier New', monospace;
+    background-color: #2d2d2d;
+    color: #e0e0e0;
+    padding: 2px 4px;
+    border-radius: 3px;
+    border: 1px solid #555;
+    font-size: 0.9em;
 } 
 </style>
 </head>
@@ -361,7 +349,7 @@ Quarter: Q4</p>
 <div class="slide" id="slide-2">
 <h1 data-bid="b19">Sales Performance Analysis</h1>
 <p data-bid="b20">Our quarterly sales performance shows consistent improvement:</p>
-<img alt="" data-bid="b21" data-caption="Quarterly sales performance vs targets showing steady improvement" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/output/.sg_tmp/slide_8742a85f/slide_8742a85f_create_sales_chart.png" data-scale-type="x" data-scale-x="0.8" src="file:///Users/louisazhou/Downloads/Slide_generate/examples/output/.sg_tmp/slide_8742a85f/slide_8742a85f_create_sales_chart.png"/><p class="figure-caption" data-bid="b22">Quarterly sales performance vs targets showing steady improvement</p>
+<img alt="" data-bid="b21" data-caption="Quarterly sales performance vs targets showing steady improvement" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/output/.sg_tmp/slide_89f29345/slide_89f29345_create_sales_chart.png" data-scale-type="x" data-scale-x="0.8" src="file:///Users/louisazhou/Downloads/Slide_generate/examples/output/.sg_tmp/slide_89f29345/slide_89f29345_create_sales_chart.png"/><p class="figure-caption" data-bid="b22">Quarterly sales performance vs targets showing steady improvement</p>
 <h2 data-bid="b23">Key Insights</h2>
 <p data-bid="b24" data-list-levels="0,0,0" data-list-type="ul"><span class="green bold" data-bid="b25">Q4 exceeded targets</span> by 5.6%<br data-bid="b26"/>Average performance: 87.5%<br data-bid="b27"/><span class="blue italic" data-bid="b28">Trend is positive</span> across all quarters</p>
 </div>
@@ -369,7 +357,7 @@ Quarter: Q4</p>
 <div class="slide" id="slide-3">
 <h1 data-bid="b29">Market Position</h1>
 <p data-bid="b30">Our market share remains strong in the competitive landscape:</p>
-<img alt="" data-bid="b31" data-caption="Current market share distribution showing our leadership position" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/output/.sg_tmp/slide_fb67b5a0/slide_fb67b5a0_create_market_share.png" data-scale-type="y" data-scale-y="0.6" src="file:///Users/louisazhou/Downloads/Slide_generate/examples/output/.sg_tmp/slide_fb67b5a0/slide_fb67b5a0_create_market_share.png"/><p class="figure-caption" data-bid="b32">Current market share distribution showing our leadership position</p>
+<img alt="" data-bid="b31" data-caption="Current market share distribution showing our leadership position" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/output/.sg_tmp/slide_efe173e6/slide_efe173e6_create_market_share.png" data-scale-type="y" data-scale-y="0.6" src="file:///Users/louisazhou/Downloads/Slide_generate/examples/output/.sg_tmp/slide_efe173e6/slide_efe173e6_create_market_share.png"/><p class="figure-caption" data-bid="b32">Current market share distribution showing our leadership position</p>
 <h3 data-bid="b33">Strategic Advantages</h3>
 <p data-bid="b34" data-list-levels="0,0,0" data-list-type="ol"><span class="green bold" data-bid="b35">Market Leader</span>: 35% market share<br data-bid="b36"/>Strong brand recognition<br data-bid="b37"/>Customer loyalty: 84.7%</p>
 </div>
@@ -655,7 +643,7 @@ Quarter: Q4</p>
 <div class="slide" id="slide-10">
 <h1 data-bid="b298">Growth Trajectory</h1>
 <h2 data-bid="b299">Monthly Growth Analysis</h2>
-<img alt="" data-bid="b300" data-caption="Monthly growth rate showing accelerating trend throughout the year" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/output/.sg_tmp/slide_41289bc7/slide_41289bc7_create_growth_trend.png" data-scale-type="x" data-scale-x="0.9" src="file:///Users/louisazhou/Downloads/Slide_generate/examples/output/.sg_tmp/slide_41289bc7/slide_41289bc7_create_growth_trend.png"/><p class="figure-caption" data-bid="b301">Monthly growth rate showing accelerating trend throughout the year</p>
+<img alt="" data-bid="b300" data-caption="Monthly growth rate showing accelerating trend throughout the year" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/output/.sg_tmp/slide_27b543ea/slide_27b543ea_create_growth_trend.png" data-scale-type="x" data-scale-x="0.9" src="file:///Users/louisazhou/Downloads/Slide_generate/examples/output/.sg_tmp/slide_27b543ea/slide_27b543ea_create_growth_trend.png"/><p class="figure-caption" data-bid="b301">Monthly growth rate showing accelerating trend throughout the year</p>
 <h3 data-bid="b302">Growth Drivers</h3>
 <p data-bid="b303" data-list-levels="0,0,0" data-list-type="ul"><strong data-bid="b304">Product Innovation</strong>: 32.0% impact<br data-bid="b305"/><strong data-bid="b306">Market Expansion</strong>: 28.0% contribution<br data-bid="b307"/><strong data-bid="b308">Customer Acquisition</strong>: 15.0% new customers</p>
 <p data-bid="b309"><span class="green bold italic" data-bid="b310">Sustained growth expected into next quarter</span></p>
@@ -666,7 +654,7 @@ Quarter: Q4</p>
 <div class="columns" data-bid="b312">
 <div class="column" data-bid="b313" data-column-width="60%" style="flex:0 0 60%;">
 <h3 data-bid="b314">Performance Metrics</h3>
-<img alt="" data-bid="b315" data-caption="Performance overview" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/output/.sg_tmp/slide_ca6dadf3/slide_ca6dadf3_create_sales_chart.png" data-in-column="true" data-scale-type="x" data-scale-x="1.0" src="file:///Users/louisazhou/Downloads/Slide_generate/examples/output/.sg_tmp/slide_ca6dadf3/slide_ca6dadf3_create_sales_chart.png"/><p class="figure-caption" data-bid="b316">Performance overview</p>
+<img alt="" data-bid="b315" data-caption="Performance overview" data-filepath="/Users/louisazhou/Downloads/Slide_generate/examples/output/.sg_tmp/slide_50cb2d3a/slide_50cb2d3a_create_sales_chart.png" data-in-column="true" data-scale-type="x" data-scale-x="1.0" src="file:///Users/louisazhou/Downloads/Slide_generate/examples/output/.sg_tmp/slide_50cb2d3a/slide_50cb2d3a_create_sales_chart.png"/><p class="figure-caption" data-bid="b316">Performance overview</p>
 <p data-bid="b317"><strong data-bid="b318">Key Highlights:</strong></p>
 <p data-bid="b319" data-list-levels="0,0" data-list-type="ul">Revenue: $4.05M<br data-bid="b320"/>Growth: 12.6%</p>
 </div>
