@@ -652,6 +652,9 @@ class StructuredLayoutParser:
                         level_data = ','.join(levels)
                         list_type = content.get('listType', tag)
                         
+                        # IMPORTANT: Set the correct tag for list blocks
+                        tag = list_type
+                        
                         # Create block with list-specific format, preserving existing BIDs
                         text_content = f'<p data-list-levels="{level_data}" data-list-type="{list_type}">{formatted_text}</p>'
                         

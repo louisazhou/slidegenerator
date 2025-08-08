@@ -872,14 +872,13 @@ class LayoutEngine:
                 for sub in li.find_all(['ul', 'ol'], recursive=False):
                     _walk(sub, level + 1)
 
-        # Locate the first list element matching current tag
-        if soup.name in ('ul', 'ol'):
+        # Locate the correct root list element
+        if soup.name == list_tag:
+            # The soup itself is the correct list type
             root = soup
         else:
-            root = soup.find(list_tag) or soup.find(['ul', 'ol'])
-
-        if not root:
-            # The fragment did not include the outer list tag; wrap it
+            # For fragments, we need to wrap them to ensure we process ALL items
+            # Don't use soup.find() as it might find nested lists instead of the root
             wrapped = f'<{list_tag}>' + list_content + f'</{list_tag}>'
             root = BeautifulSoup(wrapped, 'html.parser').find(list_tag)
 
