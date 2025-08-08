@@ -1,6 +1,9 @@
-/* Dark theme for slide generation */
+/* Dark theme for slide generation - PRESENTATION-AFFECTING STYLES ONLY */
+/* HTML-specific layout styles are now hardcoded in layout_parser.py */
 
-/* Slide dimensions and aspect ratio configuration */
+/* ====================================================================
+   CORE LAYOUT VARIABLES - Affect both HTML measurement and slides
+   ==================================================================== */
 :root {
     --slide-width: 960px;
     --slide-height: 540px;
@@ -12,15 +15,12 @@
     /* Table styling deltas */
     --table-font-delta: -2pt;    /* Table font size = body - 2pt */
     --table-width-safety: 1.10;  /* 10% safety buffer for table width (1.10 = 110%) */
-    /* NOTE: --table-border-width removed - python-pptx limitation
-     * PowerPoint ignores border thickness in XML even when valid
-     * Only border COLOR can be controlled via python-pptx
-     * For custom thickness: use PPTX templates or VBA/Aspose.Slides */
 }
 
+/* ====================================================================
+   THEME COLORS AND BACKGROUNDS - Affect slide appearance
+   ==================================================================== */
 body {
-    margin: 0;
-    padding: 0;
     font-family: var(--slide-font-family), sans-serif;
     background-color: #1a1a1a;
     color: #e0e0e0;
@@ -28,23 +28,20 @@ body {
 
 .slide {
     width: var(--slide-width);
-    min-height: var(--slide-height); /* Allow content to extend beyond slide for debugging */
+    min-height: var(--slide-height);
     padding: var(--slide-padding);
-    box-sizing: border-box;
-    position: relative;
-    page-break-after: always;
     background-color: #1a1a1a;
     color: #e0e0e0;
-    overflow: visible; /* Show all content in HTML for debugging */
-    border: 2px dashed #444; /* Visual indicator of slide boundaries */
 }
 
+/* ====================================================================
+   FONT SIZES - Must match exactly between HTML and presentations
+   ==================================================================== */
 h1 {
     font-size: 16px;
-    line-height: 1;
+    line-height: 1.2;
     margin-top: 0;
     margin-bottom: 20px;
-    width: fit-content;
     color: #e0e0e0;
 }
 
@@ -53,7 +50,6 @@ h2 {
     line-height: 1.2;
     margin-top: 0;
     margin-bottom: 15px;
-    width: fit-content;
     color: #e0e0e0;
 }
 
@@ -62,7 +58,6 @@ h3 {
     line-height: 1.2;
     margin-top: 0;
     margin-bottom: 12px;
-    width: fit-content;
     color: #e0e0e0;
 }
 
@@ -70,8 +65,6 @@ p {
     font-size: 10px;
     line-height: 1.2;
     margin-bottom: 0px;
-    width: fit-content;
-    max-width: 100%;
     color: #e0e0e0;
 }
 
@@ -80,19 +73,17 @@ ul, ol {
     line-height: 1.2;
     margin-left: 20px;
     margin-bottom: 0px;
-    width: fit-content;
-    max-width: calc(100% - 20px);
     color: #e0e0e0;
 }
 
 li {
     line-height: 1.2;
     margin-bottom: 0;
-    width: fit-content;
-    max-width: 100%;
 }
 
-/* Code blocks - separate styling for pre and inline code */
+/* ====================================================================
+   CODE BLOCK STYLING - Affects both HTML and presentation colors
+   ==================================================================== */
 pre {
     font-family: 'Courier New', monospace;
     font-size: 14px;
@@ -100,29 +91,6 @@ pre {
     background-color: #2d2d2d;
     color: #ffffff;
     padding: 10px;
-    border-radius: 4px;
-    margin-bottom: 15px;
-    width: auto;
-    max-width: 100%; /* Ensure code blocks fit within slide boundaries */
-    overflow-x: auto; /* Add horizontal scrolling if needed */
-    white-space: pre-wrap; /* Allow text wrapping in code blocks */
-    word-wrap: break-word; /* Break long words if necessary */
-    box-sizing: border-box; /* Include padding in width calculation */
-    display: block; /* Ensure block display */
-}
-
-pre code {
-    font-family: inherit;
-    font-size: inherit;
-    line-height: inherit;
-    background-color: transparent; /* Don't double-apply background */
-    color: inherit;
-    padding: 0; /* Don't double-apply padding */
-    border-radius: 0;
-    margin: 0;
-    white-space: inherit;
-    word-wrap: inherit;
-    box-sizing: border-box;
 }
 
 code {
@@ -130,30 +98,16 @@ code {
     font-size: 10px;
     background-color: #2d2d2d;
     color: #ffffff;
-    padding: 2px 4px;
-    border-radius: 2px;
 }
 
-table {
-    border-collapse: collapse;
-    width: fit-content;
-    max-width: 100%; /* Prevent overflow but allow natural width */
-    margin-bottom: 15px;
-    table-layout: auto; /* Allow intelligent column sizing */
-    word-wrap: break-word; /* Break long words if necessary */
-}
-
+/* ====================================================================
+   TABLE STYLING - Affects both HTML preview and presentation output
+   ==================================================================== */
 th, td {
     border: 1px solid #ffffff;
     padding: 8px;
-    text-align: left;
-    background-color: transparent;
     color: #ffffff;
-    line-height: 1.4;
     font-size: 10px; /* Match paragraph size so browser measurement matches PPT */
-    word-wrap: break-word; /* Break long words in table cells */
-    max-width: 200px; /* Prevent individual cells from getting too wide */
-    overflow-wrap: break-word; /* Modern CSS property for word breaking */
 }
 
 th {
@@ -161,44 +115,20 @@ th {
     color: #ffffff;
 }
 
-.page-break {
-    display: none;  /* Hidden in CSS but will be detected by JavaScript */
-}
-
-/* Two-column layout support */
+/* ====================================================================
+   COLUMN LAYOUT VARIABLES - Affect spacing calculations
+   ==================================================================== */
 .columns {
-  display: flex;
-  gap: var(--column-gap);
-  align-items: flex-start; /* Keep columns aligned to top */
-  break-inside: avoid; /* Prevent page breaks inside column container */
-  page-break-inside: avoid;
+    gap: var(--column-gap);
 }
 
 .column {
-  flex: 1 1 0;
-  padding: 0 var(--column-padding);
-  min-width: 0; /* Prevent columns from overflowing */
-  break-inside: avoid;
-  page-break-inside: avoid;
+    padding: 0 var(--column-padding);
 }
 
-/* Ensure tables inside columns fill the available column width */
-.column table {
-  width: max-content;
-  max-width: 100%;
-}
-
-/* Column width flex rules */
-.column[data-column-width="auto"] { flex: 0 0 auto; }
-.column[data-column-width="default"] { flex: 1 1 0; }
-
-/* Highlighted inline text */
-mark {
-    color: #ffcc00; /* Golden highlight on dark bg */
-    background-color: transparent;
-}
-
-/* Inline color utility classes generated to match COLOR_MAP in renderer */
+/* ====================================================================
+   INLINE COLOR CLASSES - Used by rich text formatting
+   ==================================================================== */
 .red { color: rgb(255,0,0); }
 .blue { color: rgb(0,102,204); }
 .green { color: rgb(0,153,0); }
@@ -208,96 +138,48 @@ mark {
 .black { color: rgb(255,255,255); }
 .white { color: rgb(255,255,255); }
 .yellow { color: rgb(255,255,0); }
-.dodgerblue { color: rgb(30,144,255); } 
+.dodgerblue { color: rgb(30,144,255); }
 
-/* Inline formatting utility classes for attribute syntax */
-.bold { font-weight: bold; }
-.italic { font-style: italic; }
-.underline { text-decoration: underline; }
-.strike { text-decoration: line-through; }
+/* ====================================================================
+   HIGHLIGHT COLORS - Affect text appearance in presentations
+   ==================================================================== */
+mark {
+    color: #ffcc00; /* Golden highlight on dark bg */
+}
 
-/* Wavy underline utility */
-.wavy { text-decoration: underline; text-decoration-style: wavy; text-decoration-color: inherit; }
-
-/* Figure caption styling */
+/* ====================================================================
+   FIGURE CAPTION STYLING - Affects both output formats
+   ==================================================================== */
 .figure-caption {
     font-style: italic;
     color: #cccccc;
     font-size: 10px;
-    margin-top: 5px;
-    text-align: center;
 }
 
-/* Divider slide styling - centered content with larger fonts */
-.slide.divider {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    text-align: center;
-    min-height: calc(var(--slide-height) - 2 * var(--slide-padding));
+/* ====================================================================
+   ADMONITION COLORS AND STYLING - Affect presentation appearance
+   ==================================================================== */
+.admonition { 
+    background-color: #424242; 
+    color: #e0e0e0; 
+    border-left: 4px solid #2196F3; 
 }
-
-.slide.divider h1 {
-    font-size: calc(var(--h1-font-size) + 2px);
-    margin-bottom: 0.5em;
+.admonition-title { 
+    font-size: 10px; 
 }
-
-.slide.divider h2 {
-    font-size: calc(var(--h2-font-size) + 2px);
-    margin-bottom: 0.3em;
-}
-
-.slide.divider h3 {
-    font-size: calc(var(--h3-font-size) + 2px);
-    margin-bottom: 0.3em;
-}
-
-/* Admonition blocks */
-.admonition { padding: 8px 12px; margin: 10px 0; border-left: 4px solid #2196F3; background-color: #424242; color:#e0e0e0; }
-.admonition-title { font-weight:bold;margin-top:0;margin-bottom:4px;font-size:10px; }
 
 .admonition.note,.admonition.summary { border-color:#42A5F5; background:#37474F; }
 .admonition.info { border-color:#29B6F6; background:#35525C; }
 .admonition.tip { border-color:#66BB6A; background:#2E3E2E; }
 .admonition.warning,.admonition.caution { border-color:#FFA726; background:#4A3D1B; }
 .admonition.danger,.admonition.error,.admonition.failure { border-color:#EF5350; background:#4C2626; }
-.admonition.attention { border-color:#FFB300; background:#4A3F14; } 
+.admonition.attention { border-color:#FFB300; background:#4A3F14; }
 
-/* ------------------------------------------------------------------
-   Minimal icon support (same mapping as default theme) so that browser
-   and PPTX have consistent sizing.
--------------------------------------------------------------------*/
-.admonition-title::before { margin-right:4px; }
-.admonition.note > .admonition-title::before,
-.admonition.summary > .admonition-title::before { content:"📝"; }
-.admonition.info > .admonition-title::before { content:"ℹ️"; }
-.admonition.tip > .admonition-title::before { content:"💡"; }
-.admonition.warning > .admonition-title::before,
-.admonition.caution > .admonition-title::before { content:"⚠️"; }
-.admonition.danger > .admonition-title::before { content:"🚫"; }
-.admonition.error > .admonition-title::before,
-.admonition.failure > .admonition-title::before { content:"❌"; }
-.admonition.attention > .admonition-title::before { content:"👀"; }
-
-/* Math text styling - shows raw LaTeX */
+/* ====================================================================
+   MATH TEXT STYLING - Affects appearance when math images unavailable
+   ==================================================================== */
 .math-text {
     font-family: 'Courier New', monospace;
     color: #ff6b9d;
     font-weight: 500;
 }
-
-.math-image {
-    max-width: 100%;
-    height: auto;
-}
-
-.math-image.inline {
-    display: inline;
-    vertical-align: baseline;
-}
-
-.math-image.display {
-    display: block;
-    margin: 0.5em auto;
-} 

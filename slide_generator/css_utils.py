@@ -134,6 +134,10 @@ class CSSParser:
                 r'pre\s*{[^}]*color:\s*([^;}\s]+)',
                 r'code\s*{[^}]*color:\s*([^;}\s]+)'
             ],
+            'code_background': [
+                r'pre\s*{[^}]*background-color:\s*([^;}\s]+)',
+                r'code\s*{[^}]*background-color:\s*([^;}\s]+)'
+            ],
             'heading_text': [
                 r'h[1-6]\s*{[^}]*color:\s*([^;}\s]+)',
                 r'h1\s*{[^}]*color:\s*([^;}\s]+)'

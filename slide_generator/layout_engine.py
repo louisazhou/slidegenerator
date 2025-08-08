@@ -1,21 +1,25 @@
 #!/usr/bin/env python3
 """Layout engine for measuring HTML elements and pagination."""
-import re, os
+
+import base64
 import logging
-from typing import List, Optional, Callable, Dict, Tuple
-from pathlib import Path
-from PIL import Image
+import mimetypes
+import os
+import re
 from html import unescape
+from pathlib import Path
+from typing import List, Optional, Callable, Dict, Tuple
+
 from bs4 import BeautifulSoup
-import base64, mimetypes
-from .models import Block
+from PIL import Image
+
+from .css_utils import CSSParser
+from .layout_parser import parse_html_with_structured_layout
 from .markdown_parser import MarkdownParser
+from .models import Block
 from .theme_loader import get_css
 
 logger = logging.getLogger(__name__)
-
-# Use centralized CSS parsing
-from .css_utils import CSSParser
 
 
 class ImageDimensionCache:
@@ -562,8 +566,6 @@ class LayoutEngine:
             from .math_renderer import get_math_renderer
             math_renderer = get_math_renderer(cache_dir=str(self.tmp_dir), debug=self.debug)
             # Derive theme text colour from CSS so math PNGs match theme
-            import re
-            from .theme_loader import get_css
             css = get_css(self.theme)
             m = re.search(r'body\s*{[^}]*?color:\s*([^;\s]+)', css, re.IGNORECASE | re.DOTALL)
             theme_text_color = m.group(1).strip() if m else '#000000'
@@ -597,7 +599,6 @@ class LayoutEngine:
         self._current_temp_dir = temp_dir
         
         # Always use structured pptx-box parser
-        from .layout_parser import parse_html_with_structured_layout
         
         if self.debug:
             logger.info("Using structured pptx-box parser")
@@ -1171,10 +1172,9 @@ class LayoutEngine:
                     list_type = p.get('data-list-type', 'ul')
                     # counters per nesting level for ordered lists
                     counters = {}
-                    import re as _re
                     raw_html = p.decode_contents()
                     # split on any <br>, <br/>, or <br /> (case-insensitive)
-                    segments = [seg for seg in _re.split(r'<br[^>]*>', raw_html, flags=_re.IGNORECASE) if seg.strip()]
+                    segments = [seg for seg in re.split(r'<br[^>]*>', raw_html, flags=re.IGNORECASE) if seg.strip()]
                     new_html_parts = []
                     for seg_idx, seg in enumerate(segments):
                         level = levels[seg_idx] if seg_idx < len(levels) else 0
@@ -1191,7 +1191,7 @@ class LayoutEngine:
                         indent = 20 * level
                         new_html_parts.append(f'<span class="dbg-list" style="margin-left:{indent}px">{bullet}&nbsp;{seg.strip()}</span>')
                     p.clear()
-                    p.append(_BS(''.join(new_html_parts), 'html.parser'))
+                    p.append(BeautifulSoup(''.join(new_html_parts), 'html.parser'))
                 page_html = str(soup_page)
             except Exception:
                 pass

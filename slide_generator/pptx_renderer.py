@@ -4,16 +4,20 @@ PowerPoint renderer that converts Block objects to PPTX slides.
 """
 
 
-import re
 import logging
+import os
+import re
+from html import unescape
 from typing import List, Optional, Dict
+
+from bs4 import BeautifulSoup
 from pptx import Presentation
-from pptx.util import Inches, Pt
 from pptx.dml.color import RGBColor
-from pptx.enum.text import PP_ALIGN, MSO_AUTO_SIZE, MSO_UNDERLINE
 from pptx.enum.shapes import MSO_AUTO_SHAPE_TYPE
-from pptx.oxml.ns import qn, nsdecls
+from pptx.enum.text import PP_ALIGN, MSO_AUTO_SIZE, MSO_UNDERLINE
 from pptx.oxml import parse_xml
+from pptx.oxml.ns import qn, nsdecls
+from pptx.util import Inches, Pt
 
 from .models import Block
 
@@ -58,7 +62,6 @@ class PPTXRenderer:
 
     def _extract_admonition_colors(self, css_content: str):
         """Parse CSS for .admonition.<type> colour rules, including combined selectors."""
-        import re
         colours = {}
         
         # Pattern to match both single and combined selectors
@@ -254,8 +257,6 @@ class PPTXRenderer:
         # normal text but wrong for code.
 
         if block.is_code_block():
-            from html import unescape as _html_unescape
-
             content_raw = block.content or ""
 
             # 1) Convert explicit <br> tags back to real line breaks
@@ -266,7 +267,7 @@ class PPTXRenderer:
             content_plain = re.sub(r'<[^>]+>', '', content_raw)
 
             # 3) Unescape HTML entities so &lt; becomes < etc.
-            content_plain = _html_unescape(content_plain)
+            content_plain = unescape(content_plain)
 
             # Clear the paragraph and insert the verbatim text.
             paragraph.clear()
@@ -377,8 +378,7 @@ class PPTXRenderer:
         """Add additional paragraphs to handle nested lists within a text frame."""
         
         # Split content by <br> tags (attributes possible) to get individual list items
-        import re as _re
-        items = [i for i in _re.split(r'<br[^>]*>', content) if i != '']
+        items = [i for i in re.split(r'<br[^>]*>', content) if i != '']
         levels = [int(x) for x in level_data.split(',')]  # already exact order from layout engine
         
         if len(items) != len(levels):
@@ -391,9 +391,6 @@ class PPTXRenderer:
         
         # Get or create ol_counters for ordered lists
         ol_counters = {}
-        
-        # Get text frame from first paragraph
-        text_frame = first_paragraph._element.getparent()
         
         for i, (item, item_level) in enumerate(zip(items, levels)):
             # Preserve original HTML to keep inline formatting
@@ -423,25 +420,17 @@ class PPTXRenderer:
             bullet_run = para.add_run()
             bullet_run.text = bullet_text
             # Determine bullet size strictly from CSS theme (no silent fallback)
-            if 'li' in self.theme_config['font_sizes']:
-                base_size = self.theme_config['font_sizes']['li']
-            elif 'p' in self.theme_config['font_sizes']:
-                base_size = self.theme_config['font_sizes']['p']
-            else:
-                raise ValueError("❌ CSS theme is missing required font-size for 'li' or 'p'.")
+            base_size = self._validate_font_size('li')
             bullet_run.font.size = Pt(base_size)
             bullet_run.font.name = self.theme_config['font_family']
             # Apply theme text color to bullet symbol
-            text_hex = self.theme_config['colors'].get('text')
-            if text_hex and text_hex.startswith('#'):
-                bullet_run.font.color.rgb = RGBColor(*self._hex_to_rgb(text_hex))
+            self._apply_theme_color(bullet_run.font, 'text')
 
             # Parse inline HTML to runs preserving combinations
             self._parse_html_to_runs(para, item_html)
     
     def _parse_html_to_runs(self, paragraph, html_content):
         """Parse HTML content and create formatted runs in the paragraph."""
-        from html import unescape
         
         # Stack to track nested formatting
         format_stack = []
@@ -657,331 +646,31 @@ class PPTXRenderer:
         return  # Parsing complete – no additional defaults applied
     
     def _add_element_to_slide(self, slide, block: Block, adjusted_top_px: Optional[int] = None, extra_padding_px: int = 0):
-        """Add a Block element to a slide."""
-        # Convert browser coordinates to slide coordinates using CSS-defined dimensions
-        
-        slide_width_inches = self.theme_config['slide_dimensions']['width_inches']
-        slide_height_inches = self.theme_config['slide_dimensions']['height_inches']
-        browser_width_px = self.theme_config['slide_dimensions']['width_px']
-        browser_height_px = self.theme_config['slide_dimensions']['height_px']
-        
-        # Calculate scaling factors
-        x_scale = slide_width_inches / browser_width_px
-        y_scale = slide_height_inches / browser_height_px
-        
-        # Use adjusted top if provided (to account for cumulative offsets)
-        effective_top_px = adjusted_top_px if adjusted_top_px is not None else block.y
-        top = Inches(effective_top_px * y_scale)
-        
-        # Apply small extra padding if requested
-        effective_height_px = block.height + extra_padding_px
-        height = Inches(effective_height_px * y_scale)
-        
-        # For text-based blocks we sometimes widen the text frame to the remaining
-        # slide width (to minimise unwanted additional wrapping).  When we do so
-        # we must shrink the height proportionally, otherwise the shape appears
-        # far taller than its rendered content.
-
-        is_text_block = (
-            block.tag in ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']
-            or block.is_list_item()
-            or block.tag in ['ul', 'ol', 'pre']
+        """Add a Block element to a slide using modular helper methods."""
+        # Calculate dimensions and scaling factors
+        x_scale, y_scale, top, height, browser_width_px = self._calculate_element_dimensions(
+            block, adjusted_top_px, extra_padding_px
         )
-
-        if is_text_block:
-            # Special case: figure captions should use their own measured width so centering aligns to the figure
-            if block.className and 'figure-caption' in block.className:
-                # Prefer the width of the preceding image block (same slide) if any
-                cached_width = getattr(self, '_last_image_block_width', None)
-                if cached_width:
-                    width = Inches(cached_width * x_scale)
-                    if self.debug:
-                        logger.info(f"CAPTION: Using cached image width: {cached_width}px -> {width.inches:.2f}in")
-                else:
-                    width = Inches(block.width * x_scale)
-                    if self.debug:
-                        logger.warning(f"CAPTION: No cached image width found. Using own width: {block.width}px")
-            else:
-                # Regular paragraphs – widen to remaining slide width so wrapping matches browser view
-                available_width_px = browser_width_px - block.x
-                width = Inches(available_width_px * x_scale)
-        else:
-            width = Inches(block.width * x_scale)
         
-        # Handle admonition boxes (callout blocks) early
-        if block.tag == 'div' and block.className and 'admonition' in block.className:
-            self._add_admonition_box(slide, block, x_scale, y_scale)
-            return  # Avoid default text processing
-
-        # Handle math-only blocks (display math) early
-        if block.tag == 'div' and block.className and 'math-html' in block.className and 'display' in block.className:
-            if self.debug:
-                logger.info(f"Detected display math block: className='{block.className}'")
-            self._add_math_only_block(slide, block, x_scale, y_scale)
-            return  # Avoid default text processing
-
-        # Skip layout-only divs (both columns wrapper and individual column divs)
-        if block.tag == 'div' and block.className and (
-                'columns' in block.className or 'column' in block.className):
-            return
+        # Calculate appropriate width for this element
+        width = self._calculate_element_width(block, x_scale, browser_width_px)
         
-        # Debug: Show all div blocks with className
-        if self.debug and block.tag == 'div' and block.className:
-            logger.info(f"DIV block: className='{block.className}', content preview: '{block.content[:50]}...'")
-
-        # Handle images early (they may have empty textContent)
-        if block.is_image():
-            import os
-            image_path = block.src
-            
-            # Store this image's width so an upcoming caption can use it for alignment
-            self._last_image_block_width = block.width
-            if self.debug:
-                logger.info(f"IMAGE: Caching image width for caption use: {block.width}px")
-            
-            # Extract the original file path from data-filepath if available
-            # This handles cases where the src has been modified for browser display
-            if hasattr(block, 'content') and 'data-filepath' in block.content:
-                filepath_match = re.search(r'data-filepath="([^"]+)"', block.content)
-                if filepath_match:
-                    original_path = filepath_match.group(1)
-                    if os.path.exists(original_path):
-                        image_path = original_path
-                        if self.debug:
-                            logger.info(f"Using original file path from data-filepath: {image_path}")
-            
-            # Handle file:// URLs by extracting the actual path
-            if image_path and image_path.startswith('file://'):
-                image_path = image_path.replace('file://', '')
-            
-            # Check if this is a math image (SVG from KaTeX)
-            is_math_image = (
-                block.className and 'math-image' in block.className
-            ) or (
-                image_path and image_path.endswith('.svg') and 'math_cache' in image_path
-            )
-            
-            # Debug image path resolution
-            if self.debug:
-                if is_math_image:
-                    logger.info(f"Attempting to add math image: {image_path}")
-                else:
-                    logger.info(f"Attempting to add image: {image_path}")
-                logger.info(f"   - Path exists: {os.path.exists(image_path) if image_path else False}")
-                logger.info(f"   - Block dimensions: {block.width}x{block.height}px")
-                
-            try:
-                if image_path and os.path.exists(image_path):
-                    if is_math_image:
-                        # Handle math images with special positioning
-                        self._add_math_image_to_slide(slide, block, x_scale, y_scale, image_path)
-                    else:
-                        # Regular image handling
-                        slide.shapes.add_picture(image_path, Inches(block.x * x_scale), top, width=width, height=height)
-                    
-                    if self.debug:
-                        logger.info(f"✅ Successfully added {'math ' if is_math_image else ''}image to slide")
-                    return  # Successfully added image, exit early
-                else:
-                    if self.debug:
-                        logger.info(f"⚠️ Image file not accessible: {image_path}")
-                    raise FileNotFoundError(f"Image file not found: {image_path}")
-            except Exception as e:
-                # fallback placeholder with more details
-                if self.debug:
-                    logger.error(f"Failed to add image: {e}")
-                placeholder = slide.shapes.add_textbox(Inches(block.x * x_scale), top, width, height)
-                placeholder.text_frame.text = f"[Missing {'math ' if is_math_image else ''}image: {os.path.basename(image_path) if image_path else 'No src'}]"
-            return
+        # Handle special block types (admonitions, math, layout divs)
+        if self._handle_special_blocks(slide, block, x_scale, y_scale):
+            return  # Special block was handled, exit early
         
-        # Skip elements that have no textual content (except images which are visual)
-        if not block.content.strip() and not block.is_image():
-            return
+        # Handle images
+        if self._add_image_element(slide, block, x_scale, y_scale, top, width, height):
+            return  # Image was handled, exit early
         
-        # Ensure minimum dimensions for text boxes
-        if width < Inches(0.5):
-            width = Inches(0.5)
-        if height < Inches(0.3):
-            height = Inches(0.3)
-        
-        # Add text box to slide
-        textbox = slide.shapes.add_textbox(Inches(block.x * x_scale), top, width, height)
-        text_frame = textbox.text_frame
-        text_frame.clear()
-        
-        # Configure text frame
-        text_frame.margin_left = 0
-        text_frame.margin_right = 0
-        text_frame.margin_top = 0
-        text_frame.margin_bottom = 0
-        text_frame.word_wrap = True
-        
-        # Let PowerPoint shrink the shape to fit its text once content is added
-        try:
-            text_frame.auto_size = MSO_AUTO_SIZE.SHAPE_TO_FIT_TEXT
-        except Exception:
-            pass  # older python-pptx versions may not support auto_size
-        
-        # Remove default paragraph spacing for all new paragraphs created later
-        for para in text_frame.paragraphs:
-            para.space_before = Pt(0)
-            para.space_after = Pt(0)
-        
-        # Handle tables separately
-        if block.is_table():
-            self._add_table_to_slide(slide, block, Inches(block.x * x_scale), top, width, height)
-            return
-        
-        # Add paragraph with rich text formatting
-        p = text_frame.paragraphs[0]
-        
-        # Check if this is a nested list before calling _add_formatted_text
-        content = block.content
-        level_match = re.search(r'data-list-levels="([^"]*)"', content)
-        list_type_match = re.search(r'data-list-type="([^"]*)"', content)
-        
-        if level_match and list_type_match:
-            # This is a nested list - handle with text frame directly
-            # Extract the actual content from the HTML metadata format
-            content_match = re.search(r'<p[^>]*>(.*?)</p>', content, re.DOTALL)
-            if content_match:
-                list_content = content_match.group(1)
-            else:
-                # Fallback if no p tags found
-                list_content = content
-            
-            self._add_nested_list_paragraphs(p, list_content, level_match.group(1), list_type_match.group(1))
-        elif block.tag in ['ul', 'ol']:
-            # FALLBACK: Handle ul/ol blocks that weren't converted by layout engine
-            if self.debug:
-                logger.warning(f"Processing unconverted {block.tag} block - converting to nested list format")
-            
-            # Extract list items from raw HTML, keep inline formatting tags
-            raw_items = re.findall(r'<li[^>]*>(.*?)</li>', content, re.DOTALL | re.IGNORECASE)
-            # Remove empty strings produced by trailing <br> or whitespace
-            items = [itm.strip() for itm in raw_items if itm.strip()]
-            
-            cleaned_items = [ re.sub(r'^<p[^>]*>|</p>$', '', itm, flags=re.IGNORECASE).strip() for itm in items ]
-            
-            # Create the format expected by _add_nested_list_paragraphs
-            list_content = '<br>'.join(cleaned_items)
-            level_data = ','.join('0' for _ in items)  # All items at level 0
-            list_type = block.tag
-            
-            self._add_nested_list_paragraphs(p, list_content, level_data, list_type)
-        else:
-            # Regular content - use single paragraph approach
-            self._add_formatted_text(p, block)
-        
-        # Configure paragraph formatting using theme-aware font sizes
-        # For nested lists, apply formatting to all paragraphs in text frame
-        paragraphs_to_format = []
-        if level_match and list_type_match:
-            # Nested list - format all paragraphs in text frame
-            paragraphs_to_format = text_frame.paragraphs
-        else:
-            # Single paragraph content
-            paragraphs_to_format = [p]
-        
-        if block.is_heading():
-            # Heading formatting - apply to all runs in all paragraphs
-            font_size = self.theme_config['font_sizes'].get(block.tag, 16)
-            for para in paragraphs_to_format:
-                for run in para.runs:
-                    run.font.size = Pt(font_size)
-                    if not run.font.bold:  # Only set if not already bold from inline formatting
-                        run.font.bold = True
-        elif block.is_code_block():
-            # Code block formatting - apply to all runs in all paragraphs
-            font_size = self.theme_config['font_sizes']['code']
-            code_font_delta = self.theme_config['table_deltas']['font_delta']  # Reuse table delta for consistency
-            for para in paragraphs_to_format:
-                for run in para.runs:
-                    run.font.name = 'Courier New'
-                    run.font.size = Pt(max(8, font_size + code_font_delta))  # Apply same delta as tables
-            # Set background color for code blocks
-            if hasattr(textbox, 'fill'):
-                textbox.fill.solid()
-                if self.theme == "dark":
-                    textbox.fill.fore_color.rgb = RGBColor(45, 45, 45)  # Dark gray
-                else:
-                    textbox.fill.fore_color.rgb = RGBColor(244, 244, 244)  # Light gray
-        else:
-            # Regular paragraph formatting - apply to all runs in all paragraphs
-            font_size = self.theme_config['font_sizes']['p']
-            for para in paragraphs_to_format:
-                for run in para.runs:
-                    if not run.font.size:  # Only set if not already set by inline formatting
-                        run.font.size = Pt(font_size)
-        
-        # Apply color if specified
-        if hasattr(block, 'style') and block.style and 'color' in block.style and block.style['color']:
-            color = block.style['color']
-            if isinstance(color, dict) and 'r' in color and 'g' in color and 'b' in color:
-                for para in paragraphs_to_format:
-                    para.font.color.rgb = RGBColor(color['r'], color['g'], color['b'])
-        
-        # Apply text alignment
-        if hasattr(block, 'style') and block.style and 'textAlign' in block.style:
-            align = block.style['textAlign']
-            alignment = None
-            if align == 'center':
-                alignment = PP_ALIGN.CENTER
-            elif align == 'right':
-                alignment = PP_ALIGN.RIGHT
-            else:
-                alignment = PP_ALIGN.LEFT
-            
-            for para in paragraphs_to_format:
-                para.alignment = alignment
-        
-        # Handle oversized content
-        if hasattr(block, 'oversized') and block.oversized:
-            # Make font smaller for oversized content
-            for para in paragraphs_to_format:
-                if para.font.size:
-                    para.font.size = Pt(max(10, int(para.font.size.pt * 0.8))) 
-
-        # Apply default theme text color where none is set yet
-        default_text_hex = self.theme_config['colors'].get('text')
-        if default_text_hex and default_text_hex.startswith('#'):
-            default_rgb = RGBColor(*self._hex_to_rgb(default_text_hex))
-            for para in paragraphs_to_format:
-                for run in para.runs:
-                    try:
-                        already = (run.font.color is not None and
-                                   hasattr(run.font.color, 'rgb') and
-                                   run.font.color.rgb is not None)
-                    except AttributeError:
-                        already = False
-                    if not already:
-                        run.font.color.rgb = default_rgb
-
-        # Post-formatting for figure captions
-
-        if block.className and 'figure-caption' in block.className:
-            for run in p.runs:
-                # Apply italic style and colour based on CSS theme definitions
-                run.font.italic = True
-                class_colors = self.theme_config.get('class_colors', {})
-                if 'figure-caption' in class_colors:
-                    r, g, b = class_colors['figure-caption']
-                    run.font.color.rgb = RGBColor(r, g, b)
-                else:
-                    # Fallback to theme default text colour
-                    default_hex = self.theme_config['colors'].get('text', '#666666')
-                    r, g, b = self._hex_to_rgb(default_hex)
-                    run.font.color.rgb = RGBColor(r, g, b)
-            # ensure caption is centred within its text box
-            p.alignment = PP_ALIGN.CENTER
+        # Handle text-based elements (paragraphs, headings, lists, tables)
+        self._add_text_element(slide, block, x_scale, y_scale, top, width, height)
 
     # ------------------------------------------------------------------
     # Admonition / Call-out box support
     # ------------------------------------------------------------------
     def _add_admonition_box(self, slide, block: Block, x_scale: float, y_scale: float):
         """Draw a coloured call-out box based on admonition type."""
-        from pptx.util import Inches, Pt
-        from pptx.dml.color import RGBColor
 
         # Map admonition types to colours & icons
         ICONS = {
@@ -1053,8 +742,6 @@ class PPTXRenderer:
         text_frame.margin_bottom = Inches(0.02) # Minimal bottom margin
 
         # Split block.content into title + text if possible
-        from bs4 import BeautifulSoup
-
         raw_html = block.content or ""
         soup = BeautifulSoup(raw_html, "html.parser")
 
@@ -1076,7 +763,7 @@ class PPTXRenderer:
             body_text = "\n".join(plain_lines[1:]) if len(plain_lines) > 1 else ""
 
         # Title paragraph
-        base_pt = self.theme_config['font_sizes']['p']
+        base_pt = self._validate_font_size('p')
         p_title = text_frame.paragraphs[0]
         p_title.text = f"{icon_char} {title_text}"
         p_title.font.bold = True
@@ -1091,9 +778,7 @@ class PPTXRenderer:
             p_body.font.size = Pt(base_pt)
             
             # Use theme text color instead of hardcoded gray
-            theme_text_color = self.theme_config['colors']['text']
-            text_rgb = self._hex_to_rgb(theme_text_color)
-            p_body.font.color.rgb = RGBColor(*text_rgb)
+            self._apply_theme_color(p_body.font, 'text')
             p_body.alignment = PP_ALIGN.LEFT
 
     def _add_math_image_to_slide(self, slide, block: Block, x_scale: float, y_scale: float, image_path: str):
@@ -1107,8 +792,6 @@ class PPTXRenderer:
             y_scale: Vertical scaling factor
             image_path: Path to the SVG math image
         """
-        from pptx.util import Inches
-        import os
         
         # Calculate position and size
         left = Inches(block.x * x_scale)
@@ -1116,7 +799,6 @@ class PPTXRenderer:
         
         # Use the math metadata if available for more accurate sizing
         if hasattr(block, 'content') and 'data-math-width' in block.content:
-            import re
             width_match = re.search(r'data-math-width="([^"]+)"', block.content)
             height_match = re.search(r'data-math-height="([^"]+)"', block.content)
             baseline_match = re.search(r'data-math-baseline="([^"]+)"', block.content)
@@ -1192,10 +874,6 @@ class PPTXRenderer:
         if not hasattr(block, 'content') or not block.content:
             return
         
-        import re
-        import os
-        from bs4 import BeautifulSoup
-        
         # Parse the HTML content
         soup = BeautifulSoup(block.content, 'html.parser')
         
@@ -1206,23 +884,19 @@ class PPTXRenderer:
         # Try to find the LaTeX in the HTML content first
         latex = None
         
-        # Look for LaTeX in the MathML annotation (more reliable than data-latex)
-        import re
-        import html
-        
         # Try to extract LaTeX from the MathML annotation tag
         annotation_match = re.search(r'<annotation[^>]*encoding="application/x-tex"[^>]*>([^<]*)</annotation>', block.content)
         if annotation_match:
             latex = annotation_match.group(1)
             # Decode HTML entities
-            latex = html.unescape(latex)
+            latex = unescape(latex)
         
         # Fallback: try to find data-latex attribute (might be in the content)
         if not latex:
             latex_match = re.search(r'data-latex="([^"]*)"', block.content)
             if latex_match:
                 latex = latex_match.group(1)
-                latex = html.unescape(latex)
+                latex = unescape(latex)
         
         if not latex:
             if self.debug:
@@ -1464,15 +1138,18 @@ class PPTXRenderer:
             pass
         
         # ------------------------------------------------------------------
-        # Ensure visible borders in DEFAULT theme by injecting an
-        # <a:tblBorders> block.  macOS/Office ignores cell-level <a:ln*>
-        # when the table itself has none, so we add a minimal grid once.
+        # Ensure visible borders in DEFAULT themes by injecting an <a:tblBorders> block.  
+        # macOS/Office ignores cell-level <a:ln*> when the table itself has none.
+        # Dark themes work differently and use individual cell borders.
         # ------------------------------------------------------------------
-        if self.theme == "default":
+        if self.theme in ["default"]: # Add more light themes here if needed
             try:
                 # NOTE: Using hardcoded border thickness since python-pptx cannot control it
                 border_emu = 12700  # Standard 1pt thickness in EMU
                 hex_col = self.theme_config['colors']['table_border'].lstrip('#') or '000000'
+                # Ensure 6-character hex color (convert #000 to #000000)
+                if len(hex_col) == 3:
+                    hex_col = ''.join([c*2 for c in hex_col])
 
                 tblPr = table._tbl.tblPr
                 # wipe inherited styles but keep tblPr node
@@ -1480,7 +1157,7 @@ class PPTXRenderer:
                     tblPr.remove(child)
 
                 grid_xml = (
-                    f'<a:tblBorders {nsdecls("a")}>'
+                f'<a:tblBorders {nsdecls("a")}'
                     f'<a:lnL w="{border_emu}"><a:solidFill><a:srgbClr val="{hex_col}"/></a:solidFill></a:lnL>'
                     f'<a:lnR w="{border_emu}"><a:solidFill><a:srgbClr val="{hex_col}"/></a:solidFill></a:lnR>'
                     f'<a:lnT w="{border_emu}"><a:solidFill><a:srgbClr val="{hex_col}"/></a:solidFill></a:lnT>'
@@ -1604,7 +1281,6 @@ class PPTXRenderer:
         """Attach speaker notes (HTML) to a PowerPoint slide."""
         if not note_html:
             return
-        from bs4 import BeautifulSoup
         soup = BeautifulSoup(note_html, "html.parser")
 
         notes_slide = slide.notes_slide  # Auto-creates if missing
@@ -1623,12 +1299,366 @@ class PPTXRenderer:
             self._parse_html_to_runs(para, html_snippet)
 
         # Ensure default font family/size on runs missing those attrs
-        default_size = self.theme_config["font_sizes"].get("p", 12)
+        default_size = self._validate_font_size("p")
         for para in tf.paragraphs:
             for run in para.runs:
                 if not run.font.name:
                     run.font.name = self.theme_config["font_family"]
                 if not run.font.size:
-                    from pptx.util import Pt
                     run.font.size = Pt(default_size)
+
+    # ------------------------------------------------------------------
+    # Helper methods to break down massive _add_element_to_slide
+    # ------------------------------------------------------------------
+    
+    def _calculate_element_dimensions(self, block: Block, adjusted_top_px: Optional[int] = None, extra_padding_px: int = 0):
+        """Calculate element dimensions and scaling factors."""
+        slide_width_inches = self.theme_config['slide_dimensions']['width_inches']
+        slide_height_inches = self.theme_config['slide_dimensions']['height_inches']
+        browser_width_px = self.theme_config['slide_dimensions']['width_px']
+        browser_height_px = self.theme_config['slide_dimensions']['height_px']
+        
+        # Calculate scaling factors
+        x_scale = slide_width_inches / browser_width_px
+        y_scale = slide_height_inches / browser_height_px
+        
+        # Use adjusted top if provided (to account for cumulative offsets)
+        effective_top_px = adjusted_top_px if adjusted_top_px is not None else block.y
+        top = Inches(effective_top_px * y_scale)
+        
+        # Apply small extra padding if requested
+        effective_height_px = block.height + extra_padding_px
+        height = Inches(effective_height_px * y_scale)
+        
+        return x_scale, y_scale, top, height, browser_width_px
+
+    def _calculate_element_width(self, block: Block, x_scale: float, browser_width_px: float):
+        """Calculate appropriate width for element based on its type."""
+        is_text_block = (
+            block.tag in ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']
+            or block.is_list_item()
+            or block.tag in ['ul', 'ol', 'pre']
+        )
+
+        if is_text_block:
+            # Special case: figure captions should use their own measured width so centering aligns to the figure
+            if block.className and 'figure-caption' in block.className:
+                # Prefer the width of the preceding image block (same slide) if any
+                cached_width = getattr(self, '_last_image_block_width', None)
+                if cached_width:
+                    width = Inches(cached_width * x_scale)
+                    if self.debug:
+                        logger.info(f"CAPTION: Using cached image width: {cached_width}px -> {width.inches:.2f}in")
+                    return width
+                else:
+                    width = Inches(block.width * x_scale)
+                    if self.debug:
+                        logger.warning(f"CAPTION: No cached image width found. Using own width: {block.width}px")
+                    return width
+            else:
+                # Regular paragraphs – widen to remaining slide width so wrapping matches browser view
+                available_width_px = browser_width_px - block.x
+                return Inches(available_width_px * x_scale)
+        else:
+            return Inches(block.width * x_scale)
+
+    def _handle_special_blocks(self, slide, block: Block, x_scale: float, y_scale: float) -> bool:
+        """Handle special block types (admonitions, math, layout divs). Returns True if handled."""
+        # Handle admonition boxes (callout blocks) early
+        if block.tag == 'div' and block.className and 'admonition' in block.className:
+            self._add_admonition_box(slide, block, x_scale, y_scale)
+            return True
+
+        # Handle math-only blocks (display math) early
+        if block.tag == 'div' and block.className and 'math-html' in block.className and 'display' in block.className:
+            if self.debug:
+                logger.info(f"Detected display math block: className='{block.className}'")
+            self._add_math_only_block(slide, block, x_scale, y_scale)
+            return True
+
+        # Skip layout-only divs (both columns wrapper and individual column divs)
+        if block.tag == 'div' and block.className and (
+                'columns' in block.className or 'column' in block.className):
+            return True
+        
+        # Debug: Show all div blocks with className
+        if self.debug and block.tag == 'div' and block.className:
+            logger.info(f"DIV block: className='{block.className}', content preview: '{block.content[:50]}...'")
+
+        return False
+
+    def _validate_font_size(self, tag: str) -> float:
+        """Get and validate font size from theme config (similar to Google Slides renderer)."""
+        if tag in self.theme_config['font_sizes']:
+            return self.theme_config['font_sizes'][tag]
+        elif 'p' in self.theme_config['font_sizes']:
+            return self.theme_config['font_sizes']['p']
+        else:
+            raise ValueError(f"❌ CSS theme is missing required font-size for '{tag}' and fallback 'p'.")
+
+    def _apply_theme_color(self, element, color_key: str, fallback: str = '#000000'):
+        """Apply theme color to an element with RGBColor conversion."""
+        color_hex = self.theme_config['colors'].get(color_key, fallback)
+        if color_hex and color_hex.startswith('#'):
+            rgb = self._hex_to_rgb(color_hex)
+            element.color.rgb = RGBColor(*rgb)
+            return True
+        return False
+
+    def _add_image_element(self, slide, block: Block, x_scale: float, y_scale: float, top, width, height) -> bool:
+        """Handle image elements. Returns True if handled."""
+        if not block.is_image():
+            return False
+            
+        image_path = block.src
+        
+        # Store this image's width so an upcoming caption can use it for alignment
+        self._last_image_block_width = block.width
+        if self.debug:
+            logger.info(f"IMAGE: Caching image width for caption use: {block.width}px")
+        
+        # Extract the original file path from data-filepath if available
+        # This handles cases where the src has been modified for browser display
+        if hasattr(block, 'content') and 'data-filepath' in block.content:
+            filepath_match = re.search(r'data-filepath="([^"]+)"', block.content)
+            if filepath_match:
+                original_path = filepath_match.group(1)
+                if os.path.exists(original_path):
+                    image_path = original_path
+                    if self.debug:
+                        logger.info(f"Using original file path from data-filepath: {image_path}")
+        
+        # Handle file:// URLs by extracting the actual path
+        if image_path and image_path.startswith('file://'):
+            image_path = image_path.replace('file://', '')
+        
+        # Check if this is a math image (SVG from KaTeX)
+        is_math_image = (
+            block.className and 'math-image' in block.className
+        ) or (
+            image_path and image_path.endswith('.svg') and 'math_cache' in image_path
+        )
+        
+        # Debug image path resolution
+        if self.debug:
+            if is_math_image:
+                logger.info(f"Attempting to add math image: {image_path}")
+            else:
+                logger.info(f"Attempting to add image: {image_path}")
+            logger.info(f"   - Path exists: {os.path.exists(image_path) if image_path else False}")
+            logger.info(f"   - Block dimensions: {block.width}x{block.height}px")
+            
+        try:
+            if image_path and os.path.exists(image_path):
+                if is_math_image:
+                    # Handle math images with special positioning
+                    self._add_math_image_to_slide(slide, block, x_scale, y_scale, image_path)
+                else:
+                    # Regular image handling
+                    slide.shapes.add_picture(image_path, Inches(block.x * x_scale), top, width=width, height=height)
+                
+                if self.debug:
+                    logger.info(f"✅ Successfully added {'math ' if is_math_image else ''}image to slide")
+                return True
+            else:
+                if self.debug:
+                    logger.info(f"⚠️ Image file not accessible: {image_path}")
+                raise FileNotFoundError(f"Image file not found: {image_path}")
+        except Exception as e:
+            # fallback placeholder with more details
+            if self.debug:
+                logger.error(f"Failed to add image: {e}")
+            placeholder = slide.shapes.add_textbox(Inches(block.x * x_scale), top, width, height)
+            placeholder.text_frame.text = f"[Missing {'math ' if is_math_image else ''}image: {os.path.basename(image_path) if image_path else 'No src'}]"
+            return True
+        
+        return False
+
+    def _add_text_element(self, slide, block: Block, x_scale: float, y_scale: float, top, width, height):
+        """Handle text-based elements (paragraphs, headings, lists)."""
+        # Skip elements that have no textual content (except images which are visual)
+        if not block.content.strip():
+            return
+        
+        # Ensure minimum dimensions for text boxes
+        if width < Inches(0.5):
+            width = Inches(0.5)
+        if height < Inches(0.3):
+            height = Inches(0.3)
+        
+        # Handle tables separately
+        if block.is_table():
+            self._add_table_to_slide(slide, block, Inches(block.x * x_scale), top, width, height)
+            return
+        
+        # Add text box to slide
+        textbox = slide.shapes.add_textbox(Inches(block.x * x_scale), top, width, height)
+        text_frame = textbox.text_frame
+        text_frame.clear()
+        
+        # Configure text frame
+        text_frame.margin_left = 0
+        text_frame.margin_right = 0
+        text_frame.margin_top = 0
+        text_frame.margin_bottom = 0
+        text_frame.word_wrap = True
+        
+        # Let PowerPoint shrink the shape to fit its text once content is added
+        try:
+            text_frame.auto_size = MSO_AUTO_SIZE.SHAPE_TO_FIT_TEXT
+        except Exception:
+            pass  # older python-pptx versions may not support auto_size
+        
+        # Remove default paragraph spacing for all new paragraphs created later
+        for para in text_frame.paragraphs:
+            para.space_before = Pt(0)
+            para.space_after = Pt(0)
+        
+        # Add paragraph with rich text formatting
+        p = text_frame.paragraphs[0]
+        
+        # Handle nested lists using the existing logic
+        content = block.content
+        level_match = re.search(r'data-list-levels="([^"]*)"', content)
+        list_type_match = re.search(r'data-list-type="([^"]*)"', content)
+        
+        if level_match and list_type_match:
+            # This is a nested list - handle with text frame directly
+            content_match = re.search(r'<p[^>]*>(.*?)</p>', content, re.DOTALL)
+            if content_match:
+                list_content = content_match.group(1)
+            else:
+                list_content = content
+            
+            self._add_nested_list_paragraphs(p, list_content, level_match.group(1), list_type_match.group(1))
+        elif block.tag in ['ul', 'ol']:
+            # FALLBACK: Handle ul/ol blocks that weren't converted by layout engine
+            if self.debug:
+                logger.warning(f"Processing unconverted {block.tag} block - converting to nested list format")
+            
+            # Extract list items from raw HTML, keep inline formatting tags
+            raw_items = re.findall(r'<li[^>]*>(.*?)</li>', content, re.DOTALL | re.IGNORECASE)
+            items = [itm.strip() for itm in raw_items if itm.strip()]
+            
+            cleaned_items = [re.sub(r'^<p[^>]*>|</p>$', '', itm, flags=re.IGNORECASE).strip() for itm in items]
+            
+            # Create the format expected by _add_nested_list_paragraphs
+            list_content = '<br>'.join(cleaned_items)
+            level_data = ','.join('0' for _ in items)  # All items at level 0
+            list_type = block.tag
+            
+            self._add_nested_list_paragraphs(p, list_content, level_data, list_type)
+        else:
+            # Regular content - use single paragraph approach
+            self._add_formatted_text(p, block)
+        
+        # Apply formatting using helper methods
+        self._apply_element_formatting(textbox, text_frame, block, level_match and list_type_match)
+
+    def _apply_element_formatting(self, textbox, text_frame, block: Block, is_nested_list: bool):
+        """Apply font sizes, colors, and other formatting to text elements."""
+        # Configure paragraph formatting using theme-aware font sizes
+        paragraphs_to_format = []
+        if is_nested_list:
+            # Nested list - format all paragraphs in text frame
+            paragraphs_to_format = text_frame.paragraphs
+        else:
+            # Single paragraph content
+            paragraphs_to_format = [text_frame.paragraphs[0]]
+        
+        if block.is_heading():
+            # Heading formatting - apply to all runs in all paragraphs
+            font_size = self._validate_font_size(block.tag)
+            for para in paragraphs_to_format:
+                for run in para.runs:
+                    run.font.size = Pt(font_size)
+                    if not run.font.bold:  # Only set if not already bold from inline formatting
+                        run.font.bold = True
+        elif block.is_code_block():
+            # Code block formatting - apply to all runs in all paragraphs
+            font_size = self._validate_font_size('code')
+            code_font_delta = self.theme_config['table_deltas']['font_delta']  # Reuse table delta for consistency
+            for para in paragraphs_to_format:
+                for run in para.runs:
+                    run.font.name = 'Courier New'
+                    run.font.size = Pt(max(8, font_size + code_font_delta))  # Apply same delta as tables
+            # Set background color for code blocks using CSS theme
+            if hasattr(textbox, 'fill'):
+                textbox.fill.solid()
+                code_bg_color = self.theme_config['colors'].get('code_background', '#f4f4f4')  # Default fallback
+                code_bg_rgb = self._hex_to_rgb(code_bg_color)
+                textbox.fill.fore_color.rgb = RGBColor(*code_bg_rgb)
+        else:
+            # Regular paragraph formatting - apply to all runs in all paragraphs
+            font_size = self._validate_font_size('p')
+            for para in paragraphs_to_format:
+                for run in para.runs:
+                    if not run.font.size:  # Only set if not already set by inline formatting
+                        run.font.size = Pt(font_size)
+        
+        # Apply theme colors and other formatting
+        self._apply_additional_formatting(paragraphs_to_format, block)
+
+    def _apply_additional_formatting(self, paragraphs_to_format: list, block: Block):
+        """Apply colors, alignment, and other formatting."""
+        # Apply color if specified
+        if hasattr(block, 'style') and block.style and 'color' in block.style and block.style['color']:
+            color = block.style['color']
+            if isinstance(color, dict) and 'r' in color and 'g' in color and 'b' in color:
+                for para in paragraphs_to_format:
+                    para.font.color.rgb = RGBColor(color['r'], color['g'], color['b'])
+        
+        # Apply text alignment
+        if hasattr(block, 'style') and block.style and 'textAlign' in block.style:
+            align = block.style['textAlign']
+            alignment = None
+            if align == 'center':
+                alignment = PP_ALIGN.CENTER
+            elif align == 'right':
+                alignment = PP_ALIGN.RIGHT
+            else:
+                alignment = PP_ALIGN.LEFT
+            
+            for para in paragraphs_to_format:
+                para.alignment = alignment
+        
+        # Handle oversized content
+        if hasattr(block, 'oversized') and block.oversized:
+            # Make font smaller for oversized content
+            for para in paragraphs_to_format:
+                if para.font.size:
+                    para.font.size = Pt(max(10, int(para.font.size.pt * 0.8))) 
+
+        # Apply default theme text color where none is set yet
+        default_text_hex = self.theme_config['colors'].get('text')
+        if default_text_hex and default_text_hex.startswith('#'):
+            default_rgb = RGBColor(*self._hex_to_rgb(default_text_hex))
+            for para in paragraphs_to_format:
+                for run in para.runs:
+                    try:
+                        already = (run.font.color is not None and
+                                   hasattr(run.font.color, 'rgb') and
+                                   run.font.color.rgb is not None)
+                    except AttributeError:
+                        already = False
+                    if not already:
+                        run.font.color.rgb = default_rgb
+
+        # Apply figure caption formatting
+        if hasattr(block, 'className') and block.className and 'figure-caption' in block.className:
+            p = paragraphs_to_format[0]  # Figure captions are single paragraphs
+            for run in p.runs:
+                # Apply italic style and colour based on CSS theme definitions
+                run.font.italic = True
+                class_colors = self.theme_config.get('class_colors', {})
+                if 'figure-caption' in class_colors:
+                    r, g, b = class_colors['figure-caption']
+                    run.font.color.rgb = RGBColor(r, g, b)
+                else:
+                    # Fallback to theme default text colour
+                    default_hex = self.theme_config['colors'].get('text', '#666666')
+                    r, g, b = self._hex_to_rgb(default_hex)
+                    run.font.color.rgb = RGBColor(r, g, b)
+            # ensure caption is centred within its text box
+            p.alignment = PP_ALIGN.CENTER
  

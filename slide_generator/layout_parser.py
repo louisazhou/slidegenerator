@@ -6,14 +6,153 @@ Layout parser for converting HTML to Block objects with precise measurements.
 import json
 import logging
 import os
-from typing import List, Optional, Dict, Any
-from bs4 import BeautifulSoup
+import re
 from pathlib import Path
+from typing import List, Optional, Dict, Any
 
+from bs4 import BeautifulSoup
+from pyppeteer import launch
+
+from .css_utils import CSSParser
 from .models import Block
 from .theme_loader import get_css
 
 logger = logging.getLogger(__name__)
+
+# HTML-specific CSS that doesn't affect presentation output
+# These styles are hardcoded here to keep theme CSS files focused on presentation-affecting properties
+HTML_SPECIFIC_CSS = """
+/* HTML layout and display properties - don't affect PPTX/Google Slides output */
+body { margin: 0; padding: 0; }
+
+.slide {
+    box-sizing: border-box;
+    position: relative;
+    page-break-after: always;
+    overflow: visible;
+    border: 2px dashed #ccc;  /* Visual slide boundary indicator */
+}
+
+/* Layout-only properties */
+.page-break { display: none; }
+.columns { 
+    display: flex; 
+    align-items: flex-start;
+    break-inside: avoid;
+    page-break-inside: avoid;
+}
+.column { 
+    flex: 1 1 0; 
+    min-width: 0;
+    break-inside: avoid;
+    page-break-inside: avoid;
+}
+
+/* Width/sizing constraints for HTML measurement */
+h1, h2, h3, p, li { width: fit-content; max-width: 100%; }
+ul, ol { margin-left: 20px; max-width: calc(100% - 20px); }
+table { 
+    border-collapse: collapse;
+    width: fit-content; 
+    max-width: 100%; 
+    table-layout: auto;
+    word-wrap: break-word;
+}
+th, td { 
+    text-align: left;
+    background-color: transparent;
+    line-height: 1.4;
+    word-wrap: break-word;
+    max-width: 200px;
+    overflow-wrap: break-word;
+}
+
+/* HTML-specific code block properties */
+pre { 
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    box-sizing: border-box;
+    display: block;
+    border-radius: 4px;
+    margin-bottom: 15px;
+    width: auto;
+    max-width: 100%;
+}
+pre code {
+    background-color: transparent;
+    padding: 0;
+    border-radius: 0;
+    margin: 0;
+    white-space: inherit;
+    word-wrap: inherit;
+    box-sizing: border-box;
+}
+code {
+    padding: 2px 4px;
+    border-radius: 2px;
+}
+
+/* Divider slide layout for HTML preview */
+.slide.divider {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+}
+
+/* Math image display properties */
+.math-image { max-width: 100%; height: auto; }
+.math-image.inline { display: inline; vertical-align: baseline; }
+.math-image.display { display: block; margin: 0.5em auto; }
+
+/* Admonition structure for HTML */
+.admonition { 
+    padding: 8px 12px; 
+    margin: 10px 0; 
+    border-left: 4px solid;
+}
+.admonition-title { 
+    font-weight: bold; 
+    margin-top: 0; 
+    margin-bottom: 4px;
+}
+
+/* Icon pseudo-elements for HTML preview */
+.admonition-title::before { margin-right: 4px; }
+.admonition.note > .admonition-title::before,
+.admonition.summary > .admonition-title::before { content: "📝"; }
+.admonition.info > .admonition-title::before { content: "ℹ️"; }
+.admonition.tip > .admonition-title::before { content: "💡"; }
+.admonition.warning > .admonition-title::before,
+.admonition.caution > .admonition-title::before { content: "⚠️"; }
+.admonition.danger > .admonition-title::before { content: "🚫"; }
+.admonition.error > .admonition-title::before,
+.admonition.failure > .admonition-title::before { content: "❌"; }
+.admonition.attention > .admonition-title::before { content: "👀"; }
+
+/* Column layout specific rules */
+.column[data-column-width="auto"] { flex: 0 0 auto; }
+.column[data-column-width="default"] { flex: 1 1 0; }
+.column table { width: max-content; max-width: 100%; }
+
+/* Figure caption alignment */
+.figure-caption {
+    margin-top: 5px;
+    text-align: center;
+}
+
+/* Text formatting utility classes */
+.bold { font-weight: bold; }
+.italic { font-style: italic; }
+.underline { text-decoration: underline; }
+.strike { text-decoration: line-through; }
+.wavy { text-decoration: underline; text-decoration-style: wavy; text-decoration-color: inherit; }
+
+/* Highlight background transparency for HTML */
+mark { background-color: transparent; }
+"""
 
 
 class StructuredLayoutParser:
@@ -30,7 +169,6 @@ class StructuredLayoutParser:
         self.debug = debug
         self.base_dir = base_dir
         # Use centralized CSS parsing
-        from .css_utils import CSSParser
         self.css_parser = CSSParser(theme)
     
     async def parse_html_with_layout(self, html_content: str, temp_dir: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -44,11 +182,15 @@ class StructuredLayoutParser:
         Returns:
             List of structured layout elements
         """
-        from pyppeteer import launch
         
         # Get slide dimensions from CSS theme
         viewport_width = self.css_parser.get_px_value('slide-width')
         viewport_height = self.css_parser.get_px_value('slide-height')
+        
+        # Combine hardcoded HTML-specific CSS with theme CSS
+        # Put hardcoded CSS first so theme CSS can override presentation-affecting properties
+        theme_css = get_css(self.theme)
+        combined_css = HTML_SPECIFIC_CSS + "\n" + theme_css
         
         # Images referenced directly via file:// – no temp copies needed
         
@@ -61,6 +203,19 @@ class StructuredLayoutParser:
         
         # Set viewport size to match CSS theme dimensions
         await page.setViewport({'width': viewport_width, 'height': viewport_height})
+        
+        # Inject CSS into HTML content
+        if '<head>' in html_content:
+            # Insert CSS into existing head
+            css_injection = f'<style>{combined_css}</style>'
+            html_content = html_content.replace('<head>', f'<head>{css_injection}')
+        else:
+            # Add head section with CSS
+            css_injection = f'<head><style>{combined_css}</style></head>'
+            if '<html>' in html_content:
+                html_content = html_content.replace('<html>', f'<html>{css_injection}')
+            else:
+                html_content = f'<html>{css_injection}<body>{html_content}</body></html>'
         
         # Write HTML to temp file and load it
         if temp_dir:
@@ -612,7 +767,6 @@ class StructuredLayoutParser:
                 # Fallback: try to determine heading level from HTML if originalTag is missing
                 html_content = content.get('html', '')
                 if html_content:
-                    import re
                     h_match = re.search(r'<(h[1-6])', html_content, re.IGNORECASE)
                     if h_match:
                         tag = h_match.group(1).lower()
@@ -660,7 +814,6 @@ class StructuredLayoutParser:
                         
                         # For lists, try to find a BID from the original HTML content
                         list_html = content.get('html', '')
-                        import re
                         bid_matches = re.findall(r'data-bid="([^"]+)"', list_html)
                         if bid_matches:
                             # Look for the parent container BID that should have been assigned by _preprocess_html_for_measurement
@@ -717,7 +870,6 @@ class StructuredLayoutParser:
                     block.bid = block_bid_candidate
                 else:
                     # Extract BID from HTML content if available
-                    import re
                     html_content = content.get('html', '')
                     bid_match = re.search(r'data-bid="([^"]+)"', html_content)
                     if bid_match:
