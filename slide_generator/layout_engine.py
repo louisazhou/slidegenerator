@@ -473,7 +473,13 @@ class LayoutEngine:
             return ""
         
         # Get CSS from theme system - use the configured theme
-        css = get_css(self.theme)
+        theme_css = get_css(self.theme)
+        
+        # Import HTML-specific CSS that contains column and admonition styles
+        from .layout_parser import HTML_SPECIFIC_CSS
+        
+        # Combine theme CSS with HTML-specific layout styles
+        combined_css = theme_css + "\n" + HTML_SPECIFIC_CSS
         
         # Combine HTML slides with proper UTF-8 document structure
         full_html = f"""<!DOCTYPE html>
@@ -483,7 +489,7 @@ class LayoutEngine:
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Slide Content</title>
 <style>
-{css}
+{combined_css}
 </style>
 </head>
 <body>
@@ -1128,7 +1134,10 @@ class LayoutEngine:
     def _generate_paginated_debug_html(self, pages: List[List[Block]], processed_html: str, temp_dir: str) -> str:
         """Generate HTML showing content split across actual slide pages."""
         
-        css_content = get_css(self.theme)
+        # Get both theme CSS and HTML-specific styles (for columns, admonitions, etc.)
+        theme_css = get_css(self.theme)
+        from .layout_parser import HTML_SPECIFIC_CSS
+        css_content = theme_css + "\n" + HTML_SPECIFIC_CSS
 
         html_parts = [
             "<!DOCTYPE html>",

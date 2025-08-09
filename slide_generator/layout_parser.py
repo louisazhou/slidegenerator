@@ -838,7 +838,7 @@ class StructuredLayoutParser:
                 'y': int(element['y']),
                 'width': int(element['width']),
                 'height': int(element['height']),
-                'className': element.get('original_class', ''),
+                'className': element.get('original_class', '') or element.get('class', ''),
                 'style': element.get('style', {}),
                 'parentClassName': element['parent'].get('class') if element.get('parent') else None,
                 'bid': element.get('bid')
