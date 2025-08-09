@@ -60,7 +60,7 @@ class SlideGenerator:
         )
         self.pptx_renderer = PPTXRenderer(theme=theme, debug=debug)
     
-    async def generate(self, markdown_text: str, output_path: str = "output/demo.pptx"):
+    async def generate(self, markdown_text: str, output_path: str = "output/demo.pptx", *, format: str = "pptx", presentation_id: str = None):
         """
         Generate a PowerPoint presentation from markdown text.
         
@@ -72,17 +72,15 @@ class SlideGenerator:
             str: Path to the generated PPTX file
         """
         
-        # Ensure output_path has .pptx extension and is in output_dir if no path specified
-        if not output_path.endswith('.pptx'):
-            output_path = f"{output_path}.pptx"
-        
-        output_path = Path(output_path)
-        if not output_path.is_absolute() and len(output_path.parts) == 1:
-            # If it's just a filename, put it in the output directory
-            output_path = Path(self.paths["output_dir"]) / output_path
-        
-        output_path = str(output_path)
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        # Resolve destination *before* heavy work so we can log early
+        if format == "pptx":
+            if not output_path.endswith('.pptx'):
+                output_path = f"{output_path}.pptx"
+            output_path_path = Path(output_path)
+            if not output_path_path.is_absolute() and len(output_path_path.parts) == 1:
+                output_path_path = Path(self.paths["output_dir"]) / output_path_path
+            output_path = str(output_path_path)
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
         
         temp_dir = str(self.paths["tmp_dir"])
         if self.debug:
@@ -93,14 +91,23 @@ class SlideGenerator:
             markdown_text,
         )
         
-        # Step 2: PPTX renderer converts pages to PowerPoint presentation
-        self.pptx_renderer.render(pages, output_path, self.layout_engine.slide_notes)
-        
+        # Step 2: Render depending on chosen format
+        if format == "pptx":
+            self.pptx_renderer.render(pages, output_path, self.layout_engine.slide_notes)
+            if self.debug:
+                logger.info(f"Generated PPTX saved to: {output_path}")
+        elif format == "gslides":
+            from .gslide_renderer import GSlideRenderer  # local import to avoid heavy dep unless needed
+            gs_renderer = GSlideRenderer(theme=self.theme, debug=self.debug)
+            presentation_id = gs_renderer.render(pages, presentation_id, self.layout_engine.slide_notes)
+            if self.debug:
+                logger.info(f"Generated Google Slides ID: {presentation_id}")
+            output_path = presentation_id  # function return value for caller
+        else:
+            raise ValueError(f"Unsupported format '{format}'. Use 'pptx' or 'gslides'.")
+
         if self.debug:
-            logger.info(f"Generated presentation saved to: {output_path}")
-            logger.info(f"Total pages: {len(pages)}")
-            logger.info(f"Theme: {self.theme}")
-        
+            logger.info(f"Total pages rendered: {len(pages)} | Theme: {self.theme}")
         return output_path
 
 

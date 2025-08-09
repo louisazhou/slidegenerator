@@ -1,5 +1,5 @@
 # Python cache
-__pycache__/
+*__pycache__/*
 *.py[cod]
 *$py.class
 *.so
@@ -20,7 +20,8 @@ wheels/
 .installed.cfg
 *.egg
 MANIFEST
-
+*.png
+*.sg_tmp/
 # PyTest cache
 .pytest_cache/
 
@@ -57,5 +58,6 @@ env.bak/
 venv.bak/
 
 # Google API credentials (if sensitive)
-# token.json
-# credentials.json 
+token.json
+credentials.json 
+gslides_notepad.json

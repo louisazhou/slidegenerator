@@ -133,4 +133,153 @@ class SlideGenerator:
 - ✅ Math, tables, images, admonitions all supported
 - ✅ Browser measurement accuracy maintained
 
-This is **genuine simplification** - not just refactoring, but **eliminating architectural redundancy** while preserving all functionality. 
+This is **genuine simplification** - not just refactoring, but **eliminating architectural redundancy** while preserving all functionality.
+
+---
+
+## 🎯 **HTML Parser Unification (Future Major Overhaul)**
+
+### **Current Problem: Duplicate HTML Parsing Logic**
+
+Both renderers contain large, complex HTML parsing methods:
+- **PPTX**: `_parse_html_to_runs` (217 lines) 
+- **Google Slides**: `_create_rich_text_requests` (259 lines)
+
+**Code Duplication Issues:**
+- **95% identical logic** for HTML tokenization, tag stack management, attribute extraction
+- **Same HTML patterns**: `<strong>`, `<em>`, `<code>`, `<mark>`, `<a>`, `<span>` handling
+- **Similar complexity**: Both methods handle color classes, hyperlinks, nested formatting
+- **Parallel maintenance**: Bug fixes must be applied to both renderers
+- **~476 lines** of nearly duplicate code
+
+### **Proposed Unified Architecture**
+
+#### **Shared HTML Parser Module**
+```python
+# slide_generator/html_parser.py (NEW)
+
+class HTMLTextSegment:
+    """Platform-agnostic representation of formatted text."""
+    def __init__(self, text: str, start_idx: int, end_idx: int, formatting: List[Dict]):
+        self.text = text
+        self.start_idx = start_idx  
+        self.end_idx = end_idx
+        self.formatting = formatting  # [{'type': 'bold'}, {'type': 'color', 'value': '#ff0000'}]
+
+class UnifiedHTMLParser:
+    """Single HTML parser for both PPTX and Google Slides renderers."""
+    
+    def __init__(self, theme_config: Dict):
+        self.theme_config = theme_config
+    
+    def parse_to_segments(self, html_content: str) -> Tuple[str, List[HTMLTextSegment]]:
+        """Parse HTML into plain text + formatting segments."""
+        # Unified tokenization logic (from both renderers)
+        # Stack-based tag tracking  
+        # Attribute extraction (href, class, style)
+        # Color class resolution
+        return plain_text, segments
+
+class PPTXTextFormatter:
+    """Convert text segments to PPTX runs."""
+    def apply_segments_to_paragraph(self, paragraph, segments: List[HTMLTextSegment]):
+        # PPTX-specific: paragraph.add_run(), font.size, font.color.rgb
+        pass
+
+class GSlidesTextFormatter:  
+    """Convert text segments to Google Slides API requests."""
+    def segments_to_api_requests(self, object_id: str, segments: List[HTMLTextSegment]) -> List[Dict]:
+        # Google Slides-specific: updateTextStyle requests
+        pass
+```
+
+#### **Integration Points**
+```python
+# In PPTXRenderer
+def _parse_html_to_runs(self, paragraph, html_content):
+    plain_text, segments = self.html_parser.parse_to_segments(html_content)
+    paragraph.add_run().text = plain_text
+    self.pptx_formatter.apply_segments_to_paragraph(paragraph, segments)
+
+# In GSlideRenderer  
+def _create_rich_text_requests(self, object_id: str, block: Block) -> List[Dict]:
+    plain_text, segments = self.html_parser.parse_to_segments(block.content)
+    requests = [{"insertText": {"objectId": object_id, "text": plain_text}}]
+    requests.extend(self.gslides_formatter.segments_to_api_requests(object_id, segments))
+    return requests
+```
+
+### **Implementation Strategy**
+
+#### **⚠️ Why This is "Major Overhaul"**
+1. **High Complexity**: 476 lines of intricate parsing logic to extract and unify
+2. **Platform Differences**: PPTX uses runs/fonts, Google Slides uses API requests  
+3. **Subtle Variations**: Each renderer has platform-specific edge cases
+4. **Testing Risk**: High chance of breaking existing rich text functionality
+5. **Architectural Scope**: Requires new module + interface design + integration
+
+#### **Phase-by-Phase Approach** (When Time Permits)
+
+**Phase 1: Extract Common Patterns**
+- Create `HTMLTextSegment` data structure
+- Extract tokenization regex patterns into constants
+- Identify shared attribute parsing logic
+
+**Phase 2: Build Unified Parser Core**  
+- Create `UnifiedHTMLParser` with theme config integration
+- Handle color classes, hyperlinks, nested formatting uniformly
+- Comprehensive test suite against existing output
+
+**Phase 3: Platform-Specific Formatters**
+- `PPTXTextFormatter` for run-based formatting
+- `GSlidesTextFormatter` for API request generation  
+- Maintain exact output compatibility
+
+**Phase 4: Integration & Cleanup**
+- Update both renderers to use unified parser
+- Remove duplicate 476 lines of parsing code
+- Regression testing for all rich text features
+
+### **Expected Benefits** (Long-term)
+
+#### **Code Reduction:**
+- **Delete**: ~476 lines of duplicate parsing logic
+- **Add**: ~300 lines of unified parser + formatters  
+- **Net Savings**: ~176 lines + much better maintainability
+
+#### **Maintenance Benefits:**
+- **Single source of truth** for HTML parsing
+- **Consistent behavior** across both renderers
+- **Easier feature additions** (new HTML tags, formatting options)
+- **Centralized bug fixes** apply to both platforms
+
+#### **Quality Benefits:**
+- **Uniform rich text support** between PPTX and Google Slides
+- **Easier testing** with shared test cases
+- **Better error handling** with centralized validation
+
+### **Priority Assessment: FUTURE WORK** 
+
+**Recommendation**: This is a **high-value but high-risk** refactoring that should be:
+- **Planned carefully** with comprehensive test coverage
+- **Implemented during a dedicated refactoring sprint**  
+- **Coordinated with both renderer maintainers**
+- **Thoroughly tested** against existing presentations
+
+**Current Status**: Both renderers work well independently. This unification is an **optimization for maintainability**, not a critical bug fix.
+
+---
+
+## 📊 **Recently Completed Renderer Improvements**
+
+### **Google Slides Renderer** ✅ **COMPLETED**
+- **Eliminated**: 200+ lines of repetitive code
+- **Added**: 8 helper methods for position, styling, rich text
+- **Result**: Clean, maintainable architecture
+
+### **PPTX Renderer** ✅ **COMPLETED** 
+- **Split**: 322-line monster method into 6 focused helper methods
+- **Added**: Font size validation and color application helpers
+- **Result**: 54 new lines but much better organization
+
+Both renderers are now in excellent architectural shape! 🚀 
