@@ -6,9 +6,11 @@ import logging
 import mimetypes
 import os
 import re
+import requests
 from html import unescape
 from pathlib import Path
 from typing import List, Optional, Callable, Dict, Tuple
+from io import BytesIO
 
 from bs4 import BeautifulSoup
 from PIL import Image
@@ -32,9 +34,10 @@ class ImageDimensionCache:
     def get_dimensions(self, image_path: str) -> Tuple[Optional[int], Optional[int]]:
         """
         Get image dimensions, using cache if available.
+        Supports both local files and remote URLs.
         
         Args:
-            image_path: Path to the image file
+            image_path: Path to the image file or URL
             
         Returns:
             Tuple of (width, height) or (None, None) if failed
@@ -45,12 +48,25 @@ class ImageDimensionCache:
             return self.cache[image_path]
         
         try:
-            with Image.open(image_path) as img:
-                dimensions = img.size
-                self.cache[image_path] = dimensions
+            # Check if it's a remote URL
+            if image_path.startswith(('http://', 'https://')):
+                # Download image data for remote URLs
                 if self.debug:
-                    logger.debug(f"📷 Cached new image dimensions for {image_path}: {dimensions}")
-                return dimensions
+                    logger.debug(f"🌐 Downloading remote image: {image_path}")
+                response = requests.get(image_path, timeout=10)
+                response.raise_for_status()
+                image_data = BytesIO(response.content)
+                with Image.open(image_data) as img:
+                    dimensions = img.size
+            else:
+                # Handle local files
+                with Image.open(image_path) as img:
+                    dimensions = img.size
+            
+            self.cache[image_path] = dimensions
+            if self.debug:
+                logger.debug(f"📷 Cached new image dimensions for {image_path}: {dimensions}")
+            return dimensions
         except Exception as e:
             if self.debug:
                 logger.warning(f"⚠️ Could not read image dimensions for {image_path}: {e}")
